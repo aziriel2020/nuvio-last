@@ -1,0 +1,14 @@
+{
+  "name": "nuvio-usa-releases-addon",
+  "version": "4.0.1",
+  "private": true,
+  "description": "NuvioTV/Stremio-compatible temporal USA release calendar: streaming dates, US broadcast times and anime airings",
+  "scripts": {
+    "test": "node --test",
+    "start": "node local-server.js",
+    "configure": "node scripts/configure.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
