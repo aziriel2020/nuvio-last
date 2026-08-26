@@ -1,0 +1,14 @@
+{
+  "name": "nuvio-calendar-archives",
+  "version": "1.5.3",
+  "private": true,
+  "description": "Nuvio Calendar Archives v1.5.3: plateformes → Séries/Films → périodes dynamiques → mois décroissants, Crunchyroll + AniList + films anime, Paramount+ renforcé, covers HD Modern Shield.",
+  "scripts": {
+    "test": "node --test",
+    "start": "node local-server.js",
+    "configure": "node scripts/configure.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

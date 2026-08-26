@@ -1,177 +1,112 @@
-# Nuvio Calendar Archives France v1.0.0 — NVIDIA Shield / Modern
+# Nuvio Calendar Archives — USA + France Coexist v1.0.0
 
-Projet séparé de l’édition USA/monde. Cette édition est verrouillée sur **la France** : marché TMDb `FR`, langue `fr-FR`, fuseau `Europe/Paris`, VOD achat/location France et plateformes pertinentes pour le marché français.
+Ce projet règle le conflit entre les éditions USA et France en les faisant tourner **dans un seul déploiement Vercel**, mais comme **deux addons Nuvio réellement séparés**.
 
-## Arborescence
+## Pourquoi cette version coexiste proprement
 
-```text
-Netflix
-├── Séries
-└── Films
+Le déploiement expose :
 
-Prime Video
-├── Séries
-└── Films
+- `https://TON-DOMAINE/us/manifest.json` → addon USA
+  - ID : `com.nuvio.calendar.archives.us.coexist`
+- `https://TON-DOMAINE/fr/manifest.json` → addon France
+  - ID : `com.nuvio.calendar.archives.fr.coexist`
+- `https://TON-DOMAINE/nuvio-collections-usa-fr.json` → import unique contenant les deux jeux de Collections
+- `https://TON-DOMAINE/coexistence-check.json` → diagnostic automatique des collisions
 
-Disney+
-├── Séries
-└── Films
+Les catalogues restent séparés :
 
-HBO Max
-├── Séries
-└── Films
+- USA : `archives-v3-*`
+- France : `archives-fr-v1-*`
 
-Apple TV+
-├── Séries
-└── Films
+Les Collection IDs existants sont conservés afin que l'import combiné **remplace les anciennes Collections au lieu d'en créer des doublons**.
 
-CANAL+
-├── Séries
-└── Films
+Les sources de ces Collections pointent désormais vers les nouveaux IDs addons `*.coexist`, ce qui empêche Nuvio de choisir par erreur une ancienne installation ayant le même ID d'addon.
 
-Paramount+
-├── Séries
-└── Films
+## Affichage Modern Shield
 
-france.tv
-├── Séries
-└── Films
-
-TF1+
-├── Séries
-└── Films
-
-M6+
-├── Séries
-└── Films
-
-ARTE
-├── Séries
-└── Films
-
-Crunchyroll + AniList
-├── Séries
-└── Films
-
-ADN
-├── Séries
-└── Films
-
-VOD France
-└── Films
-```
-
-## Dans chaque dossier Séries / Films
-
-Les lignes sont identiques à l’autre projet :
-
-1. `Aujourd’hui`
-2. `Demain`
-3. `Hier`
-4. `Semaine passée`
-5. `La semaine suivante`
-6. mois + année en ordre décroissant
-
-Exemple en août 2026 :
+Pour éviter de confondre les deux marchés, les parents sont maintenant explicites :
 
 ```text
-Aujourd’hui
-Demain
-Hier
-Semaine passée
-La semaine suivante
-Août 2026
-Juillet 2026
-Juin 2026
+🇺🇸 Netflix
+🇺🇸 Prime Video
+🇺🇸 Disney+
 ...
-Janvier 2026
-Décembre 2025
-...
-Janvier 2025
+🇺🇸 Crunchyroll + AniList
+🇺🇸 VOD
+
+🇫🇷 Netflix
+🇫🇷 Prime Video
+🇫🇷 Disney+
+🇫🇷 HBO Max
+🇫🇷 CANAL+
+🇫🇷 france.tv
+🇫🇷 TF1+
+🇫🇷 M6+
+🇫🇷 ARTE
+🇫🇷 Crunchyroll + AniList
+🇫🇷 ADN
+🇫🇷 VOD France
 ```
 
-Les mois futurs sont pré-câblés mais vides. En septembre, `Septembre 2026` commence à retourner ses contenus automatiquement. **Aucune réimportation mensuelle.**
-
-## France réellement forcée
-
-Cette édition ne dépend pas de l’IP de la Shield :
-
-- fuseau : `Europe/Paris`
-- marché Watch Providers : `FR`
-- langue TMDb : `fr-FR`
-- cinéma / digital : région France
-- VOD : boutiques achat/location disponibles en France
-
-Cela évite qu’un déploiement Vercel situé ailleurs ou qu’un VPN fasse basculer les dates et catalogues vers les USA.
-
-## Plateformes gratuites françaises
-
-`france.tv`, `TF1+`, `M6+` et `ARTE` ne sont pas limitées au seul mode `flatrate`. L’édition France accepte aussi les disponibilités TMDb `free` et `ads`, ce qui est nécessaire pour les services gratuits/replay.
-
-## Crunchyroll + AniList / ADN
-
-- `Crunchyroll + AniList → Séries` fusionne les sorties Crunchyroll et les airings AniList convertibles vers TMDb/Nuvio.
-- `Crunchyroll + AniList → Films` garde les films d’anime disponibles via Crunchyroll.
-- `ADN` est présent comme plateforme anime française séparée, avec Séries et Films.
-
-## Modern Shield
-
-Les parents sont des Collections natives Nuvio et les cartes `Séries` / `Films` sont :
-
-- `LANDSCAPE` 16:9 ;
-- `hideTitle: true` pour éviter le doublon de titre ;
-- logo plateforme haute définition dans la carte ;
-- wordmark horizontal large pour le hero ;
-- backdrop 1920×1080 ;
-- URLs visuelles révisées avec `v=fr100` pour éviter le cache d’une autre édition.
-
-## Projet totalement séparé
-
-Cette édition utilise :
+Chaque parent conserve :
 
 ```text
-Addon ID: com.nuvio.calendar.archives.fr
-Catalog IDs: archives-fr-v1-...
-Collection IDs: calendar-archives-fr-...
+Plateforme
+├── Séries
+│   ├── Aujourd’hui
+│   ├── Demain
+│   ├── Hier
+│   ├── Semaine passée
+│   ├── La semaine suivante
+│   ├── mois + années en décroissant
+│   └── contenus
+└── Films
+    └── mêmes périodes + mois
 ```
 
-Elle peut donc cohabiter avec l’autre projet sans remplacer ses Collections.
+Les visuels restent 16:9 Modern avec logos/wordmarks et utilisent des URLs distinctes `/us/...` et `/fr/...`, avec un numéro de révision visuelle différent dans chaque marché pour éviter les collisions de cache.
 
-## Anti-crash Shield
+## Installation / migration
 
-Une panne TMDb/TVmaze/AniList ne doit jamais faire tomber un dossier Nuvio : une erreur upstream est convertie en catalogue vide valide HTTP 200 (`{"metas":[]}`), puis le dossier reste navigable.
+Déploie **ce dossier racine** comme un seul projet Vercel et configure ta clé TMDb (`TMDB_READ_TOKEN` ou `TMDB_API_KEY`).
 
-## Installation
+Ensuite, dans Nuvio :
 
-Après le déploiement :
+1. installe `https://TON-DOMAINE/us/manifest.json` ;
+2. installe `https://TON-DOMAINE/fr/manifest.json` ;
+3. importe **une seule fois** `https://TON-DOMAINE/nuvio-collections-usa-fr.json`.
 
-1. ajoute l’addon avec `https://TON-DEPLOIEMENT/manifest.json` ;
-2. importe **une fois** `https://TON-DEPLOIEMENT/nuvio-collections.json` ;
-3. les changements jour/semaine/mois se font ensuite automatiquement.
+L'import combiné remplace les anciennes Collections USA/France grâce à leurs IDs existants. Les nouvelles Collections référencent uniquement les nouveaux addons `*.coexist`.
 
-Pour les vraies covers/logos sur Shield, importe bien le JSON **depuis l’URL déployée**, pas uniquement le fichier statique du ZIP, car les URLs d’images sont calculées à partir du domaine du déploiement.
+Une fois que tout s'affiche correctement, tu peux supprimer les **anciens addons USA et France** de Nuvio pour alléger la liste. Ne supprime pas les nouvelles entrées dont les URLs se terminent par `/us` et `/fr`.
 
-## Configuration TMDb
+## Vérification
 
-Configure l’un des deux :
+Ouvre :
 
 ```text
-TMDB_READ_TOKEN=...
+https://TON-DOMAINE/coexistence-check.json
 ```
 
-ou :
+La valeur attendue est :
 
-```text
-TMDB_API_KEY=...
+```json
+{"safe": true}
 ```
 
-Puis :
+Le diagnostic vérifie notamment :
+
+- IDs addons différents ;
+- aucun Collection ID en collision ;
+- aucune clé de dossier en collision ;
+- aucune clé de catalogue en collision ;
+- 10 parents USA + 14 parents France ;
+- URLs d'images enfermées dans leur namespace `/us` ou `/fr`.
+
+## Tests
 
 ```bash
 npm test
-npm start
 ```
 
-## Validation v1.0.0
-
-La suite de tests vérifie notamment : France forcée, plateformes françaises, modes `free/ads`, CANAL+, HBO Max, Paramount+, france.tv/TF1+/M6+/ARTE, ADN, Crunchyroll + AniList, VOD France, coexistence avec l’autre addon, rollover août → septembre, zéro appel upstream pour les mois futurs, anti-crash et visuels Modern.
+La commande lance les tests complets de l'engine USA, de l'engine France et de la couche de coexistence.

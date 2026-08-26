@@ -1,11 +1,13 @@
 'use strict';
-
-require('./src/env').loadEnvFile();
-
-const http = require('http');
+const http = require('node:http');
 const handler = require('./api/index');
-const port = Number(process.env.PORT || 7000);
-
-http.createServer((req, res) => handler(req, res)).listen(port, '0.0.0.0', () => {
-  console.log(`Nuvio Calendar Archives France: http://localhost:${port}/manifest.json`);
-});
+const port = Number(process.env.PORT || 8787);
+const server = http.createServer((req, res) => Promise.resolve(handler(req, res)).catch((error) => {
+  console.error(error);
+  if (!res.headersSent) {
+    res.statusCode = 500;
+    res.setHeader('content-type', 'application/json; charset=utf-8');
+  }
+  res.end(JSON.stringify({ error: error?.message || 'Internal error' }));
+}));
+server.listen(port, () => console.log(`USA+FR coexist server: http://localhost:${port}`));

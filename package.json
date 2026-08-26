@@ -1,12 +1,11 @@
 {
-  "name": "nuvio-calendar-archives-fr",
+  "name": "nuvio-calendar-archives-usa-fr-coexist",
   "version": "1.0.0",
   "private": true,
-  "description": "Nuvio Calendar Archives France v1.0.0: marché FR, Europe/Paris, plateformes françaises, périodes dynamiques, mois décroissants, VOD France et visuels Modern Shield.",
+  "description": "Single-deployment coexistence pack for Nuvio Calendar Archives USA + France on Modern Shield.",
   "scripts": {
-    "test": "node --test",
     "start": "node local-server.js",
-    "configure": "node scripts/configure.js"
+    "test": "node scripts/test-all.js"
   },
   "engines": {
     "node": ">=20"
