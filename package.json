@@ -1,8 +1,8 @@
 {
-  "name": "nuvio-usa-releases-addon",
-  "version": "4.0.1",
+  "name": "nuvio-calendar-archives-fr",
+  "version": "1.0.0",
   "private": true,
-  "description": "NuvioTV/Stremio-compatible temporal USA release calendar: streaming dates, US broadcast times and anime airings",
+  "description": "Nuvio Calendar Archives France v1.0.0: marché FR, Europe/Paris, plateformes françaises, périodes dynamiques, mois décroissants, VOD France et visuels Modern Shield.",
   "scripts": {
     "test": "node --test",
     "start": "node local-server.js",

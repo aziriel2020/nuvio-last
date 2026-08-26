@@ -7,5 +7,5 @@ const handler = require('./api/index');
 const port = Number(process.env.PORT || 7000);
 
 http.createServer((req, res) => handler(req, res)).listen(port, '0.0.0.0', () => {
-  console.log(`Nuvio Release Calendar: http://localhost:${port}/manifest.json`);
+  console.log(`Nuvio Calendar Archives France: http://localhost:${port}/manifest.json`);
 });

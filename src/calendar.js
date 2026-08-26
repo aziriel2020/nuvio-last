@@ -1,8 +1,8 @@
 'use strict';
 
-const DEFAULT_TIMEZONE = 'UTC';
-const DEFAULT_COUNTRY = 'US';
-const DEFAULT_LANGUAGE = 'en-US';
+const DEFAULT_TIMEZONE = 'Europe/Paris';
+const DEFAULT_COUNTRY = 'FR';
+const DEFAULT_LANGUAGE = 'fr-FR';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/';
 
 const EVENT_MODES = Object.freeze({
@@ -74,12 +74,119 @@ function localTime(now = new Date(), timeZone = DEFAULT_TIMEZONE) {
   return timeFromParts(zonedParts(now, timeZone));
 }
 
-function dateWindow(period = 'week', now = new Date(), timeZone = DEFAULT_TIMEZONE) {
+function dateWindow(period = 'next7', now = new Date(), timeZone = DEFAULT_TIMEZONE) {
   const today = localIsoDate(now, timeZone, 0);
+
+  // Standalone Archives project: archive-YYYY-MM is a calendar month.
+  // Past months are complete; the current month stops at the viewer-local
+  // current day; future months are empty and therefore cost zero upstream calls.
+  const archiveMatch = String(period || '').match(/^archive-(\d{4})-(\d{2})$/);
+  if (archiveMatch) {
+    const year = Number(archiveMatch[1]);
+    const month = Number(archiveMatch[2]);
+    const [todayYear, todayMonth] = today.split('-').map(Number);
+    if (month < 1 || month > 12) {
+      return { start: today, end: today, kind: 'archive-month', today, allowPast: true, empty: true, archiveYear: year, archiveMonth: month };
+    }
+    const start = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+    const monthEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const future = year > todayYear || (year === todayYear && month > todayMonth);
+    const end = future ? start : (year === todayYear && month === todayMonth ? today : monthEnd);
+    return { start, end, kind: 'archive-month', today, allowPast: true, empty: future, archiveYear: year, archiveMonth: month };
+  }
+
+  // Calendar windows are deliberately disjoint so the same event does
+  // not reappear in Aujourd’hui / Demain / Dans les 7 jours.
+  if (period === 'lastyear') {
+    const [year] = today.split('-').map(Number);
+    return {
+      start: `${year - 1}-01-01`,
+      end: `${year - 1}-12-31`,
+      kind: 'lastyear',
+      today,
+      allowPast: true
+    };
+  }
+  if (period === 'lastweek') {
+    // Previous CALENDAR week, Monday -> Sunday. This is intentionally
+    // different from `past7`, which is the rolling J-7 -> J-1 window.
+    const todayNoon = new Date(`${today}T12:00:00Z`);
+    const day = todayNoon.getUTCDay(); // 0=Sun, 1=Mon ... 6=Sat
+    const daysSinceMonday = (day + 6) % 7;
+    const currentMonday = addIsoDays(today, -daysSinceMonday);
+    return {
+      start: addIsoDays(currentMonday, -7),
+      end: addIsoDays(currentMonday, -1),
+      kind: 'lastweek',
+      today,
+      allowPast: true
+    };
+  }
+  if (period === 'lastmonth') {
+    const [year, month] = today.split('-').map(Number);
+    const previousMonthStart = new Date(Date.UTC(year, month - 2, 1));
+    const previousMonthEnd = new Date(Date.UTC(year, month - 1, 0));
+    const start = previousMonthStart.toISOString().slice(0, 10);
+    const end = previousMonthEnd.toISOString().slice(0, 10);
+    return { start, end, kind: 'lastmonth', today, allowPast: true };
+  }
   if (period === 'today') return { start: today, end: today, kind: 'today', today };
   if (period === 'tomorrow') {
     const tomorrow = addIsoDays(today, 1);
     return { start: tomorrow, end: tomorrow, kind: 'tomorrow', today };
+  }
+  if (period === 'yesterday') {
+    const yesterday = addIsoDays(today, -1);
+    return { start: yesterday, end: yesterday, kind: 'yesterday', today, allowPast: true };
+  }
+  if (period === 'nextweek') {
+    // Next CALENDAR week, Monday -> Sunday, in viewer-local civil dates.
+    const todayNoon = new Date(`${today}T12:00:00Z`);
+    const day = todayNoon.getUTCDay();
+    const daysSinceMonday = (day + 6) % 7;
+    const currentMonday = addIsoDays(today, -daysSinceMonday);
+    const nextMonday = addIsoDays(currentMonday, 7);
+    return {
+      start: nextMonday,
+      end: addIsoDays(nextMonday, 6),
+      kind: 'nextweek',
+      today
+    };
+  }
+  if (period === 'next7') {
+    return { start: addIsoDays(today, 2), end: addIsoDays(today, 7), kind: 'next7', today };
+  }
+  if (period === 'upcomingyear') {
+    // Starts after the dedicated Aujourd’hui / Demain / J+2→J+7 rows.
+    return { start: addIsoDays(today, 8), end: addIsoDays(today, 365), kind: 'upcomingyear', today };
+  }
+  if (period === 'nowplaying') {
+    // TMDb's now_playing endpoint is authoritative for membership in this row;
+    // this broad date window is only used for labels/stats.
+    return { start: addIsoDays(today, -120), end: today, kind: 'nowplaying', today, allowPast: true };
+  }
+
+  // Legacy windows stay callable for old bookmarks/debug routes.
+  if (period === 'past7') {
+    return {
+      start: addIsoDays(today, -7),
+      end: addIsoDays(today, -1),
+      kind: 'past7',
+      today,
+      allowPast: true
+    };
+  }
+  if (period === 'month') {
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const yesterday = addIsoDays(today, -1);
+    return {
+      start: monthStart,
+      end: yesterday,
+      kind: 'month',
+      today,
+      allowPast: true,
+      empty: monthStart > yesterday
+    };
   }
   if (period === 'upcoming' || period === 'future') {
     return { start: addIsoDays(today, 1), end: addIsoDays(today, 6), kind: 'upcoming', today };
@@ -99,14 +206,15 @@ function normalizeIsoDate(value) {
 
 function isDateInWindow(value, window) {
   const date = normalizeIsoDate(value);
-  if (!date || !window?.start || !window?.end) return false;
+  if (!date || !window?.start || !window?.end || window?.empty) return false;
   return date >= window.start && date <= window.end;
 }
 
 function classifyDate(value, window) {
   const date = normalizeIsoDate(value);
   if (!date) return 'unknown';
-  if (date < window.today) return 'past';
+  if (window?.empty) return 'outside';
+  if (!window?.allowPast && date < window.today) return 'past';
   if (date < window.start || date > window.end) return 'outside';
   return 'inside';
 }
@@ -297,6 +405,26 @@ function hasProviderInFlatrate(details, providerIds = []) {
   return providerIds.some((id) => active.has(Number(id)));
 }
 
+function usVodProviders(details) {
+  const watch = usWatchData(details);
+  const entries = [...(watch.buy || []), ...(watch.rent || [])];
+  const seen = new Set();
+  const providers = [];
+  for (const entry of entries) {
+    const id = Number(entry?.provider_id);
+    const name = String(entry?.provider_name || '').trim();
+    const key = Number.isFinite(id) ? `id:${id}` : `name:${name.toLowerCase()}`;
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    providers.push({ id: Number.isFinite(id) ? id : null, name });
+  }
+  return providers;
+}
+
+function hasVodAvailability(details) {
+  return usVodProviders(details).length > 0;
+}
+
 function usDigitalReleaseDates(details) {
   const country = (details?.release_dates?.results || []).find((entry) => entry?.iso_3166_1 === DEFAULT_COUNTRY);
   return (country?.release_dates || [])
@@ -360,7 +488,7 @@ function baseMeta(details, type, releaseDate, releaseInfo) {
     imdb_id: imdbId,
     genres: Array.isArray(details?.genres) ? details.genres.map((g) => g?.name).filter(Boolean) : [],
     runtime: runtime ? `${runtime} min` : null,
-    country: 'United States',
+    country: details?.production_countries?.[0]?.name || details?.origin_country?.[0] || null,
     language: details?.original_language || null,
     behaviorHints: type === 'series' ? { hasScheduledVideos: true } : undefined,
     _tmdbId: tmdbId,
@@ -385,7 +513,24 @@ function movieDetailsToMeta(details, providerLabel, window) {
     event.viewerDate,
     `Première streaming • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
   );
-  meta.description = [`${providerLabel} US • Première digitale`, meta.description].filter(Boolean).join('\n\n');
+  meta.description = [`${providerLabel} France • Première digitale`, meta.description].filter(Boolean).join('\n\n');
+  meta._eventMode = event.eventMode;
+  return { meta, reason: null, event };
+}
+
+function movieVodDetailsToMeta(details, providerLabel, window) {
+  const selected = selectDigitalRelease(details, window);
+  if (!selected.release) return { meta: null, reason: selected.reason };
+  const eventResult = buildStreamingDateEvent(selected.release.date, window, providerLabel);
+  if (!eventResult.event) return { meta: null, reason: eventResult.reason };
+  const event = eventResult.event;
+  const meta = baseMeta(
+    details,
+    'movie',
+    event.viewerDate,
+    `Sortie VOD • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
+  );
+  meta.description = [`${providerLabel} • Sortie digitale France (achat/location)`, meta.description].filter(Boolean).join('\n\n');
   meta._eventMode = event.eventMode;
   return { meta, reason: null, event };
 }
@@ -403,7 +548,7 @@ function seriesDetailsToMeta(details, providerLabel, window) {
     event.viewerDate,
     `${episodeCode(episode)} • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
   );
-  meta.description = [`${providerLabel} US • Date streaming`, meta.description].filter(Boolean).join('\n\n');
+  meta.description = [`${providerLabel} France • Date streaming`, meta.description].filter(Boolean).join('\n\n');
   meta._eventMode = event.eventMode;
   return { meta, reason: null, episode, event };
 }
@@ -509,12 +654,15 @@ module.exports = {
   usWatchData,
   flatrateProviderIds,
   hasProviderInFlatrate,
+  usVodProviders,
+  hasVodAvailability,
   usDigitalReleaseDates,
   selectDigitalRelease,
   episodeCode,
   selectRelevantEpisode,
   baseMeta,
   movieDetailsToMeta,
+  movieVodDetailsToMeta,
   seriesDetailsToMeta,
   cleanCatalogMeta,
   sortAndDedupeMetas,

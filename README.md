@@ -1,190 +1,177 @@
-# Nuvio USA Releases v4.0.1
+# Nuvio Calendar Archives France v1.0.0 — NVIDIA Shield / Modern
 
-Add-on NuvioTV/Stremio compatible conçu comme un **calendrier temporel** : nouvelles sorties streaming USA, diffusions TV américaines converties dans le fuseau du spectateur et calendrier anime.
+Projet séparé de l’édition USA/monde. Cette édition est verrouillée sur **la France** : marché TMDb `FR`, langue `fr-FR`, fuseau `Europe/Paris`, VOD achat/location France et plateformes pertinentes pour le marché français.
 
-## Règle temporelle centrale
-
-La v4 sépare volontairement les **dates civiles** des **timestamps** :
-
-- **Streaming** (`Netflix`, `Prime Video`, `Disney+`, `Max`, `Apple TV+`, `Hulu`, `Paramount+`, `Peacock`, `Crunchyroll`) : une date officielle reste la même date. Une date `2026-08-24` n'est jamais transformée artificiellement en `00:00` puis décalée de jour.
-- **TV broadcast USA** : TVmaze `airstamp` représente un vrai instant. Il est converti vers `x-vercel-ip-timezone`. Une diffusion `23 août 21:00 ET` peut donc devenir `24 août 03:00` à Bruxelles.
-- **Anime** : AniList `airingAt` est converti vers le fuseau du spectateur, mais reste explicitement une **diffusion originale**. Il n'est jamais présenté comme l'heure de publication Crunchyroll/Netflix sans source dédiée.
-
-Le marché commercial reste toujours **US**. Le pays du spectateur ne modifie jamais `watch_region=US`.
-
-## Catalogues
-
-### Plateformes US
-
-Deux lignes maximum par plateforme :
-
-- Netflix • Films / Séries
-- Prime Video • Films / Séries
-- Disney+ • Films / Séries
-- Max • Films / Séries
-- Apple TV+ • Films / Séries
-- Hulu • Films / Séries
-- Paramount+ • Films / Séries
-- Peacock • Films / Séries
-- Crunchyroll • Films / Séries
-
-Les lignes streaming couvrent `today → J+6` et excluent les contenus passés.
-
-### TV USA
-
-- TV USA • Aujourd’hui
-- TV USA • À venir
-
-Seuls les vrais réseaux broadcast US (`show.network`) sont utilisés ici. Les web channels TVmaze sont volontairement exclus de cette ligne pour ne pas mélanger streaming et broadcast.
-
-### Anime
-
-- Anime • Aujourd’hui
-- Anime • À venir
-
-Le calendrier AniList est converti vers l'heure locale du spectateur. Un mapping TMDb strict (titre exact normalisé + année exacte) est requis avant publication dans Nuvio afin de conserver des IDs compatibles. En cas de doute : exclusion plutôt que faux match.
-
-## Films : qualité > quantité
-
-Un film doit :
-
-1. être en `flatrate` sur le provider US demandé ;
-2. avoir une vraie date TMDb `Digital` (release type 4) aux USA ;
-3. avoir cette date entre aujourd'hui et J+6.
-
-Un film de 2024 encore présent sur Netflix en 2026 est exclu.
-
-## Séries streaming
-
-La v4 utilise en priorité le **Web/Streaming Schedule TVmaze** pour lier un épisode à son vrai web channel (Netflix, Prime Video, Disney+, etc.), puis revalide la série contre le provider `flatrate` US de TMDb. Cela évite de prendre un simple `next_episode_to_air` broadcast d'une série qui serait seulement présente en anciennes saisons sur une plateforme.
-
-Pour un web channel global, `airdate` reste une **date civile officielle** et aucune heure n'est inventée. Pour un web channel local US, une heure TVmaze peut être utilisée comme `STREAMING_INSTANT`, mais la date officielle de sortie reste la date civile annoncée.
-
-## Timezone
-
-Le fuseau est lu à chaque requête depuis :
+## Arborescence
 
 ```text
-x-vercel-ip-timezone
+Netflix
+├── Séries
+└── Films
+
+Prime Video
+├── Séries
+└── Films
+
+Disney+
+├── Séries
+└── Films
+
+HBO Max
+├── Séries
+└── Films
+
+Apple TV+
+├── Séries
+└── Films
+
+CANAL+
+├── Séries
+└── Films
+
+Paramount+
+├── Séries
+└── Films
+
+france.tv
+├── Séries
+└── Films
+
+TF1+
+├── Séries
+└── Films
+
+M6+
+├── Séries
+└── Films
+
+ARTE
+├── Séries
+└── Films
+
+Crunchyroll + AniList
+├── Séries
+└── Films
+
+ADN
+├── Séries
+└── Films
+
+VOD France
+└── Films
 ```
 
-Fallback : `UTC`.
+## Dans chaque dossier Séries / Films
 
-Aucune IP n'est stockée ou exposée.
+Les lignes sont identiques à l’autre projet :
 
-La fenêtre est recalculée à chaque requête :
+1. `Aujourd’hui`
+2. `Demain`
+3. `Hier`
+4. `Semaine passée`
+5. `La semaine suivante`
+6. mois + année en ordre décroissant
+
+Exemple en août 2026 :
 
 ```text
-today = date locale du spectateur
-week = today → today + 6 jours
+Aujourd’hui
+Demain
+Hier
+Semaine passée
+La semaine suivante
+Août 2026
+Juillet 2026
+Juin 2026
+...
+Janvier 2026
+Décembre 2025
+...
+Janvier 2025
 ```
 
-Les clés de cache incluent le fuseau et la date locale, donc le passage à minuit invalide naturellement l'ancienne journée.
+Les mois futurs sont pré-câblés mais vides. En septembre, `Septembre 2026` commence à retourner ses contenus automatiquement. **Aucune réimportation mensuelle.**
 
-## Sources
+## France réellement forcée
 
-- **TMDb** : métadonnées, release dates, IDs et providers US/JustWatch.
-- **TVmaze** : horaires broadcast TV USA via `airstamp` et dates/horaires des web channels via le Web/Streaming Schedule.
-- **AniList** : calendrier d'airing anime via `airingAt`.
+Cette édition ne dépend pas de l’IP de la Shield :
 
-Les sources externes sont isolées : une panne AniList n'affecte pas les catalogues Netflix ; une panne TVmaze n'affecte pas les films streaming.
+- fuseau : `Europe/Paris`
+- marché Watch Providers : `FR`
+- langue TMDb : `fr-FR`
+- cinéma / digital : région France
+- VOD : boutiques achat/location disponibles en France
 
-## Installation Vercel
+Cela évite qu’un déploiement Vercel situé ailleurs ou qu’un VPN fasse basculer les dates et catalogues vers les USA.
 
-Variable sensible recommandée :
+## Plateformes gratuites françaises
+
+`france.tv`, `TF1+`, `M6+` et `ARTE` ne sont pas limitées au seul mode `flatrate`. L’édition France accepte aussi les disponibilités TMDb `free` et `ads`, ce qui est nécessaire pour les services gratuits/replay.
+
+## Crunchyroll + AniList / ADN
+
+- `Crunchyroll + AniList → Séries` fusionne les sorties Crunchyroll et les airings AniList convertibles vers TMDb/Nuvio.
+- `Crunchyroll + AniList → Films` garde les films d’anime disponibles via Crunchyroll.
+- `ADN` est présent comme plateforme anime française séparée, avec Séries et Films.
+
+## Modern Shield
+
+Les parents sont des Collections natives Nuvio et les cartes `Séries` / `Films` sont :
+
+- `LANDSCAPE` 16:9 ;
+- `hideTitle: true` pour éviter le doublon de titre ;
+- logo plateforme haute définition dans la carte ;
+- wordmark horizontal large pour le hero ;
+- backdrop 1920×1080 ;
+- URLs visuelles révisées avec `v=fr100` pour éviter le cache d’une autre édition.
+
+## Projet totalement séparé
+
+Cette édition utilise :
+
+```text
+Addon ID: com.nuvio.calendar.archives.fr
+Catalog IDs: archives-fr-v1-...
+Collection IDs: calendar-archives-fr-...
+```
+
+Elle peut donc cohabiter avec l’autre projet sans remplacer ses Collections.
+
+## Anti-crash Shield
+
+Une panne TMDb/TVmaze/AniList ne doit jamais faire tomber un dossier Nuvio : une erreur upstream est convertie en catalogue vide valide HTTP 200 (`{"metas":[]}`), puis le dossier reste navigable.
+
+## Installation
+
+Après le déploiement :
+
+1. ajoute l’addon avec `https://TON-DEPLOIEMENT/manifest.json` ;
+2. importe **une fois** `https://TON-DEPLOIEMENT/nuvio-collections.json` ;
+3. les changements jour/semaine/mois se font ensuite automatiquement.
+
+Pour les vraies covers/logos sur Shield, importe bien le JSON **depuis l’URL déployée**, pas uniquement le fichier statique du ZIP, car les URLs d’images sont calculées à partir du domaine du déploiement.
+
+## Configuration TMDb
+
+Configure l’un des deux :
 
 ```text
 TMDB_READ_TOKEN=...
 ```
 
-`TMDB_API_KEY` reste supportée en fallback.
-
-Puis installe :
+ou :
 
 ```text
-https://TON-PROJET.vercel.app/manifest.json
+TMDB_API_KEY=...
 ```
 
-## Health
-
-```text
-/health
-```
-
-Retour type :
-
-```json
-{
-  "ok": true,
-  "version": "4.0.1",
-  "market": "US",
-  "timezone": "Europe/Brussels",
-  "today": "2026-08-23",
-  "currentTime": "13:17",
-  "tmdb": "ok",
-  "tvmaze": "ok",
-  "anilist": "ok",
-  "providers": {
-    "Netflix": true,
-    "Prime Video": true
-  }
-}
-```
-
-Aucun secret ni IP n'est renvoyé.
-
-## Debug facultatif
-
-Avec :
-
-```text
-DEBUG=true
-```
-
-Routes :
-
-```text
-/debug/time
-/debug/provider/netflix
-/debug/provider/netflix?period=today
-/debug/airing/tvmaze-123456
-/debug/airing/anilist-123456
-```
-
-Les diagnostics d'airing exposent seulement les timestamps et conversions sûres, jamais les tokens.
-
-## Performance / résilience
-
-- caches courts pour schedules/catalogues ;
-- cache long pour mapping anime → TMDb ;
-- concurrence limitée ;
-- `Promise.allSettled` ;
-- timeout séparé TMDb/sources ;
-- retry contrôlé `429` / `5xx` ;
-- un item défectueux ne fait pas tomber toute la ligne.
-
-## Tests
+Puis :
 
 ```bash
 npm test
+npm start
 ```
 
-La suite couvre notamment :
+## Validation v1.0.0
 
-- contenu passé ;
-- vieux film encore disponible ;
-- date streaming sans heure ;
-- épisode TV ET/PT converti à Bruxelles ;
-- changement DST USA/Europe ;
-- épisode déjà diffusé aujourd'hui ;
-- TVmaze `airstamp` prioritaire ;
-- web channels exclus du broadcast ;
-- AniList `airingAt` ;
-- mapping anime strict ;
-- cache par date/fuseau ;
-- providers US ;
-- 401 et 429 sans fuite de secrets.
-
-## Attribution
-
-Données/images : TMDb. Disponibilités streaming : JustWatch via TMDb. Horaires TV et web schedules : TVmaze. Airing anime : AniList. Cet add-on ne fournit aucun flux vidéo. This product uses the TMDB API but is not endorsed or certified by TMDB.
+La suite de tests vérifie notamment : France forcée, plateformes françaises, modes `free/ads`, CANAL+, HBO Max, Paramount+, france.tv/TF1+/M6+/ARTE, ADN, Crunchyroll + AniList, VOD France, coexistence avec l’autre addon, rollover août → septembre, zéro appel upstream pour les mois futurs, anti-crash et visuels Modern.
