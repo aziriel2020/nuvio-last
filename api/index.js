@@ -3,7 +3,7 @@
 const usHandler = require('../regions/us/api/index');
 const frHandler = require('../regions/fr/api/index');
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 function originFromRequest(req) {
   const proto = req?.headers?.['x-forwarded-proto'] || 'https';
@@ -45,9 +45,11 @@ function combinedCollections(req) {
   const nowFr = frHandler._internals.runtimeNow();
   const usTz = usHandler._internals.requestTimeZone(req);
   const frTz = frHandler._internals.requestTimeZone(req);
-  const usCollections = usHandler._internals.buildNuvioCollectionsImport(nowUs, usTz, `${origin}/us`);
-  const frCollections = frHandler._internals.buildNuvioCollectionsImport(nowFr, frTz, `${origin}/fr`);
-  return [...usCollections, ...frCollections];
+  const usCollections = usHandler._internals.buildNuvioCollectionsImport(nowUs, usTz, `${origin}/us`)
+    .map((collection) => ({ ...collection, pinToTop: false }));
+  const frCollections = frHandler._internals.buildNuvioCollectionsImport(nowFr, frTz, `${origin}/fr`)
+    .map((collection) => ({ ...collection, pinToTop: true }));
+  return [...frCollections, ...usCollections];
 }
 
 function coexistenceReport(req) {
@@ -63,12 +65,12 @@ function coexistenceReport(req) {
   return {
     version: VERSION,
     mode: 'single-deployment-dual-addon',
-    addonIds: [usManifest.id, frManifest.id],
-    manifestUrls: [`${origin}/us/manifest.json`, `${origin}/fr/manifest.json`],
+    addonIds: [frManifest.id, usManifest.id],
+    manifestUrls: [`${origin}/fr/manifest.json`, `${origin}/us/manifest.json`],
     combinedCollectionsUrl: `${origin}/nuvio-collections-usa-fr.json`,
     collectionCount: collections.length,
-    usCollectionCount: collections.filter((c) => c.title.startsWith('🇺🇸')).length,
     frCollectionCount: collections.filter((c) => c.title.startsWith('🇫🇷')).length,
+    usCollectionCount: collections.filter((c) => c.title.startsWith('🇺🇸')).length,
     duplicateCollectionIds: duplicates(collectionIds),
     duplicateFolderKeys: duplicates(folderKeys),
     duplicateCatalogKeys: duplicates([...usCatalogIds, ...frCatalogIds]),
@@ -78,7 +80,7 @@ function coexistenceReport(req) {
 
 function landing(req) {
   const origin = originFromRequest(req);
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio USA + France Coexist</title><style>body{margin:0;background:#05080f;color:#eef4ff;font-family:system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}.card{max-width:960px;margin:24px;padding:32px;border:1px solid #243247;border-radius:24px;background:#0b111b}h1{margin-top:0}code{display:block;padding:12px;margin:8px 0;background:#02050a;border-radius:10px;overflow-wrap:anywhere}.ok{color:#77e1a6}a{color:#72c7ff}</style></head><body><main class="card"><h1>🇺🇸 USA + 🇫🇷 France — coexistence</h1><p>Un seul déploiement Vercel, mais <b>deux addons Nuvio réellement séparés</b> sous deux chemins. Les IDs addons, catalogues, Collections et dossiers sont isolés.</p><p>1. Installer l'addon USA :</p><code>${origin}/us/manifest.json</code><p>2. Installer l'addon France :</p><code>${origin}/fr/manifest.json</code><p>3. Importer une seule fois les deux jeux de Collections :</p><code>${origin}/nuvio-collections-usa-fr.json</code><p><a href="${origin}/coexistence-check.json">Vérification automatique des collisions</a></p><p class="ok">Les titres sont préfixés 🇺🇸 / 🇫🇷 pour qu'ils ne se mélangent plus sur Modern Shield.</p></main></body></html>`;
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio USA + France Coexist</title><style>body{margin:0;background:#05080f;color:#eef4ff;font-family:system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}.card{max-width:960px;margin:24px;padding:32px;border:1px solid #243247;border-radius:24px;background:#0b111b}h1{margin-top:0}code{display:block;padding:12px;margin:8px 0;background:#02050a;border-radius:10px;overflow-wrap:anywhere}.ok{color:#77e1a6}a{color:#72c7ff}</style></head><body><main class="card"><h1>🇫🇷 France + 🇺🇸 USA — coexistence</h1><p>Un seul déploiement Vercel, mais <b>deux addons Nuvio réellement séparés</b> sous deux chemins. Les IDs addons, catalogues, Collections et dossiers sont isolés.</p><p>1. Installer l'addon France :</p><code>${origin}/fr/manifest.json</code><p>2. Installer l'addon USA :</p><code>${origin}/us/manifest.json</code><p>3. Importer une seule fois les deux jeux de Collections :</p><code>${origin}/nuvio-collections-usa-fr.json</code><p><a href="${origin}/coexistence-check.json">Vérification automatique des collisions</a></p><p class="ok">Le marché 🇫🇷 France est prioritaire sur Modern Shield. Les Collections FR restent pinToTop=true et les USA pinToTop=false, donc la France passe devant même si un ancien ordre Nuvio est déjà mémorisé.</p></main></body></html>`;
 }
 
 module.exports = async function handler(req, res) {
@@ -98,8 +100,8 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, {
       version: VERSION,
-      usaManifest: `${origin}/us/manifest.json`,
       franceManifest: `${origin}/fr/manifest.json`,
+      usaManifest: `${origin}/us/manifest.json`,
       combinedCollections: `${origin}/nuvio-collections-usa-fr.json`,
       check: `${origin}/coexistence-check.json`
     }, 'no-store');

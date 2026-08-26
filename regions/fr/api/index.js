@@ -774,8 +774,9 @@ function calendarCardUrl(origin, meta, catalog, timeZone, layout = 'portrait', s
   const source = optimizedCardSource(sourceOverride || meta?.poster, cardLayout);
   if (!getConfig().calendarCards || !source || !isAllowedPosterSource(source)) return sourceOverride || meta?.poster || null;
   const append = calendarAppend(meta, catalog);
-  const url = new URL('/calendar-card.svg', origin);
-  url.searchParams.set('v', VERSION);
+  const base = `${String(origin || '').replace(/\/$/, '')}/`;
+  const url = new URL('calendar-card.svg', base);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}`);
   url.searchParams.set('src', source);
   url.searchParams.set('layout', cardLayout);
   url.searchParams.set('title', compactCardText(meta.name, 62));
@@ -789,8 +790,9 @@ function calendarCardUrl(origin, meta, catalog, timeZone, layout = 'portrait', s
 }
 
 function transparentModernLogoUrl(origin) {
-  const url = new URL('/calendar-transparent-logo.svg', origin);
-  url.searchParams.set('v', VERSION);
+  const base = `${String(origin || '').replace(/\/$/, '')}/`;
+  const url = new URL('calendar-transparent-logo.svg', base);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}`);
   return url.toString();
 }
 

@@ -35,10 +35,24 @@ test('combined import has 24 unique collection IDs and clear country-prefixed ti
   assert.equal(collections.length, 24);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
-  assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 10);
   assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 14);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 10);
+  assert.equal(collections[0].title, '🇫🇷 Netflix');
+  assert.equal(collections[13].title, '🇫🇷 VOD France');
+  assert.equal(collections[14].title, '🇺🇸 Netflix');
   assert(collections.some((c) => c.title === '🇺🇸 Netflix'));
   assert(collections.some((c) => c.title === '🇫🇷 Netflix'));
+});
+
+
+test('France is hard-prioritized for Modern Shield even when an old Nuvio order exists', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-usa-fr.json')).text);
+  const fr = collections.filter((c) => c.title.startsWith('🇫🇷 '));
+  const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
+  assert.equal(fr.length, 14);
+  assert.equal(us.length, 10);
+  assert(fr.every((c) => c.pinToTop === true));
+  assert(us.every((c) => c.pinToTop === false));
 });
 
 test('USA and France collection sources always reference their own addon', async () => {
@@ -66,6 +80,28 @@ test('all hosted visual URLs stay inside the correct regional route prefix', asy
   }
 });
 
+
+test('Modern content artwork URLs keep the /fr and /us sub-path instead of falling back to the root', () => {
+  const frApi = handler._internals.frHandler._internals;
+  const usApi = handler._internals.usHandler._internals;
+  const meta = {
+    id: 'tt1234567', type: 'series', name: 'Demo',
+    poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+    background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    landscapePoster: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    released: '2026-08-26', _calendarProvider: 'Netflix', _calendarSource: 'tmdb-streaming'
+  };
+  const catalog = { type: 'series', period: 'today', cardProvider: 'Netflix', name: 'Aujourd’hui' };
+  const frDecorated = frApi.decorateCatalogMetas('https://coexist.example/fr', [meta], catalog, 'Europe/Paris')[0];
+  const usDecorated = usApi.decorateCatalogMetas('https://coexist.example/us', [meta], catalog, 'America/New_York')[0];
+  assert.match(frDecorated.background, /^https:\/\/coexist\.example\/fr\/calendar-card\.svg\?/);
+  assert.match(frDecorated.poster, /^https:\/\/coexist\.example\/fr\/calendar-card\.svg\?/);
+  assert.match(frDecorated.logo, /^https:\/\/coexist\.example\/fr\/calendar-transparent-logo\.svg\?/);
+  assert.match(usDecorated.background, /^https:\/\/coexist\.example\/us\/calendar-card\.svg\?/);
+  assert.match(usDecorated.poster, /^https:\/\/coexist\.example\/us\/calendar-card\.svg\?/);
+  assert.match(usDecorated.logo, /^https:\/\/coexist\.example\/us\/calendar-transparent-logo\.svg\?/);
+});
+
 test('regional image routes are reachable through the wrapper', async () => {
   const us = await call('/us/platform-category-card.svg?provider=netflix&category=series');
   const fr = await call('/fr/platform-category-card.svg?provider=canal-plus&category=films');
@@ -77,13 +113,41 @@ test('regional image routes are reachable through the wrapper', async () => {
   assert.match(fr.text, /FILMS/);
 });
 
+
+test('regional Modern calendar-card SVG routes are reachable and embed artwork', async () => {
+  const oldFetch = global.fetch;
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.startsWith('https://image.tmdb.org/')) {
+      return new Response(Uint8Array.from([137,80,78,71,13,10,26,10]), {
+        status: 200,
+        headers: { 'content-type': 'image/png', 'content-length': '8' }
+      });
+    }
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  try {
+    const src = encodeURIComponent('https://image.tmdb.org/t/p/w780/demo.jpg');
+    const fr = await call(`/fr/calendar-card.svg?src=${src}&layout=landscape&title=Demo&provider=Netflix&type=series`);
+    const us = await call(`/us/calendar-card.svg?src=${src}&layout=landscape&title=Demo&provider=Netflix&type=series`);
+    assert.equal(fr.statusCode, 200);
+    assert.equal(us.statusCode, 200);
+    assert.match(fr.headers['content-type'], /image\/svg\+xml/);
+    assert.match(us.headers['content-type'], /image\/svg\+xml/);
+    assert.match(fr.text, /data:image\/png;base64,/);
+    assert.match(us.text, /data:image\/png;base64,/);
+  } finally {
+    global.fetch = oldFetch;
+  }
+});
+
 test('coexistence checker reports zero collisions', async () => {
   const report = JSON.parse((await call('/coexistence-check.json')).text);
   assert.equal(report.safe, true);
   assert.deepEqual(report.duplicateCollectionIds, []);
   assert.deepEqual(report.duplicateFolderKeys, []);
   assert.deepEqual(report.duplicateCatalogKeys, []);
-  assert.deepEqual(report.addonIds, ['com.nuvio.calendar.archives.us.coexist', 'com.nuvio.calendar.archives.fr.coexist']);
+  assert.deepEqual(report.addonIds, ['com.nuvio.calendar.archives.fr.coexist', 'com.nuvio.calendar.archives.us.coexist']);
 });
 
 test('USA and France Paramount+ remain distinct and both expose Series and Films', async () => {

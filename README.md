@@ -1,44 +1,19 @@
-# Nuvio Calendar Archives — USA + France Coexist v1.0.0
+# Nuvio Calendar Archives — France + USA Coexist v1.0.1
 
-Ce projet règle le conflit entre les éditions USA et France en les faisant tourner **dans un seul déploiement Vercel**, mais comme **deux addons Nuvio réellement séparés**.
+Cette version garde les deux marchés dans **un seul déploiement Vercel**, avec **deux addons Nuvio séparés**, mais donne maintenant la priorité au marché France et corrige les affiches vides dans les cartes Modern Shield.
 
-## Pourquoi cette version coexiste proprement
+## Ordre Modern Shield : France d'abord
 
-Le déploiement expose :
-
-- `https://TON-DOMAINE/us/manifest.json` → addon USA
-  - ID : `com.nuvio.calendar.archives.us.coexist`
-- `https://TON-DOMAINE/fr/manifest.json` → addon France
-  - ID : `com.nuvio.calendar.archives.fr.coexist`
-- `https://TON-DOMAINE/nuvio-collections-usa-fr.json` → import unique contenant les deux jeux de Collections
-- `https://TON-DOMAINE/coexistence-check.json` → diagnostic automatique des collisions
-
-Les catalogues restent séparés :
-
-- USA : `archives-v3-*`
-- France : `archives-fr-v1-*`
-
-Les Collection IDs existants sont conservés afin que l'import combiné **remplace les anciennes Collections au lieu d'en créer des doublons**.
-
-Les sources de ces Collections pointent désormais vers les nouveaux IDs addons `*.coexist`, ce qui empêche Nuvio de choisir par erreur une ancienne installation ayant le même ID d'addon.
-
-## Affichage Modern Shield
-
-Pour éviter de confondre les deux marchés, les parents sont maintenant explicites :
+Le JSON combiné sort maintenant les Collections dans cet ordre :
 
 ```text
-🇺🇸 Netflix
-🇺🇸 Prime Video
-🇺🇸 Disney+
-...
-🇺🇸 Crunchyroll + AniList
-🇺🇸 VOD
-
 🇫🇷 Netflix
 🇫🇷 Prime Video
 🇫🇷 Disney+
 🇫🇷 HBO Max
+🇫🇷 Apple TV+
 🇫🇷 CANAL+
+🇫🇷 Paramount+
 🇫🇷 france.tv
 🇫🇷 TF1+
 🇫🇷 M6+
@@ -46,62 +21,84 @@ Pour éviter de confondre les deux marchés, les parents sont maintenant explici
 🇫🇷 Crunchyroll + AniList
 🇫🇷 ADN
 🇫🇷 VOD France
+
+puis
+
+🇺🇸 Netflix
+🇺🇸 Prime Video
+...
+🇺🇸 VOD
 ```
 
-Chaque parent conserve :
+Pour que ce soit fiable même si Nuvio avait déjà mémorisé l'ancien ordre :
+
+- Collections France : `pinToTop: true`
+- Collections USA : `pinToTop: false`
+
+L'import conserve les IDs existants, donc il met à jour les Collections déjà présentes sans créer une deuxième copie.
+
+## Correction des affiches Modern Shield
+
+Le bug venait du mode coexistence sous `/fr` et `/us` : les URLs générées pour les cartes de contenu utilisaient une route absolue `/calendar-card.svg`, ce qui supprimait le préfixe régional.
+
+Exemple du bug :
 
 ```text
-Plateforme
-├── Séries
-│   ├── Aujourd’hui
-│   ├── Demain
-│   ├── Hier
-│   ├── Semaine passée
-│   ├── La semaine suivante
-│   ├── mois + années en décroissant
-│   └── contenus
-└── Films
-    └── mêmes périodes + mois
+https://TON-DOMAINE/calendar-card.svg
 ```
 
-Les visuels restent 16:9 Modern avec logos/wordmarks et utilisent des URLs distinctes `/us/...` et `/fr/...`, avec un numéro de révision visuelle différent dans chaque marché pour éviter les collisions de cache.
+Alors que la bonne URL est :
 
-## Installation / migration
+```text
+https://TON-DOMAINE/fr/calendar-card.svg
+https://TON-DOMAINE/us/calendar-card.svg
+```
 
-Déploie **ce dossier racine** comme un seul projet Vercel et configure ta clé TMDb (`TMDB_READ_TOKEN` ou `TMDB_API_KEY`).
+La même correction est appliquée au logo transparent Modern :
 
-Ensuite, dans Nuvio :
+```text
+/fr/calendar-transparent-logo.svg
+/us/calendar-transparent-logo.svg
+```
 
-1. installe `https://TON-DOMAINE/us/manifest.json` ;
-2. installe `https://TON-DOMAINE/fr/manifest.json` ;
-3. importe **une seule fois** `https://TON-DOMAINE/nuvio-collections-usa-fr.json`.
+Résultat : les `poster`, `background` et `landscapePoster` des catalogues Modern restent dans le bon namespace et les affiches 16:9 peuvent être chargées par la Shield.
 
-L'import combiné remplace les anciennes Collections USA/France grâce à leurs IDs existants. Les nouvelles Collections référencent uniquement les nouveaux addons `*.coexist`.
+## URLs du déploiement
 
-Une fois que tout s'affiche correctement, tu peux supprimer les **anciens addons USA et France** de Nuvio pour alléger la liste. Ne supprime pas les nouvelles entrées dont les URLs se terminent par `/us` et `/fr`.
+- France : `https://TON-DOMAINE/fr/manifest.json`
+- USA : `https://TON-DOMAINE/us/manifest.json`
+- Collections combinées : `https://TON-DOMAINE/nuvio-collections-usa-fr.json`
+- Diagnostic : `https://TON-DOMAINE/coexistence-check.json`
+
+## Installation / mise à jour
+
+Après déploiement de cette v1.0.1 :
+
+1. installe / mets à jour `https://TON-DOMAINE/fr/manifest.json` ;
+2. installe / mets à jour `https://TON-DOMAINE/us/manifest.json` ;
+3. **réimporte une fois** `https://TON-DOMAINE/nuvio-collections-usa-fr.json`.
+
+Cette réimportation est nécessaire pour appliquer la priorité France (`pinToTop`) aux Collections déjà stockées dans Nuvio.
+
+Tu peux ensuite supprimer les anciens addons séparés qui ne se terminent pas par `/fr` ou `/us` si tu les as encore installés.
 
 ## Vérification
 
-Ouvre :
-
-```text
-https://TON-DOMAINE/coexistence-check.json
-```
-
-La valeur attendue est :
+`/coexistence-check.json` doit retourner :
 
 ```json
-{"safe": true}
+{"safe":true}
 ```
 
-Le diagnostic vérifie notamment :
+Les tests vérifient en plus :
 
-- IDs addons différents ;
-- aucun Collection ID en collision ;
-- aucune clé de dossier en collision ;
-- aucune clé de catalogue en collision ;
-- 10 parents USA + 14 parents France ;
-- URLs d'images enfermées dans leur namespace `/us` ou `/fr`.
+- 24 Collections uniques ;
+- les 14 Collections France avant les 10 USA ;
+- France `pinToTop=true`, USA `pinToTop=false` dans l'import combiné ;
+- aucune collision d'addon / Collection / dossier / catalogue ;
+- les URLs des covers de plateformes restent sous `/fr/...` ou `/us/...` ;
+- les URLs des affiches de contenu Modern restent sous `/fr/calendar-card.svg` ou `/us/calendar-card.svg` ;
+- les routes `calendar-card.svg` sont réellement atteignables via le wrapper et savent embarquer l'image source.
 
 ## Tests
 
@@ -109,4 +106,4 @@ Le diagnostic vérifie notamment :
 npm test
 ```
 
-La commande lance les tests complets de l'engine USA, de l'engine France et de la couche de coexistence.
+La commande lance l'engine USA, l'engine France puis les tests spécifiques de coexistence.

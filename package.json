@@ -1,8 +1,8 @@
 {
   "name": "nuvio-calendar-archives-usa-fr-coexist",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
-  "description": "Single-deployment coexistence pack for Nuvio Calendar Archives USA + France on Modern Shield.",
+  "description": "Single-deployment coexistence pack for Nuvio Calendar Archives France-first USA + France on Modern Shield.",
   "scripts": {
     "start": "node local-server.js",
     "test": "node scripts/test-all.js"
