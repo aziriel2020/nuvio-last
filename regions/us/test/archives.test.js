@@ -32,8 +32,8 @@ test('five rolling periods follow the viewer-local day automatically',()=>{
   assert.equal(calendar.dateWindow('yesterday',fixedTomorrow,tz).start,'2026-08-24');
 });
 
-test('prewire includes previous, current and next year for rollover without monthly reimport',()=>{
-  assert.deepEqual(api._internals.archivePrewiredYears(fixedNow,tz),[2027,2026,2025]);
+test('prewire covers 2025 through 2030 from the 2026 baseline without reimport',()=>{
+  assert.deepEqual(api._internals.archivePrewiredYears(fixedNow,tz),[2030,2029,2028,2027,2026,2025]);
   assert.equal(api._internals.archiveYearIsVisible(2027,fixedNow,tz),false);
   assert.equal(api._internals.archiveYearIsVisible(2026,fixedNow,tz),true);
   assert.equal(api._internals.archiveYearIsVisible(2025,fixedNow,tz),true);
@@ -44,15 +44,59 @@ test('prewire includes previous, current and next year for rollover without mont
 test('manifest entries include five dynamic periods plus prewired month+year rows',()=>{
   const e=api._internals.buildArchiveCatalogEntries(fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
-  const monthly=12*providerCategoryCount*3;
+  const monthly=12*providerCategoryCount*6;
   const dynamic=5*providerCategoryCount;
-  assert.equal(monthly,684);
+  assert.equal(monthly,1368);
   assert.equal(dynamic,95);
-  assert.equal(e.length,779);
+  assert.equal(e.length,1463);
   assert.equal(e.find(x=>x.id==='archives-v3-series-netflix-today').catalog.name,'Aujourd’hui');
   assert.equal(e.find(x=>x.id==='archives-v3-series-netflix-nextweek').catalog.name,'La semaine suivante');
   assert.equal(e.find(x=>x.id==='archives-v3-series-netflix-2026-08').catalog.name,'Août 2026');
   assert.equal(e.find(x=>x.id==='archives-v3-movie-vod-us-2025-12').catalog.name,'Décembre 2025');
+});
+
+
+test('VOD is based on US Digital release dates only, not buy/rent providers',async()=>{
+  const params=api._internals.vodDiscoverParams({start:'2026-08-24',end:'2026-08-24'},1);
+  assert.equal(params.region,'US');
+  assert.equal(params.with_release_type,'4');
+  assert.equal(params['release_date.gte'],'2026-08-24');
+  assert.equal(params['release_date.lte'],'2026-08-24');
+  assert.equal('watch_region' in params,false);
+  assert.equal('with_watch_monetization_types' in params,false);
+
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname.endsWith('/discover/movie')){
+      assert.equal(u.searchParams.get('region'),'US');
+      assert.equal(u.searchParams.get('with_release_type'),'4');
+      assert.equal(u.searchParams.has('with_watch_monetization_types'),false);
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({page:1,total_pages:1,results:[{id:424242}]})};
+    }
+    if(u.pathname.endsWith('/movie/424242')){
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id:424242,title:'Digital Test',overview:'Sans aucun watch provider',poster_path:'/p.jpg',backdrop_path:'/b.jpg',
+        external_ids:{imdb_id:'tt4242424'},
+        release_dates:{results:[{iso_3166_1:'US',release_dates:[{type:4,release_date:'2026-08-24T00:00:00.000Z'}]}]}
+      })};
+    }
+    throw new Error('unexpected '+u.pathname);
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog=api._internals.resolveArchiveCatalog('archives-v3-movie-vod-us-today','movie',fixedNow,tz);
+    const result=await api._internals.buildVodCatalog({catalog,timeZone:tz,now:fixedNow,useCache:false});
+    assert.equal(result.metas.length,1);
+    assert.equal(result.metas[0].name,'Digital Test');
+    assert.match(result.metas[0].releaseInfo,/Digital|digitale/i);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+  }
 });
 
 test('VOD is Films-only for periods and months',()=>{
@@ -66,8 +110,8 @@ test('VOD is Films-only for periods and months',()=>{
 
 test('manifest v1.5 stays hidden from normal Home because Collections own the UI',()=>{
   const m=api._internals.buildManifest('https://archives.example',fixedNow,tz);
-  assert.equal(m.version,'1.5.3');
-  assert.equal(m.catalogs.length,779);
+  assert.equal(m.version,'1.6.0');
+  assert.equal(m.catalogs.length,1498);
   assert(m.catalogs.every(c=>c.showInHome===false));
   assert(m.catalogs.every(c=>c.extraSupported.includes('skip')));
   assert(m.catalogs.some(c=>c.type==='series'&&c.name==='Aujourd’hui'));
@@ -96,9 +140,10 @@ test('Shield Modern decoration keeps real content type and landscape artwork for
 
 test('Nuvio import has platform names as the 10 parent Collections',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://archives.example');
-  assert.deepEqual(payload.map(c=>c.title),['🇺🇸 Netflix','🇺🇸 Prime Video','🇺🇸 Disney+','🇺🇸 Max','🇺🇸 Apple TV+','🇺🇸 Paramount+','🇺🇸 Peacock','🇺🇸 Hulu','🇺🇸 Crunchyroll + AniList','🇺🇸 VOD']);
-  assert.equal(payload.length,10);
-  assert(payload.every(c=>c.pinToTop===true&&c.viewMode==='FOLLOW_LAYOUT'&&c.showAllTab===false));
+  assert.deepEqual(payload.map(c=>c.title),['🇺🇸 Netflix','🇺🇸 Prime Video','🇺🇸 Disney+','🇺🇸 Max','🇺🇸 Apple TV+','🇺🇸 Paramount+','🇺🇸 Peacock','🇺🇸 Hulu','🇺🇸 Crunchyroll + AniList','🇺🇸 VOD','🇺🇸 TMDb Genres']);
+  assert.equal(payload.length,11);
+  assert(payload.every(c=>c.viewMode==='FOLLOW_LAYOUT'&&c.showAllTab===false));
+  assert(payload.slice(0,10).every(c=>c.pinToTop===true));
 });
 
 test('old parent IDs are reused by Netflix and Prime Video for a clean upgrade',()=>{
@@ -115,9 +160,9 @@ test('normal streaming parent contains Modern Series and Films cards',()=>{
   for(const f of netflix.folders){
     assert.equal(f.tileShape,'LANDSCAPE');
     assert.equal(f.hideTitle,true);
-    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us100$/);
-    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us100$/);
-    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us100$/);
+    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us170-cinematic$/);
+    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us170-cinematic$/);
+    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us170-cinematic$/);
   }
 });
 
@@ -181,7 +226,7 @@ test('Crunchyroll + AniList has Series and Films, VOD has Films only, and Crunch
 
 test('every folder starts with the five periods, then months+years descending',()=>{
   const s=folder(collection('🇺🇸 Netflix'),'Séries');
-  assert.equal(s.sources.length,41);
+  assert.equal(s.sources.length,77);
   assert.deepEqual(s.sources.slice(0,5).map(x=>x.catalogId),[
     'archives-v3-series-netflix-today',
     'archives-v3-series-netflix-tomorrow',
@@ -189,19 +234,19 @@ test('every folder starts with the five periods, then months+years descending',(
     'archives-v3-series-netflix-lastweek',
     'archives-v3-series-netflix-nextweek'
   ]);
-  assert.equal(s.sources[5].catalogId,'archives-v3-series-netflix-2027-12');
-  assert.equal(s.sources[16].catalogId,'archives-v3-series-netflix-2027-01');
-  assert.equal(s.sources[17].catalogId,'archives-v3-series-netflix-2026-12');
-  assert.equal(s.sources[21].catalogId,'archives-v3-series-netflix-2026-08');
-  assert.equal(s.sources[28].catalogId,'archives-v3-series-netflix-2026-01');
-  assert.equal(s.sources[29].catalogId,'archives-v3-series-netflix-2025-12');
+  assert.equal(s.sources[5].catalogId,'archives-v3-series-netflix-2030-12');
+  assert.equal(s.sources[16].catalogId,'archives-v3-series-netflix-2030-01');
+  assert.equal(s.sources[53].catalogId,'archives-v3-series-netflix-2026-12');
+  assert.equal(s.sources[57].catalogId,'archives-v3-series-netflix-2026-08');
+  assert.equal(s.sources[64].catalogId,'archives-v3-series-netflix-2026-01');
+  assert.equal(s.sources[65].catalogId,'archives-v3-series-netflix-2025-12');
   assert.equal(s.sources.at(-1).catalogId,'archives-v3-series-netflix-2025-01');
 });
 
 test('folder sources use the addon id and the folder real media type',()=>{
   for(const parent of api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://archives.example')){
     for(const f of parent.folders){
-      const expected=f.title==='Films'?'movie':'series';
+      const expected=(f.title==='Films'||f.title.startsWith('Movies'))?'movie':'series';
       assert(f.sources.every(s=>s.provider==='addon'&&s.addonId==='com.nuvio.calendar.archives.us.coexist'&&s.type===expected));
     }
   }

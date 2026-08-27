@@ -7,7 +7,7 @@ const api=require('../api/index');
 const fixedNow=new Date('2026-08-24T12:28:00Z');
 const fixedSep=new Date('2026-09-01T12:28:00Z');
 const tz='Europe/Paris';
-const expectedParents=['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France'];
+const expectedParents=['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres TMDb'];
 
 function collection(title, now=fixedNow, origin='https://fr-archives.example'){
   return api._internals.buildNuvioCollectionsImport(now,tz,origin).find(c=>c.title===title||c.title.endsWith(` ${title}`));
@@ -40,8 +40,9 @@ test('France provider parents include French services and no US-only Hulu/Peacoc
 
 test('all normal France platforms have Series and Films; VOD France is Films only',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
-  for(const parent of payload.filter(c=>c.title!=='🇫🇷 VOD France')) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
+  for(const parent of payload.filter(c=>!['🇫🇷 VOD France','🇫🇷 Genres TMDb'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
   assert.deepEqual(collection('VOD France').folders.map(f=>f.title),['Films']);
+  assert(collection('Genres TMDb').folders.length > 30);
 });
 
 test('Crunchyroll + AniList keeps anime Series and anime Films',()=>{
@@ -91,9 +92,9 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.0.0');
+  assert.equal(manifest.version,'1.1.1');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+36));
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+72)+35);
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
 
@@ -120,6 +121,50 @@ test('periods then month+years are descending and import is stable across Septem
     'archives-fr-v1-series-netflix-today','archives-fr-v1-series-netflix-tomorrow','archives-fr-v1-series-netflix-yesterday','archives-fr-v1-series-netflix-lastweek','archives-fr-v1-series-netflix-nextweek'
   ]);
   assert(sources.indexOf('archives-fr-v1-series-netflix-2026-09')<sources.indexOf('archives-fr-v1-series-netflix-2026-08'));
+});
+
+
+test('VOD is based on FR Digital release dates only, not buy/rent providers',async()=>{
+  const params=api._internals.vodDiscoverParams({start:'2026-08-24',end:'2026-08-24'},1);
+  assert.equal(params.region,'FR');
+  assert.equal(params.with_release_type,'4');
+  assert.equal(params['release_date.gte'],'2026-08-24');
+  assert.equal(params['release_date.lte'],'2026-08-24');
+  assert.equal('watch_region' in params,false);
+  assert.equal('with_watch_monetization_types' in params,false);
+
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname.endsWith('/discover/movie')){
+      assert.equal(u.searchParams.get('region'),'FR');
+      assert.equal(u.searchParams.get('with_release_type'),'4');
+      assert.equal(u.searchParams.has('with_watch_monetization_types'),false);
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({page:1,total_pages:1,results:[{id:424242}]})};
+    }
+    if(u.pathname.endsWith('/movie/424242')){
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id:424242,title:'Digital Test',overview:'Sans aucun watch provider',poster_path:'/p.jpg',backdrop_path:'/b.jpg',
+        external_ids:{imdb_id:'tt4242424'},
+        release_dates:{results:[{iso_3166_1:'FR',release_dates:[{type:4,release_date:'2026-08-24T00:00:00.000Z'}]}]}
+      })};
+    }
+    throw new Error('unexpected '+u.pathname);
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog=api._internals.resolveArchiveCatalog('archives-fr-v1-movie-vod-fr-today','movie',fixedNow,tz);
+    const result=await api._internals.buildVodCatalog({catalog,timeZone:tz,now:fixedNow,useCache:false});
+    assert.equal(result.metas.length,1);
+    assert.equal(result.metas[0].name,'Digital Test');
+    assert.match(result.metas[0].releaseInfo,/Digital|digitale/i);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+  }
 });
 
 test('French VOD is Films-only and uses FR archive IDs',()=>{

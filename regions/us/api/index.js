@@ -18,8 +18,6 @@ const {
   buildInstantEvent,
   parseTmdbFallbackId,
   hasProviderInFlatrate,
-  usVodProviders,
-  hasVodAvailability,
   movieDetailsToMeta,
   movieVodDetailsToMeta,
   seriesDetailsToMeta,
@@ -32,7 +30,10 @@ const {
   normalizeTitle
 } = require('../src/calendar');
 
-const VERSION = '1.5.3';
+const fs = require('fs');
+const path = require('path');
+
+const VERSION = '1.6.0';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -46,8 +47,22 @@ const PROVIDERS_TTL_MS = 6 * 60 * 60 * 1000;
 const TVMAZE_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const ANILIST_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const MAPPING_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const SOURCE_VERSION = 'calendar-archives-v1.5.3-modern-shield';
-const VISUAL_REV = 'coex-us100';
+const SOURCE_VERSION = 'calendar-archives-v1.7.0-modern-shield';
+const VISUAL_REV = 'coex-us170-cinematic';
+
+const REGION_ART_KEY = 'us';
+const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/us');
+const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-art/shared');
+const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
+const LOCAL_VISUAL_DATA_CACHE = new Map();
+function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
+  const key = `${mime}:${absolutePath}`; if (LOCAL_VISUAL_DATA_CACHE.has(key)) return LOCAL_VISUAL_DATA_CACHE.get(key);
+  try { const data=fs.readFileSync(absolutePath); const uri=`data:${mime};base64,${data.toString('base64')}`; LOCAL_VISUAL_DATA_CACHE.set(key,uri); return uri; }
+  catch (_) { LOCAL_VISUAL_DATA_CACHE.set(key,null); return null; }
+}
+function platformPhotoDataUri(providerSlug, variant='card') { return localVisualDataUri(path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant==='backdrop'?'backdrop':'card'}.jpg`)); }
+function genreCinematicDataUri(genreSlug, variant='card') { const v=variant==='backdrop'?'backdrop':'card'; return localVisualDataUri(path.join(GENRE_CINEMATIC_ART_DIR, `${String(genreSlug||'').trim().toLowerCase()}-${v}.jpg`)); }
+function serveLocalJpeg(res, absolutePath, cache='public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') { try { const data=fs.readFileSync(absolutePath); res.statusCode=200; res.setHeader('Content-Type','image/jpeg'); res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control',cache); res.end(data); } catch (_) { res.statusCode=404; res.end('Not found'); } }
 
 const PROVIDERS = [
   { slug: 'netflix', label: 'Netflix', aliases: ['Netflix', 'Netflix Standard with Ads'] },
@@ -65,7 +80,7 @@ const PROVIDER_BY_SLUG = new Map(PROVIDERS.map((provider) => [provider.slug, pro
 
 const ARCHIVE_MIN_YEAR = 2025;
 const ARCHIVE_ID_PREFIX = 'archives-v3';
-const ARCHIVE_PREWIRE_FUTURE_YEARS = 1;
+const ARCHIVE_PREWIRE_FUTURE_YEARS = 4;
 const ARCHIVE_MONTHS_FR = Object.freeze([
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
@@ -122,6 +137,262 @@ const PLATFORM_COLLECTION_ID_OVERRIDES = Object.freeze({
   netflix: 'calendar-archives',
   'prime-video': 'calendar-archives-films'
 });
+
+
+const TMDB_MOVIE_GENRES = Object.freeze([
+  { id: 28, slug: 'action', name: 'Action', color: '#ef4444', icon: '⚡' },
+  { id: 12, slug: 'adventure', name: 'Adventure', color: '#f59e0b', icon: '🧭' },
+  { id: 16, slug: 'animation', name: 'Animation', color: '#8b5cf6', icon: '✨' },
+  { id: 35, slug: 'comedy', name: 'Comedy', color: '#22c55e', icon: '😄' },
+  { id: 80, slug: 'crime', name: 'Crime', color: '#64748b', icon: '🕵️' },
+  { id: 99, slug: 'documentary', name: 'Documentary', color: '#06b6d4', icon: '📘' },
+  { id: 18, slug: 'drama', name: 'Drama', color: '#3b82f6', icon: '🎭' },
+  { id: 10751, slug: 'family', name: 'Family', color: '#ec4899', icon: '👨‍👩‍👧' },
+  { id: 14, slug: 'fantasy', name: 'Fantasy', color: '#a855f7', icon: '🪄' },
+  { id: 36, slug: 'history', name: 'History', color: '#b45309', icon: '🏛️' },
+  { id: 27, slug: 'horror', name: 'Horror', color: '#991b1b', icon: '🩸' },
+  { id: 10402, slug: 'music', name: 'Music', color: '#10b981', icon: '🎵' },
+  { id: 9648, slug: 'mystery', name: 'Mystery', color: '#6366f1', icon: '🧩' },
+  { id: 10749, slug: 'romance', name: 'Romance', color: '#f43f5e', icon: '❤️' },
+  { id: 878, slug: 'science-fiction', name: 'Science Fiction', color: '#38bdf8', icon: '🚀' },
+  { id: 10770, slug: 'tv-movie', name: 'TV Movie', color: '#14b8a6', icon: '📺' },
+  { id: 53, slug: 'thriller', name: 'Thriller', color: '#e11d48', icon: '🔪' },
+  { id: 10752, slug: 'war', name: 'War', color: '#78716c', icon: '🪖' },
+  { id: 37, slug: 'western', name: 'Western', color: '#ca8a04', icon: '🤠' }
+]);
+const TMDB_TV_GENRES = Object.freeze([
+  { id: 10759, slug: 'action-adventure', name: 'Action & Adventure', color: '#ef4444', icon: '⚡' },
+  { id: 16, slug: 'animation', name: 'Animation', color: '#8b5cf6', icon: '✨' },
+  { id: 35, slug: 'comedy', name: 'Comedy', color: '#22c55e', icon: '😄' },
+  { id: 80, slug: 'crime', name: 'Crime', color: '#64748b', icon: '🕵️' },
+  { id: 99, slug: 'documentary', name: 'Documentary', color: '#06b6d4', icon: '📘' },
+  { id: 18, slug: 'drama', name: 'Drama', color: '#3b82f6', icon: '🎭' },
+  { id: 10751, slug: 'family', name: 'Family', color: '#ec4899', icon: '👨‍👩‍👧' },
+  { id: 10762, slug: 'kids', name: 'Kids', color: '#f97316', icon: '🧒' },
+  { id: 9648, slug: 'mystery', name: 'Mystery', color: '#6366f1', icon: '🧩' },
+  { id: 10763, slug: 'news', name: 'News', color: '#0ea5e9', icon: '📰' },
+  { id: 10764, slug: 'reality', name: 'Reality', color: '#f59e0b', icon: '🎬' },
+  { id: 10765, slug: 'scifi-fantasy', name: 'Sci‑Fi & Fantasy', color: '#38bdf8', icon: '🪐' },
+  { id: 10766, slug: 'soap', name: 'Soap', color: '#fb7185', icon: '💞' },
+  { id: 10767, slug: 'talk', name: 'Talk', color: '#84cc16', icon: '🎤' },
+  { id: 10768, slug: 'war-politics', name: 'War & Politics', color: '#78716c', icon: '🏛️' },
+  { id: 37, slug: 'western', name: 'Western', color: '#ca8a04', icon: '🤠' }
+]);
+const TMDB_GENRE_COLLECTION = Object.freeze({ slug: 'tmdb-genres', label: 'TMDb Genres' });
+
+const GENRE_POSTER_FILES = Object.freeze({
+  'movie:action': 'action.png',
+  'movie:animation': 'animation.png',
+  'movie:comedy': 'comedy.png',
+  'movie:crime': 'crime.png',
+  'movie:documentary': 'documentary.png',
+  'movie:drama': 'drama.png',
+  'movie:fantasy': 'fantasy.png',
+  'movie:horror': 'horror.png',
+  'movie:romance': 'romance.png',
+  'movie:science-fiction': 'science-fiction.png',
+  'series:action-adventure': 'action.png',
+  'series:animation': 'animation.png',
+  'series:comedy': 'comedy.png',
+  'series:crime': 'crime.png',
+  'series:documentary': 'documentary.png',
+  'series:drama': 'drama.png',
+  'series:scifi-fantasy': 'fantasy.png'
+});
+const GENRE_POSTER_DIR_SAFE = path.resolve(__dirname, '../../../assets/genre-posters');
+
+function genrePosterFile(type, genreSlug) {
+  return GENRE_POSTER_FILES[`${type}:${genreSlug}`] || null;
+}
+
+function genrePosterUrl(origin, genre, type) {
+  const typeToken = type === 'series' ? 'series' : 'movie';
+  const fileName = genrePosterFile(typeToken, genre.slug);
+  if (!origin || !fileName) return null;
+  return `${origin}/genre-poster.png?type=${encodeURIComponent(typeToken)}&genre=${encodeURIComponent(genre.slug)}&v=${VISUAL_REV}`;
+}
+
+
+function genreCatalogId(type, genreId) {
+  return `genres-us-${type === 'movie' ? 'movie' : 'series'}-${genreId}`;
+}
+
+function genreDescriptor(type, genre) {
+  return {
+    type,
+    name: genre.name,
+    providerSlug: TMDB_GENRE_COLLECTION.slug,
+    cardProvider: TMDB_GENRE_COLLECTION.label,
+    period: 'today',
+    source: 'tmdb-streaming-genre',
+    section: type === 'movie' ? 'films' : 'series-streaming',
+    noFilters: true,
+    explore: true,
+    tmdbGenreId: genre.id,
+    tmdbGenreSlug: genre.slug,
+    genreName: genre.name,
+    genreColor: genre.color,
+    genreIcon: genre.icon,
+    genreCategory: type === 'movie' ? 'films' : 'series'
+  };
+}
+
+function buildGenreCatalogEntries() {
+  return [
+    ...TMDB_MOVIE_GENRES.map((genre) => ({ id: genreCatalogId('movie', genre.id), catalog: genreDescriptor('movie', genre) })),
+    ...TMDB_TV_GENRES.map((genre) => ({ id: genreCatalogId('series', genre.id), catalog: genreDescriptor('series', genre) }))
+  ];
+}
+
+function genreImageUrls(origin, genre, type = 'movie') {
+  if (!origin) return { card:null, backdrop:null, logo:null };
+  const typeToken=type==='series'?'series':'movie';
+  const params=`genre=${encodeURIComponent(genre.slug)}&label=${encodeURIComponent(genre.name)}&type=${typeToken}&color=${encodeURIComponent(genre.color)}&icon=${encodeURIComponent(genre.icon)}&v=${VISUAL_REV}`;
+  return { card:`${origin}/genre-folder-art.svg?variant=card&${params}`, backdrop:`${origin}/genre-folder-art.svg?variant=backdrop&${params}`, logo:`${origin}/genre-folder-art.svg?variant=logo&${params}` };
+}
+
+function buildGenreCollection(entries, origin = null) {
+  const folders = [
+    ...TMDB_MOVIE_GENRES.map((genre) => {
+      const entry = entries.find((item) => item.id === genreCatalogId('movie', genre.id));
+      const images = genreImageUrls(origin, genre, 'movie');
+      return {
+        id: `genres-us-movie-folder-${genre.id}`,
+        title: `Movies · ${genre.name}`,
+        coverImageUrl: images.card,
+        focusGifEnabled: false,
+        coverEmoji: genre.icon,
+        tileShape: 'LANDSCAPE',
+        hideTitle: true,
+        heroBackdropUrl: images.backdrop,
+        heroVideoUrl: null,
+        titleLogoUrl: images.logo,
+        sources: entry ? [collectionAddonSource(entry)] : [],
+        catalogSources: entry ? [collectionLegacyCatalogSource(entry)] : []
+      };
+    }),
+    ...TMDB_TV_GENRES.map((genre) => {
+      const entry = entries.find((item) => item.id === genreCatalogId('series', genre.id));
+      const images = genreImageUrls(origin, genre, 'series');
+      return {
+        id: `genres-us-series-folder-${genre.id}`,
+        title: `Series · ${genre.name}`,
+        coverImageUrl: images.card,
+        focusGifEnabled: false,
+        coverEmoji: genre.icon,
+        tileShape: 'LANDSCAPE',
+        hideTitle: true,
+        heroBackdropUrl: images.backdrop,
+        heroVideoUrl: null,
+        titleLogoUrl: images.logo,
+        sources: entry ? [collectionAddonSource(entry)] : [],
+        catalogSources: entry ? [collectionLegacyCatalogSource(entry)] : []
+      };
+    })
+  ];
+  return {
+    id: 'calendar-archives-us-genres',
+    title: '🇺🇸 TMDb Genres',
+    backdropImageUrl: origin ? `${origin}/genre-collection-art.jpg?v=${VISUAL_REV}` : null,
+    pinToTop: false,
+    focusGlowEnabled: true,
+    viewMode: 'FOLLOW_LAYOUT',
+    showAllTab: false,
+    folders
+  };
+}
+
+async function resolveAllStreamingProviderIds(type) {
+  const directory = await providerDirectory(type);
+  const ids = new Set();
+  for (const provider of PROVIDERS) {
+    const resolved = resolveProviderFromDirectory(provider, directory);
+    for (const id of resolved?.ids || []) ids.add(Number(id));
+  }
+  return [...ids].filter(Number.isFinite);
+}
+
+function genreDiscoverParams(catalog, providerIds, page) {
+  const common = {
+    language: getConfig().language,
+    page,
+    include_adult: false,
+    sort_by: 'popularity.desc',
+    with_genres: String(catalog.tmdbGenreId),
+    watch_region: DEFAULT_COUNTRY,
+    with_watch_providers: providerIds.join('|'),
+    with_watch_monetization_types: 'flatrate|free|ads'
+  };
+  if (catalog.type === 'movie') return { ...common, region: DEFAULT_COUNTRY };
+  return common;
+}
+
+async function discoverGenreCandidates(catalog, providerIds) {
+  const endpoint = catalog.type === 'movie' ? '/discover/movie' : '/discover/tv';
+  const maxCandidates = Math.max(getConfig().maxItems, 120);
+  const items = [];
+  for (let page = 1; page <= 8 && items.length < maxCandidates; page += 1) {
+    const payload = await tmdbFetch(endpoint, genreDiscoverParams(catalog, providerIds, page));
+    items.push(...(payload?.results || []));
+    if (page >= Number(payload?.total_pages || 1)) break;
+  }
+  return items.slice(0, maxCandidates);
+}
+
+function detailsToGenreMeta(details, catalog) {
+  const type = catalog.type === 'movie' ? 'movie' : 'series';
+  const date = normalizeIsoDate(type === 'movie' ? details?.release_date : details?.first_air_date) || localIsoDate(new Date(), DEFAULT_TIMEZONE);
+  const label = `${TMDB_GENRE_COLLECTION.label} • ${catalog.type === 'movie' ? 'Movies' : 'Series'} • ${catalog.genreName}`;
+  const meta = baseMeta(details, type, date, label);
+  meta.description = [
+    `${label} • US Market`,
+    meta.description
+  ].filter(Boolean).join('\n\n');
+  meta._eventMode = EVENT_MODES.STREAMING_DATE;
+  return { meta, reason: null };
+}
+
+async function buildGenreStreamingCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
+  const window = dateWindow('today', now, timeZone);
+  const key = catalogCacheKey({ providerSlug: `${TMDB_GENRE_COLLECTION.slug}:${catalog.type}:${catalog.tmdbGenreId}`, type: catalog.type, period: 'library', timeZone, today: window.today, sourceVersion: `${SOURCE_VERSION}-genres` });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+  const stats = emptyStats({ label: `${TMDB_GENRE_COLLECTION.label} ${catalog.genreName}`, ids: [] }, { ...catalog, period: 'library' }, window, timeZone);
+  const providerIds = await resolveAllStreamingProviderIds(catalog.type);
+  if (!providerIds.length) {
+    const result = { metas: [], stats };
+    return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+  }
+  const raw = await discoverGenreCandidates(catalog, providerIds);
+  stats.candidates = raw.length;
+  const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
+    const details = await fetchDetails(catalog.type, candidate.id);
+    return detailsToGenreMeta(details, catalog);
+  });
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) { countReason(stats, result?.reason); continue; }
+    metas.push(result.meta);
+  }
+  const sorted = sortAndDedupeMetas(metas).slice(0, getConfig().maxItems);
+  stats.duplicatesRemoved = Math.max(0, metas.length - sorted.length);
+  stats.final = sorted.length;
+  const result = { metas: sorted.map(cleanCatalogMeta), stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
+function genreFolderArtSvg(params = {}) {
+  const label=escapeXml(String(params.label||'Genre')); const variant=String(params.variant||'card'); const typeToken=String(params.type||'movie')==='series'?'series':'movie'; const typeLabel=typeToken==='series'?'SERIES':'MOVIES';
+  const color=/^#?[0-9a-fA-F]{6}$/.test(String(params.color||'').replace('#',''))?(String(params.color).startsWith('#')?String(params.color):`#${String(params.color)}`):'#38bdf8';
+  const photoDataUri=genreCinematicDataUri(params.genre, variant==='backdrop'?'backdrop':'card');
+  if (variant==='logo') return `<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="300" viewBox="0 0 1400 300"><rect width="1400" height="300" fill="none"/><rect x="20" y="55" width="10" height="180" rx="5" fill="${color}"/><text x="70" y="155" fill="#fff" font-family="Arial,sans-serif" font-size="112" font-weight="900">${label}</text><text x="76" y="220" fill="${color}" font-family="Arial,sans-serif" font-size="40" font-weight="900" letter-spacing="6">${typeLabel}</text></svg>`;
+  const isBackdrop=variant==='backdrop'; const width=isBackdrop?1920:1600; const height=isBackdrop?1080:900; const image=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="${width}" height="${height}" fill="#07111f"/>`;
+  if (isBackdrop) return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".86"/><stop offset=".52" stop-color="#02040a" stop-opacity=".44"/><stop offset="1" stop-color="#02040a" stop-opacity=".04"/></linearGradient></defs>${image}<rect width="1920" height="1080" fill="url(#r)"/><rect x="104" y="140" width="10" height="224" rx="5" fill="${color}"/><text x="148" y="240" fill="#fff" font-family="Arial,sans-serif" font-size="58" font-weight="900" letter-spacing="5">TMDb GENRES</text><text x="148" y="344" fill="${color}" font-family="Arial,sans-serif" font-size="42" font-weight="900" letter-spacing="5">${typeLabel}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".58"/><stop offset="1" stop-color="#02040a" stop-opacity=".06"/></linearGradient></defs><g clip-path="url(#c)">${image}<rect width="1600" height="900" fill="url(#r)"/></g><rect x="76" y="80" width="10" height="176" rx="5" fill="${color}"/><text x="116" y="153" fill="#e7edf7" font-family="Arial,sans-serif" font-size="32" font-weight="900" letter-spacing="4">TMDb GENRES</text><text x="116" y="248" fill="#fff" font-family="Arial,sans-serif" font-size="104" font-weight="900">${label}</text><text x="118" y="312" fill="${color}" font-family="Arial,sans-serif" font-size="40" font-weight="900" letter-spacing="5">${typeLabel}</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".20" stroke-width="5"/></svg>`;
+}
 
 function archiveNowParts(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
   const today = localIsoDate(now, timeZone);
@@ -347,14 +618,14 @@ function buildPlatformCollection(definition, entries, origin = null) {
 }
 
 function buildNuvioCollectionsImport(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
-  const entries = buildArchiveCatalogEntries(now, timeZone);
-  return PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin));
+  const entries = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries()];
+  return [...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), buildGenreCollection(entries, origin)];
 }
 
 function buildArchiveBlueprint(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
   const collections = buildNuvioCollectionsImport(now, timeZone, origin);
   return {
-    schema: 'nuvio-calendar-archives-blueprint-v1.5.3',
+    schema: 'nuvio-calendar-archives-blueprint-v1.5.5',
     generatedForTimezone: timeZone,
     archiveMinYear: ARCHIVE_MIN_YEAR,
     visibleRollingYears: 2,
@@ -564,6 +835,28 @@ function svg(res, body, cache = 'public, max-age=86400, s-maxage=86400') {
   res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
   res.setHeader('Cache-Control', cache);
   res.end(body);
+}
+
+function serveGenrePosterPng(res, params = {}) {
+  const typeToken = String(params.type || 'movie') === 'series' ? 'series' : 'movie';
+  const genreSlug = String(params.genre || '').trim().toLowerCase();
+  const fileName = genrePosterFile(typeToken, genreSlug);
+  if (!fileName) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  try {
+    const data = fs.readFileSync(path.join(GENRE_POSTER_DIR_SAFE, fileName));
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+    res.end(data);
+  } catch (_) {
+    res.statusCode = 404;
+    res.end('Not found');
+  }
 }
 
 function requestOrigin(req) {
@@ -1068,7 +1361,7 @@ function requireTmdbConfig() {
 }
 
 function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
-  const catalogs = buildArchiveCatalogEntries(now, timeZone).map(({ id, catalog }) => {
+  const catalogs = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries()].map(({ id, catalog }) => {
     const filters = filterOptionsForCatalog(catalog).map((entry) => entry.label);
     return {
       type: catalog.type,
@@ -1088,7 +1381,7 @@ function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) 
     id: 'com.nuvio.calendar.archives.us.coexist',
     version: VERSION,
     name: 'Nuvio Calendar Archives',
-    description: 'Archives Nuvio Shield Modern: plateforme → Séries/Films → périodes dynamiques puis mois+année. Crunchyroll + AniList, films d’anime inclus, VOD Films, covers HD 16:9.',
+    description: 'Archives Nuvio Shield Modern: plateforme → Séries/Films → périodes dynamiques puis mois+année. Crunchyroll + AniList, films d’anime inclus, VOD Films basé sur les dates Digital Releases (TMDb type 4), covers HD 16:9.',
     logo: `${origin}/logo.svg`,
     background: `${origin}/background.svg`,
     resources: [
@@ -1377,26 +1670,14 @@ function platformBrandBadge(providerSlug, logoDataUri, opts = {}) {
   return `<g><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="#02060d" fill-opacity=".52" stroke="#ffffff" stroke-opacity=".12"/><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="url(#brandAccent)" fill-opacity=".18"/>${icon}<text x="${textX}" y="${titleY}" fill="#fff" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="900" letter-spacing="-2">${label}</text><text x="${textX}" y="${subtitleY}" fill="#c9d6e5" font-family="Arial,sans-serif" font-size="${subSize}" font-weight="700" letter-spacing="4">STREAMING PLATFORM</text></g>`;
 }
 
-function platformBackdropSvg(providerSlug, type = 'movie', logoDataUri = null) {
-  const label = escapeXml(platformCollectionTitle(providerSlug));
-  const accent = providerAccentColor(platformCollectionTitle(providerSlug));
-  const typeLabel = type === 'series' ? 'SÉRIES' : 'FILMS';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#03060c"/><stop offset=".55" stop-color="#09111e"/><stop offset="1" stop-color="${accent}" stop-opacity=".44"/></linearGradient><radialGradient id="glow" cx=".82" cy=".22" r=".72"><stop stop-color="${accent}" stop-opacity=".28"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><rect width="1920" height="1080" fill="url(#bg)"/><rect width="1920" height="1080" fill="url(#glow)"/><path d="M0 820C300 720 495 650 720 650c250 0 390 70 622 70 215 0 380-68 578-185v545H0Z" fill="#02050a" opacity=".52"/><path d="M0 838c295-82 503-126 720-126 242 0 399 60 617 60 224 0 396-72 583-166" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="3"/><text x="112" y="780" fill="#fff" font-family="Arial,sans-serif" font-size="176" font-weight="900" letter-spacing="-6">${typeLabel}</text><text x="120" y="852" fill="#c7d3e2" font-family="Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="6">${label}</text><text x="120" y="912" fill="#8fa2b8" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="4">CALENDAR ARCHIVES · PÉRIODES + MOIS DÉCROISSANTS</text><rect x="120" y="952" width="760" height="12" rx="6" fill="${accent}" opacity=".92"/></svg>`;
+function platformBackdropSvg(providerSlug, type = 'movie', logoDataUri = null, photoDataUri = null) {
+  const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const typeLabel=type==='series'?'SÉRIES':'FILMS'; const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1920" height="1080" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1920" height="1080" fill="#060a12"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".90"/><stop offset=".48" stop-color="#02040a" stop-opacity=".55"/><stop offset="1" stop-color="#02040a" stop-opacity=".05"/></linearGradient></defs>${photo}<rect width="1920" height="1080" fill="url(#r)"/><rect x="92" y="116" width="10" height="245" rx="5" fill="${accent}"/><text x="132" y="205" fill="#fff" font-family="Arial,sans-serif" font-size="48" font-weight="800" letter-spacing="6">${typeLabel}</text><text x="130" y="307" fill="#fff" font-family="Arial,sans-serif" font-size="92" font-weight="900">${label}</text><text x="132" y="388" fill="#d5e0ee" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="4">NUVIO · CALENDAR ARCHIVES</text></svg>`;
 }
 
-function platformCategoryCardSvg(providerSlug, category = 'series', logoDataUri = null) {
-  const label = escapeXml(platformCollectionTitle(providerSlug));
-  const accent = providerAccentColor(platformCollectionTitle(providerSlug));
-  const isFilms = category === 'films';
-  const categoryLabel = isFilms ? 'FILMS' : 'SÉRIES';
-  const detailLabel = providerSlug === 'crunchyroll'
-    ? (isFilms ? 'FILMS D’ANIME + STREAMING' : 'CRUNCHYROLL + ANILIST')
-    : (isFilms ? 'SORTIES STREAMING · PAR MOIS' : 'NOUVELLES SÉRIES · PAR MOIS');
-  const icon = logoDataUri
-    ? `<image href="${logoDataUri}" x="92" y="76" width="230" height="230" preserveAspectRatio="xMidYMid meet"/>`
-    : `<rect x="96" y="80" width="220" height="220" rx="52" fill="#fff" fill-opacity=".08" stroke="#fff" stroke-opacity=".14"/><text x="206" y="224" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="76" font-weight="900">${escapeXml(platformProviderDefinition(providerSlug)?.label?.[0] || 'S')}</text>`;
-  const brandSize = label.length > 17 ? 74 : label.length > 12 ? 86 : 104;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#02050a"/><stop offset=".57" stop-color="#09111f"/><stop offset="1" stop-color="${accent}" stop-opacity=".48"/></linearGradient><radialGradient id="g" cx=".82" cy=".12" r=".78"><stop stop-color="${accent}" stop-opacity=".24"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><rect width="1600" height="900" rx="44" fill="url(#bg)"/><rect width="1600" height="900" rx="44" fill="url(#g)"/><circle cx="1450" cy="100" r="270" fill="${accent}" opacity=".10"/>${icon}<text x="360" y="212" fill="#fff" font-family="Arial,sans-serif" font-size="${brandSize}" font-weight="900" letter-spacing="-4">${label}</text><rect x="362" y="246" width="650" height="11" rx="5.5" fill="${accent}" opacity=".92"/><path d="M0 584C238 510 410 474 594 474c211 0 344 51 538 51 177 0 318-48 468-142v517H0Z" fill="#02050a" opacity=".54"/><text x="84" y="700" fill="#fff" font-family="Arial,sans-serif" font-size="176" font-weight="900" letter-spacing="-7">${categoryLabel}</text><text x="92" y="762" fill="#d5dfeb" font-family="Arial,sans-serif" font-size="29" font-weight="800" letter-spacing="4">${detailLabel}</text><text x="92" y="812" fill="#91a4ba" font-family="Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="3">PÉRIODES + MOIS · ORDRE DÉCROISSANT</text><rect x="92" y="848" width="660" height="12" rx="6" fill="${accent}" opacity=".9"/><g transform="translate(1180 540)">${platformCategoryIcon(category)}</g></svg>`;
+function platformCategoryCardSvg(providerSlug, category = 'series', logoDataUri = null, photoDataUri = null) {
+  const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const isFilms=category==='films'; const categoryLabel=isFilms?'FILMS':'SÉRIES'; const detailLabel=providerSlug==='crunchyroll'?(isFilms?'FILMS D’ANIME + STREAMING':'CRUNCHYROLL + ANILIST'):(isFilms?'SORTIES STREAMING':'NOUVELLES SÉRIES'); const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1600" height="900" fill="#07111f"/>`; const icon=logoDataUri?`<rect x="74" y="65" width="270" height="150" rx="32" fill="#02050a" fill-opacity=".72" stroke="#fff" stroke-opacity=".14"/><image href="${escapeXml(logoDataUri)}" x="94" y="83" width="230" height="114" preserveAspectRatio="xMidYMid meet"/><text x="510" y="155" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="62" font-weight="900">${label}</text>`:`<text x="210" y="174" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="92" font-weight="900">${label}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="l" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".62"/><stop offset="1" stop-color="#02040a" stop-opacity=".08"/></linearGradient></defs><g clip-path="url(#c)">${photo}<rect width="1600" height="900" fill="url(#l)"/></g>${icon}<rect x="74" y="592" width="10" height="208" rx="5" fill="${accent}"/><text x="112" y="704" fill="#fff" font-family="Arial,sans-serif" font-size="150" font-weight="900">${categoryLabel}</text><text x="118" y="770" fill="${accent}" font-family="Arial,sans-serif" font-size="34" font-weight="900" letter-spacing="4">${detailLabel}</text><text x="118" y="820" fill="#d7e2ef" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="3">PÉRIODES + MOIS · ARCHIVES</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="5"/></svg>`;
 }
 
 async function handlePlatformLogo(res, url) {
@@ -1414,7 +1695,8 @@ async function handlePlatformBackdrop(res, url) {
   const provider = platformProviderDefinition(providerSlug);
   if (!provider) return svg(res, platformBackdropSvg('', type, null), 'public, max-age=3600');
   const asset = await platformLogoAsset(providerSlug, type);
-  return svg(res, platformBackdropSvg(providerSlug, type, asset?.dataUri || null), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  const photo = platformPhotoDataUri(providerSlug, 'backdrop');
+  return svg(res, platformBackdropSvg(providerSlug, type, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
 }
 
 async function handlePlatformCategoryCard(res, url) {
@@ -1423,7 +1705,8 @@ async function handlePlatformCategoryCard(res, url) {
   const provider = platformProviderDefinition(providerSlug);
   if (!provider) return svg(res, platformCategoryCardSvg('', category, null), 'public, max-age=3600');
   const asset = await platformLogoAsset(providerSlug, category === 'films' ? 'movie' : 'series');
-  return svg(res, platformCategoryCardSvg(providerSlug, category, asset?.dataUri || null), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  const photo = platformPhotoDataUri(providerSlug, 'card');
+  return svg(res, platformCategoryCardSvg(providerSlug, category, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
 }
 
 function discoverParams(catalog, window, providerIds, page, timeZone = DEFAULT_TIMEZONE) {
@@ -1487,14 +1770,15 @@ async function discoverCandidates(catalog, window, providerIds, timeZone) {
 }
 
 function vodDiscoverParams(window, page) {
+  // VOD = date de sortie numérique régionale, PAS disponibilité achat/location.
+  // TMDb release type 4 = Digital. Le filtre region force FR ou US selon l'addon.
   return {
     language: getConfig().language,
     page,
     include_adult: false,
+    include_video: false,
     sort_by: 'popularity.desc',
     region: DEFAULT_COUNTRY,
-    watch_region: DEFAULT_COUNTRY,
-    with_watch_monetization_types: 'rent|buy',
     'release_date.gte': window.start,
     'release_date.lte': window.end,
     with_release_type: '4'
@@ -1505,18 +1789,7 @@ async function discoverVodCandidates(window) {
   const maxCandidates = getConfig().maxCandidates;
   const items = [];
   for (let page = 1; page <= 5 && items.length < maxCandidates; page += 1) {
-    let payload;
-    try {
-      payload = await tmdbFetch('/discover/movie', vodDiscoverParams(window, page));
-    } catch (error) {
-      if (error?.code === 'TMDB_HTTP_ERROR' && [400, 422].includes(error.status)) {
-        const fallback = vodDiscoverParams(window, page);
-        delete fallback.with_watch_monetization_types;
-        payload = await tmdbFetch('/discover/movie', fallback);
-      } else {
-        throw error;
-      }
-    }
+    const payload = await tmdbFetch('/discover/movie', vodDiscoverParams(window, page));
     items.push(...(payload?.results || []));
     if (page >= Number(payload?.total_pages || 1)) break;
   }
@@ -1861,7 +2134,7 @@ async function buildVodCatalog({ catalog, timeZone, now = new Date(), period = c
     if (cached) return cached;
   }
 
-  const stats = emptyStats({ label: 'VOD US', ids: [] }, { ...catalog, period, providerSlug: 'vod-us' }, window, timeZone);
+  const stats = emptyStats({ label: 'VOD US · Digital Releases', ids: [] }, { ...catalog, period, providerSlug: 'vod-us' }, window, timeZone);
   if (window.empty) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
@@ -1871,17 +2144,9 @@ async function buildVodCatalog({ catalog, timeZone, now = new Date(), period = c
   stats.candidates = raw.length;
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
     const details = await fetchDetails('movie', candidate.id);
-    if (!hasVodAvailability(details)) return { meta: null, reason: 'wrong-provider' };
-    const stores = usVodProviders(details).map((entry) => entry.name);
-    const label = stores.length ? `VOD US • ${stores.slice(0, 3).join(' • ')}` : 'VOD US';
-    const result = movieVodDetailsToMeta(details, label, window);
-    if (result?.meta) {
-      result.meta.description = [
-        `VOD US (achat/location) : ${stores.slice(0, 6).join(' • ')}`,
-        stripProviderLead(result.meta.description)
-      ].filter(Boolean).join('\n\n');
-    }
-    return result;
+    // La seule condition VOD est une vraie date Digital (type 4) dans le marché US.
+    // Aucune exigence de buy/rent/watch provider.
+    return movieVodDetailsToMeta(details, 'VOD US · Digital Release', window);
   });
 
   const metas = [];
@@ -2873,6 +3138,7 @@ async function buildCatalog(options) {
   if (source === 'tvmaze-broadcast') return buildTvBroadcastCatalog(options);
   if (source === 'anilist-airing') return buildAnimeCatalog(options);
   if (source === 'tmdb-vod') return buildVodCatalog(options);
+  if (source === 'tmdb-streaming-genre') return buildGenreStreamingCatalog(options);
   if (source === 'tmdb-theatrical-now' || source === 'tmdb-theatrical-upcoming') return buildTheatricalCatalog(options);
   if (source === 'tmdb-streaming' && options.catalog.type === 'series') return buildStreamingSeriesCatalog(options);
   return buildStreamingCatalog(options);
@@ -3198,7 +3464,7 @@ function landing(origin, timeZone = DEFAULT_TIMEZONE) {
   const configured = Boolean(getConfig().token || getConfig().apiKey);
   const { year, month } = archiveNowParts(runtimeNow(), timeZone);
   const currentMonth = ARCHIVE_MONTHS_FR[month - 1];
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio Calendar Archives</title><style>body{margin:0;background:#050a12;color:#f8fbff;font:16px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.card{max-width:980px;margin:24px;padding:32px;border:1px solid #17365e;border-radius:24px;background:linear-gradient(145deg,#08111f,#0a2344)}h1{margin-top:0}.pill{display:inline-block;background:#0b67c2;padding:8px 14px;border-radius:999px;font-weight:800}code{display:block;overflow-wrap:anywhere;background:#030912;padding:14px;border-radius:12px;margin:14px 0}a{color:#58c7ff}.muted{color:#a9bdd4}.ok{color:#7ee787}.bad{color:#ff7b72}</style></head><body><main class="card"><span class="pill">ARCHIVES MODERN SHIELD · PLATEFORMES</span><h1>Nuvio Calendar Archives ${VERSION}</h1><p>Hiérarchie native : <b>plateforme → Séries / Films → périodes dynamiques → mois + année → contenus</b>.</p><p>Parents : <b>Netflix, Prime Video, Disney+, Max, Apple TV+, Hulu, Paramount+, Peacock, Crunchyroll + AniList et VOD</b>. Crunchyroll fusionne <b>Crunchyroll + AniList</b> pour les animes et ajoute aussi les films d’anime ; VOD contient Films.</p><p>Chaque dossier commence par <b>Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante</b>, puis les mois. Les cinq périodes se recalculent chaque jour selon le fuseau du spectateur. Aujourd’hui : <b>${currentMonth} ${year}</b> est le premier mois courant; quand septembre arrive, <b>Septembre ${year}</b> apparaît automatiquement sans réimport.</p><p>Visuels : cartes 16:9 Modern vectorielles, backgrounds nets et <b>logos plateforme TMDb en résolution originale, grands et centrés</b>, avec overlay Séries / Films.</p><p>Fuseau spectateur : <b>${timeZone}</b> — marché streaming : <b>US</b> — TMDb : <b class="${configured ? 'ok' : 'bad'}">${configured ? 'configuré' : 'clé manquante'}</b></p><p>Manifest :</p><code>${manifest}</code><p><a href="${manifest}">manifest.json</a> · <a href="${collectionsImport}">JSON Collections importable</a> · <a href="${blueprint}">blueprint</a> · <a href="${origin}/health">health</a></p><p class="muted">Pour avoir les vraies images sur la Shield, importe le JSON depuis l’URL déployée <b>/nuvio-collections.json</b> : il injecte automatiquement les URLs du déploiement dans les cartes et les backdrops.</p></main></body></html>`;
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio Calendar Archives</title><style>body{margin:0;background:#050a12;color:#f8fbff;font:16px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.card{max-width:980px;margin:24px;padding:32px;border:1px solid #17365e;border-radius:24px;background:linear-gradient(145deg,#08111f,#0a2344)}h1{margin-top:0}.pill{display:inline-block;background:#0b67c2;padding:8px 14px;border-radius:999px;font-weight:800}code{display:block;overflow-wrap:anywhere;background:#030912;padding:14px;border-radius:12px;margin:14px 0}a{color:#58c7ff}.muted{color:#a9bdd4}.ok{color:#7ee787}.bad{color:#ff7b72}</style></head><body><main class="card"><span class="pill">ARCHIVES MODERN SHIELD · PLATEFORMES</span><h1>Nuvio Calendar Archives ${VERSION}</h1><p>Hiérarchie native : <b>plateforme → Séries / Films → périodes dynamiques → mois + année → contenus</b>.</p><p>Parents : <b>Netflix, Prime Video, Disney+, Max, Apple TV+, Hulu, Paramount+, Peacock, Crunchyroll + AniList et VOD</b>. Crunchyroll fusionne <b>Crunchyroll + AniList</b> pour les animes et ajoute aussi les films d’anime ; VOD contient Films et suit les Digital Releases US (TMDb type 4), indépendamment des boutiques achat/location.</p><p>Chaque dossier commence par <b>Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante</b>, puis les mois. Les cinq périodes se recalculent chaque jour selon le fuseau du spectateur. Aujourd’hui : <b>${currentMonth} ${year}</b> est le premier mois courant; quand septembre arrive, <b>Septembre ${year}</b> apparaît automatiquement sans réimport.</p><p>Visuels : cartes 16:9 Modern vectorielles, backgrounds nets et <b>logos plateforme TMDb en résolution originale, grands et centrés</b>, avec overlay Séries / Films.</p><p>Fuseau spectateur : <b>${timeZone}</b> — marché streaming : <b>US</b> — TMDb : <b class="${configured ? 'ok' : 'bad'}">${configured ? 'configuré' : 'clé manquante'}</b></p><p>Manifest :</p><code>${manifest}</code><p><a href="${manifest}">manifest.json</a> · <a href="${collectionsImport}">JSON Collections importable</a> · <a href="${blueprint}">blueprint</a> · <a href="${origin}/health">health</a></p><p class="muted">Pour avoir les vraies images sur la Shield, importe le JSON depuis l’URL déployée <b>/nuvio-collections.json</b> : il injecte automatiquement les URLs du déploiement dans les cartes et les backdrops.</p></main></body></html>`;
 }
 
 function archiveYearCardSvg(year, category = '') {
@@ -3233,6 +3499,9 @@ module.exports = async function handler(req, res) {
     if (path === '/platform-logo') return await handlePlatformLogo(res, url);
     if (path === '/platform-backdrop.svg') return await handlePlatformBackdrop(res, url);
     if (path === '/platform-category-card.svg') return await handlePlatformCategoryCard(res, url);
+    if (path === '/genre-poster.png') return serveGenrePosterPng(res, Object.fromEntries(url.searchParams.entries()));
+    if (path === '/genre-folder-art.svg') return svg(res, genreFolderArtSvg(Object.fromEntries(url.searchParams.entries())), 'public, max-age=3600, s-maxage=86400');
+    if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/us-genres-backdrop.jpg`);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
     if (path === '/nuvio-collections.json' || path === '/collections.json') return json(res, 200, buildNuvioCollectionsImport(runtimeNow(), requestTimeZone(req), origin), 'no-store');
@@ -3306,6 +3575,11 @@ module.exports._internals = {
   platformCollectionId,
   platformImageUrls,
   buildNuvioCollectionsImport,
+  buildGenreCatalogEntries,
+  buildGenreCollection,
+  TMDB_MOVIE_GENRES,
+  TMDB_TV_GENRES,
+  buildGenreStreamingCatalog,
   buildArchiveBlueprint,
   PERIOD_OPTIONS,
   FILM_EXTRA_CATALOGS,

@@ -528,9 +528,9 @@ function movieVodDetailsToMeta(details, providerLabel, window) {
     details,
     'movie',
     event.viewerDate,
-    `Sortie VOD • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
+    `Sortie digitale • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
   );
-  meta.description = [`${providerLabel} • Sortie digitale France (achat/location)`, meta.description].filter(Boolean).join('\n\n');
+  meta.description = [`${providerLabel} • Date Digital France vérifiée`, meta.description].filter(Boolean).join('\n\n');
   meta._eventMode = event.eventMode;
   return { meta, reason: null, event };
 }
