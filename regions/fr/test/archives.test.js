@@ -92,9 +92,9 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.1.1');
+  assert.equal(manifest.version,'1.1.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+72)+35);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+72)+35*(5+72));
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
 
@@ -186,4 +186,24 @@ test('France Modern covers and hero wordmarks keep large platform branding',()=>
   assert.match(hero,/width="1400" height="300"/);
   assert.match(backdrop,/HBO Max/);
   assert.match(backdrop,/FILMS/);
+});
+
+test('France genre folders use the exact predefined periods then all prewired months',()=>{
+  const genres=collection('Genres TMDb');
+  assert.equal(genres.folders.length,35);
+  assert(genres.folders.every((f)=>f.sources.length===77));
+  const action=genres.folders.find((f)=>f.title==='Films · Action');
+  assert(action);
+  assert.deepEqual(action.sources.slice(0,5).map((s)=>s.catalogId),[
+    'genres-fr-movie-28',
+    'genres-fr-movie-28-tomorrow',
+    'genres-fr-movie-28-yesterday',
+    'genres-fr-movie-28-lastweek',
+    'genres-fr-movie-28-nextweek'
+  ]);
+  assert.equal(action.sources[5].catalogId,'genres-fr-movie-28-2030-12');
+  assert.equal(action.sources.at(-1).catalogId,'genres-fr-movie-28-2025-01');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28','movie',fixedNow,tz).period,'today');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-nextweek','movie',fixedNow,tz).period,'nextweek');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');
 });

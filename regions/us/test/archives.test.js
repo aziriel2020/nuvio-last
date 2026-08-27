@@ -110,8 +110,8 @@ test('VOD is Films-only for periods and months',()=>{
 
 test('manifest v1.5 stays hidden from normal Home because Collections own the UI',()=>{
   const m=api._internals.buildManifest('https://archives.example',fixedNow,tz);
-  assert.equal(m.version,'1.6.0');
-  assert.equal(m.catalogs.length,1498);
+  assert.equal(m.version,'1.6.1');
+  assert.equal(m.catalogs.length,4158);
   assert(m.catalogs.every(c=>c.showInHome===false));
   assert(m.catalogs.every(c=>c.extraSupported.includes('skip')));
   assert(m.catalogs.some(c=>c.type==='series'&&c.name==='Aujourd’hui'));
@@ -328,4 +328,24 @@ test('invalid provider, pre-2025 and legacy catalog IDs are rejected',()=>{
   assert.equal(api._internals.resolveArchiveCatalog('archives-v3-series-made-up-2026-01','series',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('archives-v2-series-netflix-2025-01','series',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('archives-v1-month-2025-01','series',fixedNow,tz),null);
+});
+
+test('US genre folders use the exact predefined periods then all prewired months',()=>{
+  const genres=collection('🇺🇸 TMDb Genres');
+  assert.equal(genres.folders.length,35);
+  assert(genres.folders.every((f)=>f.sources.length===77));
+  const action=genres.folders.find((f)=>f.title==='Movies · Action');
+  assert(action);
+  assert.deepEqual(action.sources.slice(0,5).map((s)=>s.catalogId),[
+    'genres-us-movie-28',
+    'genres-us-movie-28-tomorrow',
+    'genres-us-movie-28-yesterday',
+    'genres-us-movie-28-lastweek',
+    'genres-us-movie-28-nextweek'
+  ]);
+  assert.equal(action.sources[5].catalogId,'genres-us-movie-28-2030-12');
+  assert.equal(action.sources.at(-1).catalogId,'genres-us-movie-28-2025-01');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28','movie',fixedNow,tz).period,'today');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28-nextweek','movie',fixedNow,tz).period,'nextweek');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');
 });

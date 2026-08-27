@@ -33,7 +33,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.6.0';
+const VERSION = '1.6.1';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -213,17 +213,33 @@ function genrePosterUrl(origin, genre, type) {
 }
 
 
-function genreCatalogId(type, genreId) {
+function genreCatalogBaseId(type, genreId) {
   return `genres-us-${type === 'movie' ? 'movie' : 'series'}-${genreId}`;
 }
 
-function genreDescriptor(type, genre) {
-  return {
+// Backward compatibility: the old genre catalog ID is now the stable Today row.
+function genreCatalogId(type, genreId) {
+  return genreCatalogBaseId(type, genreId);
+}
+
+function genreDynamicCatalogId(type, genreId, periodKey) {
+  if (periodKey === 'today') return genreCatalogBaseId(type, genreId);
+  return `${genreCatalogBaseId(type, genreId)}-${periodKey}`;
+}
+
+function genreMonthlyCatalogId(type, genreId, year, month) {
+  return `${genreCatalogBaseId(type, genreId)}-${year}-${String(month).padStart(2, '0')}`;
+}
+
+function genreDescriptor(type, genre, options = {}) {
+  const period = options.period || 'today';
+  const name = options.name || genre.name;
+  const descriptor = {
     type,
-    name: genre.name,
+    name,
     providerSlug: TMDB_GENRE_COLLECTION.slug,
-    cardProvider: TMDB_GENRE_COLLECTION.label,
-    period: 'today',
+    cardProvider: `${TMDB_GENRE_COLLECTION.label} • ${genre.name}`,
+    period,
     source: 'tmdb-streaming-genre',
     section: type === 'movie' ? 'films' : 'series-streaming',
     noFilters: true,
@@ -233,15 +249,56 @@ function genreDescriptor(type, genre) {
     genreName: genre.name,
     genreColor: genre.color,
     genreIcon: genre.icon,
-    genreCategory: type === 'movie' ? 'films' : 'series'
+    genreCategory: type === 'movie' ? 'films' : 'series',
+    archiveProvider: TMDB_GENRE_COLLECTION.slug,
+    archiveProviderLabel: TMDB_GENRE_COLLECTION.label,
+    archiveCategory: type === 'movie' ? 'films' : 'series',
+    archiveKind: options.archivePeriodKey ? 'genre-period' : 'genre-month'
   };
+  if (options.archivePeriodKey) descriptor.archivePeriodKey = options.archivePeriodKey;
+  if (Number.isInteger(options.archiveYear)) descriptor.archiveYear = options.archiveYear;
+  if (Number.isInteger(options.archiveMonth)) descriptor.archiveMonth = options.archiveMonth;
+  return descriptor;
 }
 
-function buildGenreCatalogEntries() {
-  return [
-    ...TMDB_MOVIE_GENRES.map((genre) => ({ id: genreCatalogId('movie', genre.id), catalog: genreDescriptor('movie', genre) })),
-    ...TMDB_TV_GENRES.map((genre) => ({ id: genreCatalogId('series', genre.id), catalog: genreDescriptor('series', genre) }))
+function buildGenreCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
+  const entries = [];
+  const groups = [
+    { type: 'movie', genres: TMDB_MOVIE_GENRES },
+    { type: 'series', genres: TMDB_TV_GENRES }
   ];
+  for (const group of groups) {
+    for (const genre of group.genres) {
+      for (const definition of ARCHIVE_DYNAMIC_PERIODS) {
+        entries.push({
+          id: genreDynamicCatalogId(group.type, genre.id, definition.key),
+          catalog: genreDescriptor(group.type, genre, {
+            name: definition.label,
+            period: definition.period,
+            archivePeriodKey: definition.key
+          })
+        });
+      }
+    }
+  }
+  for (const year of archivePrewiredYears(now, timeZone)) {
+    for (const group of groups) {
+      for (const genre of group.genres) {
+        for (let month = 12; month >= 1; month -= 1) {
+          entries.push({
+            id: genreMonthlyCatalogId(group.type, genre.id, year, month),
+            catalog: genreDescriptor(group.type, genre, {
+              name: `${ARCHIVE_MONTHS_FR[month - 1]} ${year}`,
+              period: archivePeriod(year, month),
+              archiveYear: year,
+              archiveMonth: month
+            })
+          });
+        }
+      }
+    }
+  }
+  return entries;
 }
 
 function genreImageUrls(origin, genre, type = 'movie') {
@@ -251,10 +308,25 @@ function genreImageUrls(origin, genre, type = 'movie') {
   return { card:`${origin}/genre-folder-art.svg?variant=card&${params}`, backdrop:`${origin}/genre-folder-art.svg?variant=backdrop&${params}`, logo:`${origin}/genre-folder-art.svg?variant=logo&${params}` };
 }
 
+function genreSourceEntries(entries, type, genreId) {
+  return entries
+    .filter((entry) => entry.catalog.source === 'tmdb-streaming-genre' && entry.catalog.type === type && entry.catalog.tmdbGenreId === genreId)
+    .sort((a, b) => {
+      const aPeriod = a.catalog.archivePeriodKey;
+      const bPeriod = b.catalog.archivePeriodKey;
+      if (aPeriod || bPeriod) {
+        if (aPeriod && bPeriod) return ARCHIVE_DYNAMIC_PERIOD_ORDER.get(aPeriod) - ARCHIVE_DYNAMIC_PERIOD_ORDER.get(bPeriod);
+        return aPeriod ? -1 : 1;
+      }
+      if (a.catalog.archiveYear !== b.catalog.archiveYear) return b.catalog.archiveYear - a.catalog.archiveYear;
+      return b.catalog.archiveMonth - a.catalog.archiveMonth;
+    });
+}
+
 function buildGenreCollection(entries, origin = null) {
   const folders = [
     ...TMDB_MOVIE_GENRES.map((genre) => {
-      const entry = entries.find((item) => item.id === genreCatalogId('movie', genre.id));
+      const sourceEntries = genreSourceEntries(entries, 'movie', genre.id);
       const images = genreImageUrls(origin, genre, 'movie');
       return {
         id: `genres-us-movie-folder-${genre.id}`,
@@ -267,12 +339,12 @@ function buildGenreCollection(entries, origin = null) {
         heroBackdropUrl: images.backdrop,
         heroVideoUrl: null,
         titleLogoUrl: images.logo,
-        sources: entry ? [collectionAddonSource(entry)] : [],
-        catalogSources: entry ? [collectionLegacyCatalogSource(entry)] : []
+        sources: sourceEntries.map(collectionAddonSource),
+        catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
       };
     }),
     ...TMDB_TV_GENRES.map((genre) => {
-      const entry = entries.find((item) => item.id === genreCatalogId('series', genre.id));
+      const sourceEntries = genreSourceEntries(entries, 'series', genre.id);
       const images = genreImageUrls(origin, genre, 'series');
       return {
         id: `genres-us-series-folder-${genre.id}`,
@@ -285,8 +357,8 @@ function buildGenreCollection(entries, origin = null) {
         heroBackdropUrl: images.backdrop,
         heroVideoUrl: null,
         titleLogoUrl: images.logo,
-        sources: entry ? [collectionAddonSource(entry)] : [],
-        catalogSources: entry ? [collectionLegacyCatalogSource(entry)] : []
+        sources: sourceEntries.map(collectionAddonSource),
+        catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
       };
     })
   ];
@@ -312,7 +384,7 @@ async function resolveAllStreamingProviderIds(type) {
   return [...ids].filter(Number.isFinite);
 }
 
-function genreDiscoverParams(catalog, providerIds, page) {
+function genreDiscoverParams(catalog, providerIds, page, window) {
   const common = {
     language: getConfig().language,
     page,
@@ -323,25 +395,50 @@ function genreDiscoverParams(catalog, providerIds, page) {
     with_watch_providers: providerIds.join('|'),
     with_watch_monetization_types: 'flatrate|free|ads'
   };
-  if (catalog.type === 'movie') return { ...common, region: DEFAULT_COUNTRY };
-  return common;
+  if (catalog.type === 'movie') return {
+    ...common,
+    region: DEFAULT_COUNTRY,
+    with_release_type: '4',
+    'release_date.gte': window.start,
+    'release_date.lte': window.end
+  };
+  return {
+    ...common,
+    'first_air_date.gte': window.start,
+    'first_air_date.lte': window.end,
+    include_null_first_air_dates: false
+  };
 }
 
-async function discoverGenreCandidates(catalog, providerIds) {
+async function discoverGenreCandidates(catalog, providerIds, window) {
   const endpoint = catalog.type === 'movie' ? '/discover/movie' : '/discover/tv';
   const maxCandidates = Math.max(getConfig().maxItems, 120);
   const items = [];
   for (let page = 1; page <= 8 && items.length < maxCandidates; page += 1) {
-    const payload = await tmdbFetch(endpoint, genreDiscoverParams(catalog, providerIds, page));
+    const payload = await tmdbFetch(endpoint, genreDiscoverParams(catalog, providerIds, page, window));
     items.push(...(payload?.results || []));
     if (page >= Number(payload?.total_pages || 1)) break;
   }
   return items.slice(0, maxCandidates);
 }
 
-function detailsToGenreMeta(details, catalog) {
+function genreMovieDigitalDate(details, window) {
+  const country = (details?.release_dates?.results || []).find((entry) => entry?.iso_3166_1 === DEFAULT_COUNTRY);
+  const dates = (country?.release_dates || [])
+    .filter((entry) => Number(entry?.type) === 4)
+    .map((entry) => normalizeIsoDate(entry?.release_date))
+    .filter(Boolean)
+    .sort();
+  return dates.find((date) => date >= window.start && date <= window.end) || null;
+}
+
+function detailsToGenreMeta(details, catalog, window) {
   const type = catalog.type === 'movie' ? 'movie' : 'series';
-  const date = normalizeIsoDate(type === 'movie' ? details?.release_date : details?.first_air_date) || localIsoDate(new Date(), DEFAULT_TIMEZONE);
+  const date = type === 'movie'
+    ? genreMovieDigitalDate(details, window)
+    : normalizeIsoDate(details?.first_air_date);
+  if (!date) return { meta: null, reason: 'date-unknown' };
+  if (date < window.start || date > window.end) return { meta: null, reason: date < window.today ? 'past' : 'outside-window' };
   const label = `${TMDB_GENRE_COLLECTION.label} • ${catalog.type === 'movie' ? 'Movies' : 'Series'} • ${catalog.genreName}`;
   const meta = baseMeta(details, type, date, label);
   meta.description = [
@@ -353,23 +450,27 @@ function detailsToGenreMeta(details, catalog) {
 }
 
 async function buildGenreStreamingCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
-  const window = dateWindow('today', now, timeZone);
-  const key = catalogCacheKey({ providerSlug: `${TMDB_GENRE_COLLECTION.slug}:${catalog.type}:${catalog.tmdbGenreId}`, type: catalog.type, period: 'library', timeZone, today: window.today, sourceVersion: `${SOURCE_VERSION}-genres` });
+  const window = dateWindow(period, now, timeZone);
+  const key = catalogCacheKey({ providerSlug: `${TMDB_GENRE_COLLECTION.slug}:${catalog.type}:${catalog.tmdbGenreId}`, type: catalog.type, period, timeZone, today: window.today, sourceVersion: `${SOURCE_VERSION}-genres-periods-v2` });
   if (useCache) {
     const cached = catalogCache.get(key);
     if (cached) return cached;
   }
-  const stats = emptyStats({ label: `${TMDB_GENRE_COLLECTION.label} ${catalog.genreName}`, ids: [] }, { ...catalog, period: 'library' }, window, timeZone);
+  const stats = emptyStats({ label: `${TMDB_GENRE_COLLECTION.label} ${catalog.genreName}`, ids: [] }, { ...catalog, period }, window, timeZone);
+  if (window.empty) {
+    const result = { metas: [], stats };
+    return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+  }
   const providerIds = await resolveAllStreamingProviderIds(catalog.type);
   if (!providerIds.length) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
-  const raw = await discoverGenreCandidates(catalog, providerIds);
+  const raw = await discoverGenreCandidates(catalog, providerIds, window);
   stats.candidates = raw.length;
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
     const details = await fetchDetails(catalog.type, candidate.id);
-    return detailsToGenreMeta(details, catalog);
+    return detailsToGenreMeta(details, catalog, window);
   });
   const metas = [];
   for (const result of settled) {
@@ -519,6 +620,36 @@ function archiveProviderAllowed(expectedType, providerSlug) {
 function resolveArchiveCatalog(catalogId, type, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
   const raw = String(catalogId || '');
 
+  const genreMonthly = raw.match(/^genres-us-(series|movie)-(\d+)-(\d{4})-(\d{2})$/);
+  if (genreMonthly) {
+    const expectedType = genreMonthly[1] === 'movie' ? 'movie' : 'series';
+    const genreId = Number(genreMonthly[2]);
+    const year = Number(genreMonthly[3]);
+    const month = Number(genreMonthly[4]);
+    const allowedYears = new Set(archivePrewiredYears(now, timeZone));
+    if (type !== expectedType || !allowedYears.has(year) || month < 1 || month > 12) return null;
+    const list = expectedType === 'movie' ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
+    const match = list.find((entry) => entry.id === genreId);
+    return match ? genreDescriptor(expectedType, match, {
+      name: `${ARCHIVE_MONTHS_FR[month - 1]} ${year}`,
+      period: archivePeriod(year, month),
+      archiveYear: year,
+      archiveMonth: month
+    }) : null;
+  }
+
+  const genreDynamic = raw.match(/^genres-us-(series|movie)-(\d+)(?:-(today|tomorrow|yesterday|lastweek|nextweek))?$/);
+  if (genreDynamic) {
+    const expectedType = genreDynamic[1] === 'movie' ? 'movie' : 'series';
+    if (type !== expectedType) return null;
+    const periodKey = genreDynamic[3] || 'today';
+    const definition = ARCHIVE_DYNAMIC_PERIOD_BY_KEY.get(periodKey);
+    if (!definition) return null;
+    const list = expectedType === 'movie' ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
+    const match = list.find((entry) => entry.id === Number(genreDynamic[2]));
+    return match ? genreDescriptor(expectedType, match, { name: definition.label, period: definition.period, archivePeriodKey: definition.key }) : null;
+  }
+
   const dynamic = raw.match(/^archives-v3-(series|movie)-([a-z0-9-]+)-(today|tomorrow|yesterday|lastweek|nextweek)$/);
   if (dynamic) {
     const expectedType = dynamic[1] === 'movie' ? 'movie' : 'series';
@@ -618,7 +749,7 @@ function buildPlatformCollection(definition, entries, origin = null) {
 }
 
 function buildNuvioCollectionsImport(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
-  const entries = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries()];
+  const entries = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)];
   return [...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), buildGenreCollection(entries, origin)];
 }
 
@@ -1361,7 +1492,7 @@ function requireTmdbConfig() {
 }
 
 function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
-  const catalogs = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries()].map(({ id, catalog }) => {
+  const catalogs = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)].map(({ id, catalog }) => {
     const filters = filterOptionsForCatalog(catalog).map((entry) => entry.label);
     return {
       type: catalog.type,

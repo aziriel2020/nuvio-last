@@ -12,7 +12,7 @@ test('manifest route is France-specific',async()=>{
     assert.equal(r.statusCode,200);
     const m=JSON.parse(r.text);
     assert.equal(m.id,'com.nuvio.calendar.archives.fr.coexist');
-    assert.equal(m.version,'1.1.1');
+    assert.equal(m.version,'1.1.2');
     assert.match(m.name,/France/);
     assert(m.catalogs.some(c=>c.id==='archives-fr-v1-series-canal-plus-2026-08'));
     assert(m.catalogs.some(c=>c.id==='archives-fr-v1-movie-vod-fr-2026-08'));
