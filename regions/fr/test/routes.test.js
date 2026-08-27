@@ -12,7 +12,7 @@ test('manifest route is France-specific',async()=>{
     assert.equal(r.statusCode,200);
     const m=JSON.parse(r.text);
     assert.equal(m.id,'com.nuvio.calendar.archives.fr.coexist');
-    assert.equal(m.version,'1.0.0');
+    assert.equal(m.version,'1.1.1');
     assert.match(m.name,/France/);
     assert(m.catalogs.some(c=>c.id==='archives-fr-v1-series-canal-plus-2026-08'));
     assert(m.catalogs.some(c=>c.id==='archives-fr-v1-movie-vod-fr-2026-08'));
@@ -23,11 +23,11 @@ test('collections route exposes French platform parents and hosted Modern images
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';
   try{
     const r=await call('/nuvio-collections.json');assert.equal(r.statusCode,200);const p=JSON.parse(r.text);
-    assert.deepEqual(p.map(x=>x.title),['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France']);
+    assert.deepEqual(p.map(x=>x.title),['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres TMDb']);
     const canal=p.find(x=>x.title==='🇫🇷 CANAL+');
     assert.deepEqual(canal.folders.map(f=>f.title),['Séries','Films']);
-    assert.match(canal.folders[0].coverImageUrl,/platform-category-card\.svg\?provider=canal-plus&category=series&v=coex-fr100$/);
-    assert.match(canal.folders[0].titleLogoUrl,/platform-logo\?provider=canal-plus&type=series&v=coex-fr100$/);
+    assert.match(canal.folders[0].coverImageUrl,/platform-category-card\.svg\?provider=canal-plus&category=series&v=coex-fr120-cinematic$/);
+    assert.match(canal.folders[0].titleLogoUrl,/platform-logo\?provider=canal-plus&type=series&v=coex-fr120-cinematic$/);
   }finally{delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
@@ -42,6 +42,12 @@ test('France timezone is forced even when request header says another country',a
 test('future September catalog is prewired and zero-upstream in August',async()=>{
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';const old=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('must not fetch')};
   try{const r=await call('/catalog/series/archives-fr-v1-series-netflix-2026-09.json');assert.equal(r.statusCode,200);assert.deepEqual(JSON.parse(r.text),{metas:[]});assert.equal(calls,0)}finally{global.fetch=old;delete process.env.NUVIO_NOW_OVERRIDE}
+});
+
+
+test('France 2030 row is prewired now and stays zero-upstream until its active year',async()=>{
+  process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';const old=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('must not fetch')};
+  try{const r=await call('/catalog/series/archives-fr-v1-series-netflix-2030-12.json');assert.equal(r.statusCode,200);assert.deepEqual(JSON.parse(r.text),{metas:[]});assert.equal(calls,0)}finally{global.fetch=old;delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
 test('active France catalog soft-fails to HTTP 200 if TMDb is unavailable',async()=>{
@@ -66,9 +72,9 @@ test('France local free platform also soft-fails safely',async()=>{
 test('France category-card and hero routes render large platform names even without TMDb credentials',async()=>{
   const oldKey=process.env.TMDB_API_KEY, oldToken=process.env.TMDB_READ_TOKEN;delete process.env.TMDB_API_KEY;delete process.env.TMDB_READ_TOKEN;
   try{
-    const card=await call('/platform-category-card.svg?provider=canal-plus&category=films&v=coex-fr100');
+    const card=await call('/platform-category-card.svg?provider=canal-plus&category=films&v=coex-fr120-cinematic');
     assert.equal(card.statusCode,200);assert.match(card.text,/CANAL\+/);assert.match(card.text,/FILMS/);
-    const logo=await call('/platform-logo?provider=hbo-max&type=series&v=coex-fr100');
+    const logo=await call('/platform-logo?provider=hbo-max&type=series&v=coex-fr120-cinematic');
     assert.equal(logo.statusCode,200);assert.match(logo.text,/HBO Max/);assert.match(logo.text,/width="1400" height="300"/);
   }finally{if(oldKey!==undefined)process.env.TMDB_API_KEY=oldKey;if(oldToken!==undefined)process.env.TMDB_READ_TOKEN=oldToken}
 });

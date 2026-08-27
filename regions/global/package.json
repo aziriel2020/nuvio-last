@@ -1,0 +1,14 @@
+{
+  "name": "nuvio-vod-mondiale",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nuvio VOD Mondiale: first worldwide TMDb Digital release (type 4), Modern Shield.",
+  "scripts": {
+    "test": "node --test",
+    "start": "node local-server.js",
+    "configure": "node scripts/configure.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
