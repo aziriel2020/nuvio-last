@@ -1,8 +1,8 @@
 {
   "name": "nuvio-calendar-archives-usa-fr-coexist",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
-  "description": "France + TMDb genres + global anime/VOD + USA coexistence pack for Modern Shield.",
+  "description": "France + TMDb genres periodisés + global anime/VOD + USA coexistence pack for Modern Shield.",
   "scripts": {
     "start": "node local-server.js",
     "test": "node scripts/test-all.js"

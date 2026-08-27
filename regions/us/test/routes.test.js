@@ -9,7 +9,7 @@ test('manifest route exposes v1.5 periods first plus month+year catalogs',async(
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';
   try{
     const r=await call('/manifest.json',tz);assert.equal(r.statusCode,200);const m=JSON.parse(r.text);
-    assert.equal(m.version,'1.6.0');assert.equal(m.catalogs.length,1498);
+    assert.equal(m.version,'1.6.1');assert.equal(m.catalogs.length,4158);
     assert(m.catalogs.some(c=>c.name==='Aujourd’hui'&&c.type==='series'));
     assert(m.catalogs.some(c=>c.name==='La semaine suivante'&&c.type==='movie'));
     assert(m.catalogs.some(c=>c.name==='Août 2026'&&c.type==='series'));
