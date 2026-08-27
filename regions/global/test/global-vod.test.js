@@ -37,7 +37,7 @@ test('global manifest exposes anime + VOD catalogs through 2030', () => {
   assert.equal(manifest.id, 'com.nuvio.calendar.archives.global.coexist');
   assert.equal(manifest.name, 'Nuvio Global Archives');
   assert.deepEqual(manifest.types, ['series', 'movie']);
-  assert.equal(manifest.catalogs.length, 231);
+  assert.equal(manifest.catalogs.length, 591);
   assert(manifest.catalogs.every((catalog) => catalog.showInHome === false));
   assert(manifest.catalogs.some((catalog) => catalog.id === 'archives-global-v1-series-anime-asia-today'));
   assert(manifest.catalogs.some((catalog) => catalog.id === 'archives-global-v1-movie-vod-global-2030-12'));
@@ -51,12 +51,12 @@ test('global collections expose Anime (series+films) plus VOD films', () => {
   assert.equal(anime.id, 'calendar-archives-global-anime');
   assert.equal(anime.title, '🌍 Anime Japon + Corée');
   assert.deepEqual(anime.folders.map((folder) => folder.title), ['Séries','Films']);
-  assert.equal(anime.folders[0].sources.length, 77);
-  assert.equal(anime.folders[1].sources.length, 77);
+  assert.equal(anime.folders[0].sources.length, 197);
+  assert.equal(anime.folders[1].sources.length, 197);
   assert.equal(vod.id, 'calendar-archives-global-vod');
   assert.equal(vod.title, '🌍 VOD Mondiale');
   assert.deepEqual(vod.folders.map((folder) => folder.title), ['Films']);
-  assert.equal(vod.folders[0].sources.length, 77);
+  assert.equal(vod.folders[0].sources.length, 197);
   assert.deepEqual(vod.folders[0].sources.slice(0, 5).map((source) => source.catalogId), [
     'archives-global-v1-movie-vod-global-today',
     'archives-global-v1-movie-vod-global-tomorrow',
