@@ -26,9 +26,9 @@ test('single deployment exposes three distinct addon manifests', async () => {
   assert.equal(fr.id, 'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(globalVod.id, 'com.nuvio.calendar.archives.global.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id]).size, 3);
-  assert.equal(us.catalogs.length, 4158);
-  assert.equal(fr.catalogs.length, 4774);
-  assert.equal(globalVod.catalogs.length, 231);
+  assert.equal(us.catalogs.length, 10638);
+  assert.equal(fr.catalogs.length, 12214);
+  assert.equal(globalVod.catalogs.length, 591);
 });
 
 test('combined import has 28 unique collections: France, Global Anime/VOD, then USA', async () => {

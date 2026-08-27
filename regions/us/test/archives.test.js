@@ -32,23 +32,23 @@ test('five rolling periods follow the viewer-local day automatically',()=>{
   assert.equal(calendar.dateWindow('yesterday',fixedTomorrow,tz).start,'2026-08-24');
 });
 
-test('prewire covers 2025 through 2030 from the 2026 baseline without reimport',()=>{
-  assert.deepEqual(api._internals.archivePrewiredYears(fixedNow,tz),[2030,2029,2028,2027,2026,2025]);
-  assert.equal(api._internals.archiveYearIsVisible(2027,fixedNow,tz),false);
-  assert.equal(api._internals.archiveYearIsVisible(2026,fixedNow,tz),true);
-  assert.equal(api._internals.archiveYearIsVisible(2025,fixedNow,tz),true);
-  assert.equal(api._internals.archiveYearIsVisible(2025,fixedJan2027,tz),false);
-  assert.equal(api._internals.archiveYearIsVisible(2027,fixedJan2027,tz),true);
+test('prewire is fixed from 2030 down to 2015 and every predefined year stays selectable',()=>{
+  assert.deepEqual(api._internals.archivePrewiredYears(fixedNow,tz),[2030,2029,2028,2027,2026,2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015]);
+  assert.equal(api._internals.archiveYearIsVisible(2030,fixedNow,tz),true);
+  assert.equal(api._internals.archiveYearIsVisible(2025,fixedJan2027,tz),true);
+  assert.equal(api._internals.archiveYearIsVisible(2015,fixedNow,tz),true);
+  assert.equal(api._internals.archiveYearIsVisible(2014,fixedNow,tz),false);
+  assert.equal(api._internals.archiveYearIsVisible(2031,fixedNow,tz),false);
 });
 
 test('manifest entries include five dynamic periods plus prewired month+year rows',()=>{
   const e=api._internals.buildArchiveCatalogEntries(fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
-  const monthly=12*providerCategoryCount*6;
+  const monthly=12*providerCategoryCount*16;
   const dynamic=5*providerCategoryCount;
-  assert.equal(monthly,1368);
+  assert.equal(monthly,3648);
   assert.equal(dynamic,95);
-  assert.equal(e.length,1463);
+  assert.equal(e.length,3743);
   assert.equal(e.find(x=>x.id==='archives-v3-series-netflix-today').catalog.name,'Aujourd’hui');
   assert.equal(e.find(x=>x.id==='archives-v3-series-netflix-nextweek').catalog.name,'La semaine suivante');
   assert.equal(e.find(x=>x.id==='archives-v3-series-netflix-2026-08').catalog.name,'Août 2026');
@@ -110,8 +110,8 @@ test('VOD is Films-only for periods and months',()=>{
 
 test('manifest v1.5 stays hidden from normal Home because Collections own the UI',()=>{
   const m=api._internals.buildManifest('https://archives.example',fixedNow,tz);
-  assert.equal(m.version,'1.6.1');
-  assert.equal(m.catalogs.length,4158);
+  assert.equal(m.version,'1.3.0');
+  assert.equal(m.catalogs.length,10638);
   assert(m.catalogs.every(c=>c.showInHome===false));
   assert(m.catalogs.every(c=>c.extraSupported.includes('skip')));
   assert(m.catalogs.some(c=>c.type==='series'&&c.name==='Aujourd’hui'));
@@ -160,9 +160,9 @@ test('normal streaming parent contains Modern Series and Films cards',()=>{
   for(const f of netflix.folders){
     assert.equal(f.tileShape,'LANDSCAPE');
     assert.equal(f.hideTitle,true);
-    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us170-cinematic$/);
-    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us170-cinematic$/);
-    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us170-cinematic$/);
+    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us130-cinematic$/);
+    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us130-cinematic$/);
+    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us130-cinematic$/);
   }
 });
 
@@ -226,7 +226,7 @@ test('Crunchyroll + AniList has Series and Films, VOD has Films only, and Crunch
 
 test('every folder starts with the five periods, then months+years descending',()=>{
   const s=folder(collection('🇺🇸 Netflix'),'Séries');
-  assert.equal(s.sources.length,77);
+  assert.equal(s.sources.length,197);
   assert.deepEqual(s.sources.slice(0,5).map(x=>x.catalogId),[
     'archives-v3-series-netflix-today',
     'archives-v3-series-netflix-tomorrow',
@@ -240,7 +240,7 @@ test('every folder starts with the five periods, then months+years descending',(
   assert.equal(s.sources[57].catalogId,'archives-v3-series-netflix-2026-08');
   assert.equal(s.sources[64].catalogId,'archives-v3-series-netflix-2026-01');
   assert.equal(s.sources[65].catalogId,'archives-v3-series-netflix-2025-12');
-  assert.equal(s.sources.at(-1).catalogId,'archives-v3-series-netflix-2025-01');
+  assert.equal(s.sources.at(-1).catalogId,'archives-v3-series-netflix-2015-01');
 });
 
 test('folder sources use the addon id and the folder real media type',()=>{
@@ -323,8 +323,8 @@ test('TMDb watch-provider logo is fetched at original resolution for non-pixelat
   }
 });
 
-test('invalid provider, pre-2025 and legacy catalog IDs are rejected',()=>{
-  assert.equal(api._internals.resolveArchiveCatalog('archives-v3-series-netflix-2024-12','series',fixedNow,tz),null);
+test('invalid provider, pre-2015 and legacy catalog IDs are rejected',()=>{
+  assert.equal(api._internals.resolveArchiveCatalog('archives-v3-series-netflix-2014-12','series',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('archives-v3-series-made-up-2026-01','series',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('archives-v2-series-netflix-2025-01','series',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('archives-v1-month-2025-01','series',fixedNow,tz),null);
@@ -333,7 +333,7 @@ test('invalid provider, pre-2025 and legacy catalog IDs are rejected',()=>{
 test('US genre folders use the exact predefined periods then all prewired months',()=>{
   const genres=collection('🇺🇸 TMDb Genres');
   assert.equal(genres.folders.length,35);
-  assert(genres.folders.every((f)=>f.sources.length===77));
+  assert(genres.folders.every((f)=>f.sources.length===197));
   const action=genres.folders.find((f)=>f.title==='Movies · Action');
   assert(action);
   assert.deepEqual(action.sources.slice(0,5).map((s)=>s.catalogId),[
@@ -344,7 +344,7 @@ test('US genre folders use the exact predefined periods then all prewired months
     'genres-us-movie-28-nextweek'
   ]);
   assert.equal(action.sources[5].catalogId,'genres-us-movie-28-2030-12');
-  assert.equal(action.sources.at(-1).catalogId,'genres-us-movie-28-2025-01');
+  assert.equal(action.sources.at(-1).catalogId,'genres-us-movie-28-2015-01');
   assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28','movie',fixedNow,tz).period,'today');
   assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28-nextweek','movie',fixedNow,tz).period,'nextweek');
   assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');

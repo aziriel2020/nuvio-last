@@ -12,7 +12,7 @@ test('manifest route is France-specific',async()=>{
     assert.equal(r.statusCode,200);
     const m=JSON.parse(r.text);
     assert.equal(m.id,'com.nuvio.calendar.archives.fr.coexist');
-    assert.equal(m.version,'1.1.2');
+    assert.equal(m.version,'1.3.0');
     assert.match(m.name,/France/);
     assert(m.catalogs.some(c=>c.id==='archives-fr-v1-series-canal-plus-2026-08'));
     assert(m.catalogs.some(c=>c.id==='archives-fr-v1-movie-vod-fr-2026-08'));
@@ -26,8 +26,8 @@ test('collections route exposes French platform parents and hosted Modern images
     assert.deepEqual(p.map(x=>x.title),['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres TMDb']);
     const canal=p.find(x=>x.title==='🇫🇷 CANAL+');
     assert.deepEqual(canal.folders.map(f=>f.title),['Séries','Films']);
-    assert.match(canal.folders[0].coverImageUrl,/platform-category-card\.svg\?provider=canal-plus&category=series&v=coex-fr120-cinematic$/);
-    assert.match(canal.folders[0].titleLogoUrl,/platform-logo\?provider=canal-plus&type=series&v=coex-fr120-cinematic$/);
+    assert.match(canal.folders[0].coverImageUrl,/platform-category-card\.svg\?provider=canal-plus&category=series&v=coex-fr130-cinematic$/);
+    assert.match(canal.folders[0].titleLogoUrl,/platform-logo\?provider=canal-plus&type=series&v=coex-fr130-cinematic$/);
   }finally{delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
@@ -72,9 +72,9 @@ test('France local free platform also soft-fails safely',async()=>{
 test('France category-card and hero routes render large platform names even without TMDb credentials',async()=>{
   const oldKey=process.env.TMDB_API_KEY, oldToken=process.env.TMDB_READ_TOKEN;delete process.env.TMDB_API_KEY;delete process.env.TMDB_READ_TOKEN;
   try{
-    const card=await call('/platform-category-card.svg?provider=canal-plus&category=films&v=coex-fr120-cinematic');
+    const card=await call('/platform-category-card.svg?provider=canal-plus&category=films&v=coex-fr130-cinematic');
     assert.equal(card.statusCode,200);assert.match(card.text,/CANAL\+/);assert.match(card.text,/FILMS/);
-    const logo=await call('/platform-logo?provider=hbo-max&type=series&v=coex-fr120-cinematic');
+    const logo=await call('/platform-logo?provider=hbo-max&type=series&v=coex-fr130-cinematic');
     assert.equal(logo.statusCode,200);assert.match(logo.text,/HBO Max/);assert.match(logo.text,/width="1400" height="300"/);
   }finally{if(oldKey!==undefined)process.env.TMDB_API_KEY=oldKey;if(oldToken!==undefined)process.env.TMDB_READ_TOKEN=oldToken}
 });

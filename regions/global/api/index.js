@@ -33,7 +33,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -47,8 +47,8 @@ const PROVIDERS_TTL_MS = 6 * 60 * 60 * 1000;
 const TVMAZE_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const ANILIST_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const MAPPING_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const SOURCE_VERSION = 'calendar-archives-global-v1.2.0-modern-shield';
-const VISUAL_REV = 'coex-global120-cinematic';
+const SOURCE_VERSION = 'calendar-archives-global-v1.3.0-modern-shield';
+const VISUAL_REV = 'coex-global130-cinematic';
 
 const REGION_ART_KEY = 'global';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/global');
@@ -60,7 +60,8 @@ const PROVIDERS = [];
 
 const PROVIDER_BY_SLUG = new Map(PROVIDERS.map((provider) => [provider.slug, provider]));
 
-const ARCHIVE_MIN_YEAR = 2025;
+const ARCHIVE_MIN_YEAR = 2015;
+const ARCHIVE_MAX_YEAR = 2030;
 const ARCHIVE_ID_PREFIX = 'archives-global-v1';
 const ARCHIVE_PREWIRE_FUTURE_YEARS = 4;
 const ARCHIVE_MONTHS_FR = Object.freeze([
@@ -288,17 +289,17 @@ function archiveDynamicDescriptor(type, provider, periodKey) {
 }
 
 function archivePrewiredYears(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
-  const { year: currentYear } = archiveNowParts(now, timeZone);
-  const start = ARCHIVE_MIN_YEAR;
-  const end = currentYear + ARCHIVE_PREWIRE_FUTURE_YEARS;
+  // Fixed archive contract requested by the Collection UI: December 2030 down to January 2015.
+  // Keeping this range stable prevents imports from changing shape as the current year moves.
   const years = [];
-  for (let year = end; year >= start; year -= 1) years.push(year);
+  for (let year = ARCHIVE_MAX_YEAR; year >= ARCHIVE_MIN_YEAR; year -= 1) years.push(year);
   return years;
 }
 
 function archiveYearIsVisible(year, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
-  const { year: currentYear } = archiveNowParts(now, timeZone);
-  return year === currentYear || year === currentYear - 1;
+  // Every pre-defined archive month is a real, selectable period. Historical rows must not
+  // silently turn empty just because they are older than a rolling two-year window.
+  return Number.isInteger(year) && year >= ARCHIVE_MIN_YEAR && year <= ARCHIVE_MAX_YEAR;
 }
 
 function buildArchiveCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {

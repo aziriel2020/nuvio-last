@@ -4,7 +4,7 @@ const usHandler = require('../regions/us/api/index');
 const frHandler = require('../regions/fr/api/index');
 const globalHandler = require('../regions/global/api/index');
 
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 
 function originFromRequest(req) {
   const proto = req?.headers?.['x-forwarded-proto'] || 'https';

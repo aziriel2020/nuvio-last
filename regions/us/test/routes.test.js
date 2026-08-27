@@ -9,7 +9,7 @@ test('manifest route exposes v1.5 periods first plus month+year catalogs',async(
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';
   try{
     const r=await call('/manifest.json',tz);assert.equal(r.statusCode,200);const m=JSON.parse(r.text);
-    assert.equal(m.version,'1.6.1');assert.equal(m.catalogs.length,4158);
+    assert.equal(m.version,'1.3.0');assert.equal(m.catalogs.length,10638);
     assert(m.catalogs.some(c=>c.name==='Aujourd’hui'&&c.type==='series'));
     assert(m.catalogs.some(c=>c.name==='La semaine suivante'&&c.type==='movie'));
     assert(m.catalogs.some(c=>c.name==='Août 2026'&&c.type==='series'));
@@ -33,9 +33,9 @@ test('prewired 2030 row is already valid and zero-upstream while still in 2026',
   try{const r=await call('/catalog/movie/archives-v3-movie-prime-video-2030-12.json',tz);assert.equal(r.statusCode,200);assert.deepEqual(JSON.parse(r.text),{metas:[]});assert.equal(calls,0)}finally{global.fetch=old;delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
-test('old 2025 rows become empty automatically in 2027 so only two years remain visible',async()=>{
+test('pre-2015 archive rows are rejected without upstream calls',async()=>{
   process.env.NUVIO_NOW_OVERRIDE='2027-01-05T12:28:00Z';const old=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('must not call upstream')};
-  try{const r=await call('/catalog/series/archives-v3-series-netflix-2025-12.json',tz);assert.equal(r.statusCode,200);assert.deepEqual(JSON.parse(r.text),{metas:[]});assert.equal(calls,0)}finally{global.fetch=old;delete process.env.NUVIO_NOW_OVERRIDE}
+  try{const r=await call('/catalog/series/archives-v3-series-netflix-2014-12.json',tz);assert.equal(r.statusCode,404);assert.equal(calls,0)}finally{global.fetch=old;delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
 test('VOD future row is Films-only and zero-upstream',async()=>{
@@ -70,7 +70,7 @@ test('collections route is platform parents -> Series/Films -> five periods -> m
     assert.deepEqual(p[0].folders.map(x=>x.title),['Séries','Films']);
     assert.deepEqual(p[8].folders.map(x=>x.title),['Séries','Films']);
     assert.deepEqual(p[9].folders.map(x=>x.title),['Films']);
-    assert.equal(p[0].folders[0].sources.length,77);
+    assert.equal(p[0].folders[0].sources.length,197);
     assert.deepEqual(p[0].folders[0].sources.slice(0,5).map(x=>x.catalogId),[
       'archives-v3-series-netflix-today','archives-v3-series-netflix-tomorrow','archives-v3-series-netflix-yesterday','archives-v3-series-netflix-lastweek','archives-v3-series-netflix-nextweek'
     ]);
@@ -78,8 +78,8 @@ test('collections route is platform parents -> Series/Films -> five periods -> m
     assert.equal(p[0].pinToTop,true);
     assert.equal(p[0].folders[0].hideTitle,true);
     assert.equal(p[0].folders[1].hideTitle,true);
-    assert.equal(p[0].folders[0].coverImageUrl,'https://archives.example/platform-category-card.svg?provider=netflix&category=series&v=coex-us170-cinematic');
-    assert.equal(p[0].folders[1].titleLogoUrl,'https://archives.example/platform-logo?provider=netflix&type=movie&v=coex-us170-cinematic');
+    assert.equal(p[0].folders[0].coverImageUrl,'https://archives.example/platform-category-card.svg?provider=netflix&category=series&v=coex-us130-cinematic');
+    assert.equal(p[0].folders[1].titleLogoUrl,'https://archives.example/platform-logo?provider=netflix&type=movie&v=coex-us130-cinematic');
   }finally{delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
