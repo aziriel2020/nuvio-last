@@ -33,7 +33,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -47,8 +47,8 @@ const PROVIDERS_TTL_MS = 6 * 60 * 60 * 1000;
 const TVMAZE_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const ANILIST_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const MAPPING_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const SOURCE_VERSION = 'calendar-archives-fr-v1.3.0-modern-shield';
-const VISUAL_REV = 'coex-fr130-cinematic';
+const SOURCE_VERSION = 'calendar-archives-fr-v1.3.1-modern-shield';
+const VISUAL_REV = 'coex-fr131-cinematic';
 
 const REGION_ART_KEY = 'fr';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/fr');
@@ -435,55 +435,57 @@ function genreSourceEntries(entries, type, genreId) {
     });
 }
 
-function buildGenreCollection(entries, origin = null) {
-  const folders = [
-    ...TMDB_MOVIE_GENRES.map((genre) => {
-      const sourceEntries = genreSourceEntries(entries, 'movie', genre.id);
-      const images = genreImageUrls(origin, genre, 'movie');
-      return {
-        id: `genres-fr-movie-folder-${genre.id}`,
-        title: `Films · ${genre.name}`,
-        coverImageUrl: images.card,
-        focusGifEnabled: false,
-        coverEmoji: genre.icon,
-        tileShape: 'LANDSCAPE',
-        hideTitle: true,
-        heroBackdropUrl: images.backdrop,
-        heroVideoUrl: null,
-        titleLogoUrl: images.logo,
-        sources: sourceEntries.map(collectionAddonSource),
-        catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
-      };
-    }),
-    ...TMDB_TV_GENRES.map((genre) => {
-      const sourceEntries = genreSourceEntries(entries, 'series', genre.id);
-      const images = genreImageUrls(origin, genre, 'series');
-      return {
-        id: `genres-fr-series-folder-${genre.id}`,
-        title: `Séries · ${genre.name}`,
-        coverImageUrl: images.card,
-        focusGifEnabled: false,
-        coverEmoji: genre.icon,
-        tileShape: 'LANDSCAPE',
-        hideTitle: true,
-        heroBackdropUrl: images.backdrop,
-        heroVideoUrl: null,
-        titleLogoUrl: images.logo,
-        sources: sourceEntries.map(collectionAddonSource),
-        catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
-      };
-    })
-  ];
+function buildGenreFolder(entries, origin, genre, type) {
+  const isMovie = type === 'movie';
+  const sourceEntries = genreSourceEntries(entries, type, genre.id);
+  const images = genreImageUrls(origin, genre, type);
   return {
-    id: 'calendar-archives-fr-genres',
-    title: '🇫🇷 Genres TMDb',
-    backdropImageUrl: origin ? `${origin}/genre-collection-art.jpg?v=${VISUAL_REV}` : null,
+    id: `genres-fr-${isMovie ? 'movie' : 'series'}-folder-${genre.id}`,
+    title: genre.name,
+    coverImageUrl: images.card,
+    focusGifEnabled: false,
+    coverEmoji: genre.icon,
+    tileShape: 'LANDSCAPE',
+    hideTitle: true,
+    heroBackdropUrl: images.backdrop,
+    heroVideoUrl: null,
+    titleLogoUrl: images.logo,
+    sources: sourceEntries.map(collectionAddonSource),
+    catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
+  };
+}
+
+function buildGenreCollectionByType(entries, origin = null, type = 'movie') {
+  const isMovie = type === 'movie';
+  const genres = isMovie ? TMDB_MOVIE_GENRES : TMDB_TV_GENRES;
+  return {
+    // Keep the old Collection id for Films so importing this release updates the
+    // existing Genres parent instead of duplicating it. Series gets one new id.
+    id: isMovie ? 'calendar-archives-fr-genres' : 'calendar-archives-fr-genres-series',
+    title: isMovie ? '🇫🇷 Genres · Films' : '🇫🇷 Genres · Séries',
+    backdropImageUrl: origin ? `${origin}/genre-collection-art.jpg?type=${isMovie ? 'movie' : 'series'}&v=${VISUAL_REV}` : null,
     pinToTop: true,
     focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT',
     showAllTab: false,
-    folders
+    genreRow: isMovie ? 1 : 2,
+    folders: genres.map((genre) => buildGenreFolder(entries, origin, genre, type))
   };
+}
+
+function buildGenreCollections(entries, origin = null) {
+  // Nuvio has only Collection -> Folder -> Sources, no recursive genre folder.
+  // Two adjacent Collections are therefore the native, functional equivalent of
+  // the requested two horizontal genre blocks: Films first, Series second.
+  return [
+    buildGenreCollectionByType(entries, origin, 'movie'),
+    buildGenreCollectionByType(entries, origin, 'series')
+  ];
+}
+
+// Backward-compatible helper retained for old tests/integrations.
+function buildGenreCollection(entries, origin = null) {
+  return buildGenreCollectionByType(entries, origin, 'movie');
 }
 
 async function resolveAllStreamingProviderIds(type) {
@@ -599,16 +601,23 @@ async function buildGenreStreamingCatalog({ catalog, timeZone, now = new Date(),
 
 function genreFolderArtSvg(params = {}) {
   const label = escapeXml(String(params.label || 'Genre'));
+  const rawLabel = String(params.label || 'Genre');
   const variant = String(params.variant || 'card');
   const typeToken = String(params.type || 'movie') === 'series' ? 'series' : 'movie';
   const typeLabel = typeToken === 'series' ? 'SÉRIES' : 'FILMS';
   const color = /^#?[0-9a-fA-F]{6}$/.test(String(params.color || '').replace('#','')) ? (String(params.color).startsWith('#') ? String(params.color) : `#${String(params.color)}`) : '#38bdf8';
   const photoDataUri = genreCinematicDataUri(params.genre, variant === 'backdrop' ? 'backdrop' : 'card');
-  if (variant === 'logo') return `<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="300" viewBox="0 0 1400 300"><rect width="1400" height="300" fill="none"/><rect x="20" y="55" width="10" height="180" rx="5" fill="${color}"/><text x="70" y="155" fill="#fff" font-family="Arial,sans-serif" font-size="112" font-weight="900">${label}</text><text x="76" y="220" fill="${color}" font-family="Arial,sans-serif" font-size="40" font-weight="900" letter-spacing="6">${typeLabel}</text></svg>`;
-  const isBackdrop = variant === 'backdrop'; const width=isBackdrop?1920:1600; const height=isBackdrop?1080:900;
+  const compactLen = rawLabel.replace(/\s/g, '').length;
+  const logoFont = compactLen > 22 ? 104 : compactLen > 16 ? 122 : compactLen > 11 ? 140 : 158;
+  const cardFont = compactLen > 22 ? 112 : compactLen > 16 ? 130 : compactLen > 11 ? 152 : 178;
+  const backdropFont = compactLen > 22 ? 142 : compactLen > 16 ? 164 : compactLen > 11 ? 190 : 224;
+  if (variant === 'logo') return `<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="300" viewBox="0 0 1400 300"><rect width="1400" height="300" fill="none"/><rect x="20" y="38" width="12" height="220" rx="6" fill="${color}"/><text x="72" y="164" fill="#fff" font-family="Arial,sans-serif" font-size="${logoFont}" font-weight="900" letter-spacing="-2">${label}</text><text x="78" y="244" fill="${color}" font-family="Arial,sans-serif" font-size="52" font-weight="900" letter-spacing="7">${typeLabel}</text></svg>`;
+  const isBackdrop = variant === 'backdrop';
+  const width = isBackdrop ? 1920 : 1600;
+  const height = isBackdrop ? 1080 : 900;
   const image = photoDataUri ? `<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice"/>` : `<rect width="${width}" height="${height}" fill="#07111f"/>`;
-  if (isBackdrop) return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".86"/><stop offset=".52" stop-color="#02040a" stop-opacity=".44"/><stop offset="1" stop-color="#02040a" stop-opacity=".04"/></linearGradient></defs>${image}<rect width="1920" height="1080" fill="url(#r)"/><rect x="104" y="140" width="10" height="224" rx="5" fill="${color}"/><text x="148" y="240" fill="#fff" font-family="Arial,sans-serif" font-size="58" font-weight="900" letter-spacing="5">TMDb GENRES</text><text x="148" y="344" fill="${color}" font-family="Arial,sans-serif" font-size="42" font-weight="900" letter-spacing="5">${typeLabel}</text></svg>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".58"/><stop offset="1" stop-color="#02040a" stop-opacity=".06"/></linearGradient></defs><g clip-path="url(#c)">${image}<rect width="1600" height="900" fill="url(#r)"/></g><rect x="76" y="80" width="10" height="176" rx="5" fill="${color}"/><text x="116" y="153" fill="#e7edf7" font-family="Arial,sans-serif" font-size="32" font-weight="900" letter-spacing="4">TMDb GENRES</text><text x="116" y="248" fill="#fff" font-family="Arial,sans-serif" font-size="104" font-weight="900">${label}</text><text x="118" y="312" fill="${color}" font-family="Arial,sans-serif" font-size="40" font-weight="900" letter-spacing="5">${typeLabel}</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".20" stroke-width="5"/></svg>`;
+  if (isBackdrop) return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".90"/><stop offset=".56" stop-color="#02040a" stop-opacity=".48"/><stop offset="1" stop-color="#02040a" stop-opacity=".04"/></linearGradient></defs>${image}<rect width="1920" height="1080" fill="url(#r)"/><rect x="104" y="116" width="12" height="390" rx="6" fill="${color}"/><text x="154" y="205" fill="#fff" font-family="Arial,sans-serif" font-size="68" font-weight="900" letter-spacing="5">TMDb GENRES</text><text x="154" y="315" fill="${color}" font-family="Arial,sans-serif" font-size="56" font-weight="900" letter-spacing="6">${typeLabel}</text><text x="150" y="505" fill="#fff" font-family="Arial,sans-serif" font-size="${backdropFont}" font-weight="900" letter-spacing="-3">${label}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".55" stop-color="#02040a" stop-opacity=".56"/><stop offset="1" stop-color="#02040a" stop-opacity=".05"/></linearGradient></defs><g clip-path="url(#c)">${image}<rect width="1600" height="900" fill="url(#r)"/></g><rect x="76" y="70" width="12" height="305" rx="6" fill="${color}"/><text x="124" y="143" fill="#e7edf7" font-family="Arial,sans-serif" font-size="44" font-weight="900" letter-spacing="5">TMDb GENRES</text><text x="120" y="300" fill="#fff" font-family="Arial,sans-serif" font-size="${cardFont}" font-weight="900" letter-spacing="-3">${label}</text><text x="126" y="380" fill="${color}" font-family="Arial,sans-serif" font-size="58" font-weight="900" letter-spacing="7">${typeLabel}</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".20" stroke-width="5"/></svg>`;
 }
 
 function archiveNowParts(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
@@ -866,7 +875,7 @@ function buildPlatformCollection(definition, entries, origin = null) {
 
 function buildNuvioCollectionsImport(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
   const entries = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)];
-  return [...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), buildGenreCollection(entries, origin)];
+  return [...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), ...buildGenreCollections(entries, origin)];
 }
 
 function buildArchiveBlueprint(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
@@ -1950,15 +1959,15 @@ function platformBrandBadge(providerSlug, logoDataUri, opts = {}) {
 function platformBackdropSvg(providerSlug, type = 'movie', logoDataUri = null, photoDataUri = null) {
   const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const typeLabel=type==='series'?'SÉRIES':'FILMS';
   const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1920" height="1080" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1920" height="1080" fill="#060a12"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".90"/><stop offset=".48" stop-color="#02040a" stop-opacity=".55"/><stop offset="1" stop-color="#02040a" stop-opacity=".05"/></linearGradient></defs>${photo}<rect width="1920" height="1080" fill="url(#r)"/><rect x="92" y="116" width="10" height="245" rx="5" fill="${accent}"/><text x="132" y="205" fill="#fff" font-family="Arial,sans-serif" font-size="48" font-weight="800" letter-spacing="6">${typeLabel}</text><text x="130" y="307" fill="#fff" font-family="Arial,sans-serif" font-size="92" font-weight="900">${label}</text><text x="132" y="388" fill="#d5e0ee" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="4">NUVIO · CALENDAR ARCHIVES</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".90"/><stop offset=".48" stop-color="#02040a" stop-opacity=".55"/><stop offset="1" stop-color="#02040a" stop-opacity=".05"/></linearGradient></defs>${photo}<rect width="1920" height="1080" fill="url(#r)"/><rect x="92" y="116" width="10" height="245" rx="5" fill="${accent}"/><text x="132" y="205" fill="#fff" font-family="Arial,sans-serif" font-size="64" font-weight="900" letter-spacing="7">${typeLabel}</text><text x="130" y="307" fill="#fff" font-family="Arial,sans-serif" font-size="132" font-weight="900" letter-spacing="-3">${label}</text><text x="132" y="388" fill="#d5e0ee" font-family="Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="5">NUVIO · CALENDAR ARCHIVES</text></svg>`;
 }
 
 function platformCategoryCardSvg(providerSlug, category = 'series', logoDataUri = null, photoDataUri = null) {
   const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const isFilms=category==='films'; const categoryLabel=isFilms?'FILMS':'SÉRIES';
   const detailLabel=providerSlug==='crunchyroll'?(isFilms?'ANIME MOVIES · STREAMING':'CRUNCHYROLL + ANILIST'):(isFilms?'SORTIES STREAMING':'NOUVELLES SÉRIES');
   const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1600" height="900" fill="#07111f"/>`;
-  const icon=logoDataUri?`<rect x="74" y="65" width="270" height="150" rx="32" fill="#02050a" fill-opacity=".72" stroke="#fff" stroke-opacity=".14"/><image href="${escapeXml(logoDataUri)}" x="94" y="83" width="230" height="114" preserveAspectRatio="xMidYMid meet"/><text x="510" y="155" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="62" font-weight="900">${label}</text>`:`<text x="210" y="174" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="92" font-weight="900">${label}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="l" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".62"/><stop offset="1" stop-color="#02040a" stop-opacity=".08"/></linearGradient></defs><g clip-path="url(#c)">${photo}<rect width="1600" height="900" fill="url(#l)"/></g>${icon}<rect x="74" y="592" width="10" height="208" rx="5" fill="${accent}"/><text x="112" y="704" fill="#fff" font-family="Arial,sans-serif" font-size="164" font-weight="900">${categoryLabel}</text><text x="118" y="770" fill="${accent}" font-family="Arial,sans-serif" font-size="34" font-weight="900" letter-spacing="4">${detailLabel}</text><text x="118" y="820" fill="#d7e2ef" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="3">PÉRIODES · MOIS · ARCHIVES</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="5"/></svg>`;
+  const icon=logoDataUri?`<rect x="74" y="65" width="270" height="150" rx="32" fill="#02050a" fill-opacity=".72" stroke="#fff" stroke-opacity=".14"/><image href="${escapeXml(logoDataUri)}" x="94" y="83" width="230" height="114" preserveAspectRatio="xMidYMid meet"/><text x="510" y="155" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="82" font-weight="900" letter-spacing="-2">${label}</text>`:`<text x="210" y="174" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="132" font-weight="900" letter-spacing="-3">${label}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="l" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".62"/><stop offset="1" stop-color="#02040a" stop-opacity=".08"/></linearGradient></defs><g clip-path="url(#c)">${photo}<rect width="1600" height="900" fill="url(#l)"/></g>${icon}<rect x="74" y="592" width="10" height="208" rx="5" fill="${accent}"/><text x="112" y="704" fill="#fff" font-family="Arial,sans-serif" font-size="198" font-weight="900" letter-spacing="-4">${categoryLabel}</text><text x="118" y="770" fill="${accent}" font-family="Arial,sans-serif" font-size="44" font-weight="900" letter-spacing="4">${detailLabel}</text><text x="118" y="820" fill="#d7e2ef" font-family="Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="3">PÉRIODES · MOIS · ARCHIVES</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="5"/></svg>`;
 }
 
 async function handlePlatformLogo(res, url) {
@@ -3858,6 +3867,8 @@ module.exports._internals = {
   buildNuvioCollectionsImport,
   buildGenreCatalogEntries,
   buildGenreCollection,
+  buildGenreCollections,
+  buildGenreCollectionByType,
   TMDB_MOVIE_GENRES,
   TMDB_TV_GENRES,
   buildGenreStreamingCatalog,

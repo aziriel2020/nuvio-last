@@ -7,7 +7,7 @@ const api=require('../api/index');
 const fixedNow=new Date('2026-08-24T12:28:00Z');
 const fixedSep=new Date('2026-09-01T12:28:00Z');
 const tz='Europe/Paris';
-const expectedParents=['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres TMDb'];
+const expectedParents=['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'];
 
 function collection(title, now=fixedNow, origin='https://fr-archives.example'){
   return api._internals.buildNuvioCollectionsImport(now,tz,origin).find(c=>c.title===title||c.title.endsWith(` ${title}`));
@@ -40,9 +40,9 @@ test('France provider parents include French services and no US-only Hulu/Peacoc
 
 test('all normal France platforms have Series and Films; VOD France is Films only',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
-  for(const parent of payload.filter(c=>!['🇫🇷 VOD France','🇫🇷 Genres TMDb'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
+  for(const parent of payload.filter(c=>!['🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
   assert.deepEqual(collection('VOD France').folders.map(f=>f.title),['Films']);
-  assert(collection('Genres TMDb').folders.length > 30);
+  assert.equal(collection('Genres · Films').folders.length,19); assert.equal(collection('Genres · Séries').folders.length,16);
 });
 
 test('Crunchyroll + AniList keeps anime Series and anime Films',()=>{
@@ -92,7 +92,7 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.3.0');
+  assert.equal(manifest.version,'1.3.1');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
   assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192));
   assert(manifest.catalogs.every(c=>c.showInHome===false));
@@ -188,11 +188,17 @@ test('France Modern covers and hero wordmarks keep large platform branding',()=>
   assert.match(backdrop,/FILMS/);
 });
 
-test('France genre folders use the exact predefined periods then all prewired months',()=>{
-  const genres=collection('Genres TMDb');
-  assert.equal(genres.folders.length,35);
-  assert(genres.folders.every((f)=>f.sources.length===197));
-  const action=genres.folders.find((f)=>f.title==='Films · Action');
+test('France genres are split into Films first and Series second, both with exact periods',()=>{
+  const films=collection('Genres · Films');
+  const series=collection('Genres · Séries');
+  assert(films&&series);
+  assert.equal(films.id,'calendar-archives-fr-genres');
+  assert.equal(series.id,'calendar-archives-fr-genres-series');
+  assert.equal(films.folders.length,19);
+  assert.equal(series.folders.length,16);
+  assert(films.folders.every((f)=>f.sources.length===197));
+  assert(series.folders.every((f)=>f.sources.length===197));
+  const action=films.folders.find((f)=>f.title==='Action');
   assert(action);
   assert.deepEqual(action.sources.slice(0,5).map((s)=>s.catalogId),[
     'genres-fr-movie-28',
@@ -203,7 +209,12 @@ test('France genre folders use the exact predefined periods then all prewired mo
   ]);
   assert.equal(action.sources[5].catalogId,'genres-fr-movie-28-2030-12');
   assert.equal(action.sources.at(-1).catalogId,'genres-fr-movie-28-2015-01');
+  const actionSeries=series.folders.find((f)=>f.title==='Action & Aventure');
+  assert(actionSeries);
+  assert.equal(actionSeries.sources[0].catalogId,'genres-fr-series-10759');
+  assert.equal(actionSeries.sources[5].catalogId,'genres-fr-series-10759-2030-12');
+  assert.equal(actionSeries.sources.at(-1).catalogId,'genres-fr-series-10759-2015-01');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28','movie',fixedNow,tz).period,'today');
-  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-nextweek','movie',fixedNow,tz).period,'nextweek');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-series-10759-nextweek','series',fixedNow,tz).period,'nextweek');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');
 });

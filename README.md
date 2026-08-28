@@ -1,41 +1,32 @@
-# Nuvio TOTAL CINEMATIC — FR + US + Anime + Genres + VOD — v1.3.0
+# Nuvio TOTAL CINEMATIC — FR + US + Anime + Genres + VOD — v1.3.1
 
-Déploiement cible : `https://nuvio-last.vercel.app`
+Version corrective complète pour Nuvio Modern / Shield.
 
-Ce pack conserve les IDs de Collections/addons existants, garde tous les visuels v1.3.0 et corrige la structure **Genres TMDb** pour qu'elle suive exactement les mêmes périodes que tout le reste du projet.
+## Correctifs v1.3.1
 
-## Addons
-- France : `/fr/manifest.json`
-- Global Anime + VOD : `/global/manifest.json`
-- USA : `/us/manifest.json`
+- **Anime global** : manifest corrigé pour exposer les catalogues `series` + `movie`; résolution AniList → TMDb assouplie pour les titres localisés; films d’animation recherchés séparément en JP (`ja`) et KR (`ko`).
+- **Périodes Global Anime + VOD Mondiale** : chaque source de Collection est validée contre un catalogue nommé du manifest. Ordre fixe : Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante, puis Décembre 2030 → Janvier 2015.
+- **Genres** : deux blocs/Collections natifs par région, dans cet ordre : `Genres · Films`, puis `Genres · Séries`. Chaque genre conserve ses 197 périodes/mois.
+- **Typographie** : textes des cartes et backdrops nettement agrandis.
+- **Backdrops** : 1920×1080, comportement cover via `preserveAspectRatio="xMidYMid slice"`.
+- **Cartes** : 1600×900 paysage.
 
-## Collections
-- 15 Collections France : 14 existantes + `🇫🇷 Genres TMDb`
-- 2 Collections globales : `🌍 Anime Japon + Corée` + `🌍 VOD Mondiale`
-- 11 Collections USA : 10 existantes + `🇺🇸 TMDb Genres`
-- Total : 28 Collections.
+## Structure
 
-## Règle de périodes — appliquée partout
-Chaque dossier de plateforme, Anime/VOD et désormais **chaque dossier de genre** commence par :
-1. Aujourd’hui
-2. Demain
-3. Hier
-4. Semaine passée
-5. La semaine suivante
+- France : 16 Collections
+- Global : 2 Collections (`Anime Japon + Corée`, `VOD Mondiale`)
+- USA : 12 Collections
+- Total : **30 Collections**
+- Total folders : **119**
+- Sources par folder calendrier : **197**
+  - 5 périodes dynamiques
+  - 192 mois (Décembre 2030 → Janvier 2015)
 
-Puis viennent les mois + années pré-câblés, dans le même ordre décroissant. Avec la base 2026 du projet : **5 périodes + 192 mois (2015→2030) = 197 sources par dossier**.
+## URLs après déploiement
 
-Pour compatibilité, l'ancien ID d'un genre (ex. `genres-fr-movie-28`) est conservé et devient la ligne **Aujourd’hui**. Les autres périodes/mois ont des IDs complémentaires stables.
+- `/fr/manifest.json`
+- `/global/manifest.json`
+- `/us/manifest.json`
+- `/nuvio-collections-fr-global-usa.json`
 
-## Visuels
-- Toutes les plateformes FR / US / Global utilisent un visuel cinéma avec des personnages variés.
-- Chaque plateforme possède un master `card` et un master `backdrop` dans `assets/platform-art/<market>/`.
-- Les 27 genres visuels uniques sont dans `assets/genre-art/shared/` et alimentent cartes + hero backgrounds FR/US.
-- Les Collections Genres ont un grand backdrop montage dédié.
-- Les logos restent rendus par la couche Nuvio/TMDb pour conserver des noms/wordmarks propres.
-
-## Sécurité migration
-Les IDs de Collections existantes n'ont pas été renommés. Réimporter le JSON combiné met à jour les mêmes Collections. Aucun nettoyage automatique n'est effectué.
-
-## Import principal
-Après déploiement, utiliser `imports/nuvio-collections-fr-global-us-all.json` ou directement l'URL déployée `/nuvio-collections-fr-global-usa.json`.
+Après déploiement de cette version, actualiser/réinstaller le manifest Global dans Nuvio, puis réimporter le JSON TOTAL pour que la nouvelle structure Genres Films/Séries et les catalogues Global soient pris en compte.

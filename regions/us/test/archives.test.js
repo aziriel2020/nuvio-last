@@ -110,7 +110,7 @@ test('VOD is Films-only for periods and months',()=>{
 
 test('manifest v1.5 stays hidden from normal Home because Collections own the UI',()=>{
   const m=api._internals.buildManifest('https://archives.example',fixedNow,tz);
-  assert.equal(m.version,'1.3.0');
+  assert.equal(m.version,'1.3.1');
   assert.equal(m.catalogs.length,10638);
   assert(m.catalogs.every(c=>c.showInHome===false));
   assert(m.catalogs.every(c=>c.extraSupported.includes('skip')));
@@ -140,8 +140,8 @@ test('Shield Modern decoration keeps real content type and landscape artwork for
 
 test('Nuvio import has platform names as the 10 parent Collections',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://archives.example');
-  assert.deepEqual(payload.map(c=>c.title),['🇺🇸 Netflix','🇺🇸 Prime Video','🇺🇸 Disney+','🇺🇸 Max','🇺🇸 Apple TV+','🇺🇸 Paramount+','🇺🇸 Peacock','🇺🇸 Hulu','🇺🇸 Crunchyroll + AniList','🇺🇸 VOD','🇺🇸 TMDb Genres']);
-  assert.equal(payload.length,11);
+  assert.deepEqual(payload.map(c=>c.title),['🇺🇸 Netflix','🇺🇸 Prime Video','🇺🇸 Disney+','🇺🇸 Max','🇺🇸 Apple TV+','🇺🇸 Paramount+','🇺🇸 Peacock','🇺🇸 Hulu','🇺🇸 Crunchyroll + AniList','🇺🇸 VOD','🇺🇸 Genres · Films','🇺🇸 Genres · Séries']);
+  assert.equal(payload.length,12);
   assert(payload.every(c=>c.viewMode==='FOLLOW_LAYOUT'&&c.showAllTab===false));
   assert(payload.slice(0,10).every(c=>c.pinToTop===true));
 });
@@ -160,9 +160,9 @@ test('normal streaming parent contains Modern Series and Films cards',()=>{
   for(const f of netflix.folders){
     assert.equal(f.tileShape,'LANDSCAPE');
     assert.equal(f.hideTitle,true);
-    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us130-cinematic$/);
-    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us130-cinematic$/);
-    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us130-cinematic$/);
+    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us131-cinematic$/);
+    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us131-cinematic$/);
+    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us131-cinematic$/);
   }
 });
 
@@ -246,7 +246,7 @@ test('every folder starts with the five periods, then months+years descending',(
 test('folder sources use the addon id and the folder real media type',()=>{
   for(const parent of api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://archives.example')){
     for(const f of parent.folders){
-      const expected=(f.title==='Films'||f.title.startsWith('Movies'))?'movie':'series';
+      const expected=parent.id==='calendar-archives-us-genres'?'movie':parent.id==='calendar-archives-us-genres-series'?'series':((f.title==='Films'||f.title.startsWith('Movies'))?'movie':'series');
       assert(f.sources.every(s=>s.provider==='addon'&&s.addonId==='com.nuvio.calendar.archives.us.coexist'&&s.type===expected));
     }
   }
@@ -330,11 +330,18 @@ test('invalid provider, pre-2015 and legacy catalog IDs are rejected',()=>{
   assert.equal(api._internals.resolveArchiveCatalog('archives-v1-month-2025-01','series',fixedNow,tz),null);
 });
 
-test('US genre folders use the exact predefined periods then all prewired months',()=>{
-  const genres=collection('🇺🇸 TMDb Genres');
-  assert.equal(genres.folders.length,35);
-  assert(genres.folders.every((f)=>f.sources.length===197));
-  const action=genres.folders.find((f)=>f.title==='Movies · Action');
+test('US genres are split into Films first and Series second, both with exact periods',()=>{
+  const films=collection('🇺🇸 Genres · Films');
+  const series=collection('🇺🇸 Genres · Séries');
+  assert(films&&series);
+  assert.equal(films.id,'calendar-archives-us-genres');
+  assert.equal(series.id,'calendar-archives-us-genres-series');
+  assert.equal(films.folders.length,19);
+  assert.equal(series.folders.length,16);
+  assert(films.folders.every((f)=>f.sources.length===197));
+  assert(series.folders.every((f)=>f.sources.length===197));
+
+  const action=films.folders.find((f)=>f.title==='Action');
   assert(action);
   assert.deepEqual(action.sources.slice(0,5).map((s)=>s.catalogId),[
     'genres-us-movie-28',
@@ -345,7 +352,20 @@ test('US genre folders use the exact predefined periods then all prewired months
   ]);
   assert.equal(action.sources[5].catalogId,'genres-us-movie-28-2030-12');
   assert.equal(action.sources.at(-1).catalogId,'genres-us-movie-28-2015-01');
+
+  const actionSeries=series.folders.find((f)=>f.title==='Action & Adventure');
+  assert(actionSeries);
+  assert.deepEqual(actionSeries.sources.slice(0,5).map((s)=>s.catalogId),[
+    'genres-us-series-10759',
+    'genres-us-series-10759-tomorrow',
+    'genres-us-series-10759-yesterday',
+    'genres-us-series-10759-lastweek',
+    'genres-us-series-10759-nextweek'
+  ]);
+  assert.equal(actionSeries.sources[5].catalogId,'genres-us-series-10759-2030-12');
+  assert.equal(actionSeries.sources.at(-1).catalogId,'genres-us-series-10759-2015-01');
+
   assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28','movie',fixedNow,tz).period,'today');
-  assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28-nextweek','movie',fixedNow,tz).period,'nextweek');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-us-series-10759-nextweek','series',fixedNow,tz).period,'nextweek');
   assert.equal(api._internals.resolveArchiveCatalog('genres-us-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');
 });

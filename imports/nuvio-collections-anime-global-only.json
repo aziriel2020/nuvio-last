@@ -2,7 +2,7 @@
   {
     "id": "calendar-archives-global-anime",
     "title": "🌍 Anime Japon + Corée",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/global/platform-backdrop.svg?provider=anime-asia&type=series&v=coex-global130-cinematic",
+    "backdropImageUrl": "https://nuvio-last.vercel.app/global/platform-backdrop.svg?provider=anime-asia&type=series&v=coex-global131-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -11,14 +11,14 @@
       {
         "id": "archives-anime-asia-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/global/platform-category-card.svg?provider=anime-asia&category=series&v=coex-global130-cinematic",
+        "coverImageUrl": "https://nuvio-last.vercel.app/global/platform-category-card.svg?provider=anime-asia&category=series&v=coex-global131-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/global/platform-backdrop.svg?provider=anime-asia&type=series&v=coex-global130-cinematic",
+        "heroBackdropUrl": "https://nuvio-last.vercel.app/global/platform-backdrop.svg?provider=anime-asia&type=series&v=coex-global131-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/global/platform-logo?provider=anime-asia&type=series&v=coex-global130-cinematic",
+        "titleLogoUrl": "https://nuvio-last.vercel.app/global/platform-logo?provider=anime-asia&type=series&v=coex-global131-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -2194,14 +2194,14 @@
       {
         "id": "archives-anime-asia-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/global/platform-category-card.svg?provider=anime-asia&category=films&v=coex-global130-cinematic",
+        "coverImageUrl": "https://nuvio-last.vercel.app/global/platform-category-card.svg?provider=anime-asia&category=films&v=coex-global131-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/global/platform-backdrop.svg?provider=anime-asia&type=movie&v=coex-global130-cinematic",
+        "heroBackdropUrl": "https://nuvio-last.vercel.app/global/platform-backdrop.svg?provider=anime-asia&type=movie&v=coex-global131-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/global/platform-logo?provider=anime-asia&type=movie&v=coex-global130-cinematic",
+        "titleLogoUrl": "https://nuvio-last.vercel.app/global/platform-logo?provider=anime-asia&type=movie&v=coex-global131-cinematic",
         "sources": [
           {
             "provider": "addon",

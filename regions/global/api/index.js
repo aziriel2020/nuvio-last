@@ -33,7 +33,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -47,8 +47,8 @@ const PROVIDERS_TTL_MS = 6 * 60 * 60 * 1000;
 const TVMAZE_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const ANILIST_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const MAPPING_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const SOURCE_VERSION = 'calendar-archives-global-v1.3.0-modern-shield';
-const VISUAL_REV = 'coex-global130-cinematic';
+const SOURCE_VERSION = 'calendar-archives-global-v1.3.1-modern-shield';
+const VISUAL_REV = 'coex-global131-cinematic';
 
 const REGION_ART_KEY = 'global';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/global');
@@ -117,38 +117,61 @@ const ANIME_TIMEZONE = 'Asia/Tokyo';
 async function discoverGlobalAnimeMovieCandidates(window) {
   const maxCandidates = Math.max(getConfig().maxItems, 120);
   const byId = new Map();
-  for (const originalLanguage of ['ja', 'ko']) {
+  const markets = [
+    { originalLanguage: 'ja', region: 'JP' },
+    { originalLanguage: 'ko', region: 'KR' }
+  ];
+  for (const market of markets) {
     for (let page = 1; page <= 5 && byId.size < maxCandidates; page += 1) {
       const payload = await tmdbFetch('/discover/movie', {
         language: getConfig().language,
         page,
         include_adult: false,
         sort_by: 'popularity.desc',
-        region: 'JP',
+        region: market.region,
         with_genres: '16',
-        with_original_language: originalLanguage,
+        with_original_language: market.originalLanguage,
         'release_date.gte': window.start,
         'release_date.lte': window.end
       });
-      for (const item of payload?.results || []) byId.set(Number(item.id), item);
+      for (const item of payload?.results || []) {
+        const id = Number(item.id);
+        if (!Number.isFinite(id)) continue;
+        const releaseDate = normalizeIsoDate(item.release_date);
+        if (!releaseDate || releaseDate < window.start || releaseDate > window.end) continue;
+        const candidate = {
+          ...item,
+          _animeRegion: market.region,
+          _animeOriginalLanguage: market.originalLanguage,
+          _animeReleaseDate: releaseDate
+        };
+        const previous = byId.get(id);
+        // Keep the earliest matching JP/KR theatrical/streaming release if the
+        // same animation appears in both regional searches.
+        if (!previous || releaseDate < previous._animeReleaseDate) byId.set(id, candidate);
+      }
       if (page >= Number(payload?.total_pages || 1)) break;
     }
   }
-  return [...byId.values()].slice(0, maxCandidates);
+  return [...byId.values()]
+    .sort((a, b) => String(a._animeReleaseDate).localeCompare(String(b._animeReleaseDate)) || Number(b.popularity || 0) - Number(a.popularity || 0))
+    .slice(0, maxCandidates);
 }
 
-function animeMovieDetailsToMeta(details, window) {
-  const date = normalizeIsoDate(details?.release_date);
+function animeMovieDetailsToMeta(details, window, candidate = null) {
+  const date = normalizeIsoDate(candidate?._animeReleaseDate || details?.release_date);
   if (!date || date < window.start || date > window.end) return { meta: null, reason: date && date < window.today ? 'past' : 'outside-window' };
-  const meta = baseMeta(details, 'movie', date, `Sortie Japon • ${humanDate(date, ANIME_TIMEZONE, window.today)}`);
-  meta.description = ['Anime Japon/Corée • Date de sortie JP/KR', meta.description].filter(Boolean).join('\n\n');
+  const market = candidate?._animeRegion || (String(details?.original_language || '').toLowerCase() === 'ko' ? 'KR' : 'JP');
+  const marketLabel = market === 'KR' ? 'Corée' : 'Japon';
+  const meta = baseMeta(details, 'movie', date, `Sortie ${marketLabel} • ${humanDate(date, ANIME_TIMEZONE, window.today)}`);
+  meta.description = [`Anime ${marketLabel} • date de sortie ${market}`, meta.description].filter(Boolean).join('\n\n');
   meta._eventMode = EVENT_MODES.STREAMING_DATE;
   return { meta, reason: null };
 }
 
 async function buildAnimeAsiaMovieCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
   const window = dateWindow(period, now, ANIME_TIMEZONE);
-  const key = catalogCacheKey({ providerSlug: 'anime-asia-movie', type: 'movie', period, timeZone: ANIME_TIMEZONE, today: window.today, sourceVersion: `${SOURCE_VERSION}-anime-movie` });
+  const key = catalogCacheKey({ providerSlug: 'anime-asia-movie', type: 'movie', period, timeZone: ANIME_TIMEZONE, today: window.today, sourceVersion: `${SOURCE_VERSION}-anime-movie-jpkr-v2` });
   if (useCache) {
     const cached = catalogCache.get(key);
     if (cached) return cached;
@@ -162,8 +185,9 @@ async function buildAnimeAsiaMovieCatalog({ catalog, timeZone, now = new Date(),
   stats.candidates = raw.length;
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
     const details = await fetchDetails('movie', candidate.id);
-    if (!['ja', 'ko'].includes(String(details?.original_language || '').toLowerCase())) return { meta: null, reason: 'wrong-provider' };
-    return animeMovieDetailsToMeta(details, window);
+    const expectedLanguage = String(candidate?._animeOriginalLanguage || '').toLowerCase();
+    if (expectedLanguage && String(details?.original_language || '').toLowerCase() !== expectedLanguage) return { meta: null, reason: 'wrong-provider' };
+    return animeMovieDetailsToMeta(details, window, candidate);
   });
   const metas = [];
   for (const result of settled) {
@@ -1181,11 +1205,11 @@ function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) 
     logo: `${origin}/logo.svg`,
     background: `${origin}/background.svg`,
     resources: [
-      { name: 'catalog', types: ['movie'] },
-      { name: 'meta', types: ['series', 'movie'], idPrefixes: ['tt', 'tmdb:movie:'] }
+      { name: 'catalog', types: ['movie', 'series'] },
+      { name: 'meta', types: ['movie', 'series'], idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:'] }
     ],
-    types: ['series', 'movie'],
-    idPrefixes: ['tt', 'tmdb:movie:'],
+    types: ['movie', 'series'],
+    idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:'],
     catalogs,
     behaviorHints: { configurable: false, configurationRequired: false, newEpisodeNotifications: false },
     language: 'fr'
@@ -1467,11 +1491,11 @@ function platformBrandBadge(providerSlug, logoDataUri, opts = {}) {
 }
 
 function platformBackdropSvg(providerSlug, type = 'movie', logoDataUri = null, photoDataUri = null) {
- const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const typeLabel=type==='series'?'SÉRIES':'FILMS'; const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1920" height="1080" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1920" height="1080" fill="#060a12"/>`; return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".90"/><stop offset=".48" stop-color="#02040a" stop-opacity=".55"/><stop offset="1" stop-color="#02040a" stop-opacity=".05"/></linearGradient></defs>${photo}<rect width="1920" height="1080" fill="url(#r)"/><rect x="92" y="116" width="10" height="245" rx="5" fill="${accent}"/><text x="132" y="205" fill="#fff" font-family="Arial,sans-serif" font-size="48" font-weight="800" letter-spacing="6">${typeLabel}</text><text x="130" y="307" fill="#fff" font-family="Arial,sans-serif" font-size="92" font-weight="900">${label}</text><text x="132" y="388" fill="#d5e0ee" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="4">GLOBAL · NUVIO ARCHIVES</text></svg>`;
+ const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const typeLabel=type==='series'?'SÉRIES':'FILMS'; const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1920" height="1080" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1920" height="1080" fill="#060a12"/>`; return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="r" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".90"/><stop offset=".48" stop-color="#02040a" stop-opacity=".55"/><stop offset="1" stop-color="#02040a" stop-opacity=".05"/></linearGradient></defs>${photo}<rect width="1920" height="1080" fill="url(#r)"/><rect x="92" y="116" width="10" height="245" rx="5" fill="${accent}"/><text x="132" y="205" fill="#fff" font-family="Arial,sans-serif" font-size="64" font-weight="900" letter-spacing="7">${typeLabel}</text><text x="130" y="307" fill="#fff" font-family="Arial,sans-serif" font-size="132" font-weight="900" letter-spacing="-3">${label}</text><text x="132" y="388" fill="#d5e0ee" font-family="Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="5">GLOBAL · NUVIO ARCHIVES</text></svg>`;
 }
 
 function platformCategoryCardSvg(providerSlug, category = 'series', logoDataUri = null, photoDataUri = null) {
- const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const isFilms=category==='films'; const categoryLabel=isFilms?'FILMS':'SÉRIES'; const detailLabel=providerSlug==='anime-asia'?(isFilms?'FILMS ANIME · JAPON + CORÉE':'ANIME JAPON + CORÉE'):'DIGITAL RELEASES · MONDIAL'; const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1600" height="900" fill="#07111f"/>`; const icon=logoDataUri?`<rect x="74" y="65" width="270" height="150" rx="32" fill="#02050a" fill-opacity=".72" stroke="#fff" stroke-opacity=".14"/><image href="${escapeXml(logoDataUri)}" x="94" y="83" width="230" height="114" preserveAspectRatio="xMidYMid meet"/>`:`<text x="78" y="174" fill="#fff" font-family="Arial,sans-serif" font-size="80" font-weight="900">${label}</text>`; return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="l" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".62"/><stop offset="1" stop-color="#02040a" stop-opacity=".08"/></linearGradient></defs><g clip-path="url(#c)">${photo}<rect width="1600" height="900" fill="url(#l)"/></g>${icon}<rect x="74" y="592" width="10" height="208" rx="5" fill="${accent}"/><text x="112" y="704" fill="#fff" font-family="Arial,sans-serif" font-size="164" font-weight="900">${categoryLabel}</text><text x="118" y="770" fill="${accent}" font-family="Arial,sans-serif" font-size="34" font-weight="900" letter-spacing="4">${detailLabel}</text><text x="118" y="820" fill="#d7e2ef" font-family="Arial,sans-serif" font-size="23" font-weight="700" letter-spacing="3">PÉRIODES · MOIS · ARCHIVES</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="5"/></svg>`;
+ const label=escapeXml(platformCollectionTitle(providerSlug)); const accent=providerAccentColor(platformCollectionTitle(providerSlug)); const isFilms=category==='films'; const categoryLabel=isFilms?'FILMS':'SÉRIES'; const detailLabel=providerSlug==='anime-asia'?(isFilms?'FILMS ANIME · JAPON + CORÉE':'ANIME JAPON + CORÉE'):'DIGITAL RELEASES · MONDIAL'; const photo=photoDataUri?`<image href="${escapeXml(photoDataUri)}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>`:`<rect width="1600" height="900" fill="#07111f"/>`; const icon=logoDataUri?`<rect x="74" y="65" width="270" height="150" rx="32" fill="#02050a" fill-opacity=".72" stroke="#fff" stroke-opacity=".14"/><image href="${escapeXml(logoDataUri)}" x="94" y="83" width="230" height="114" preserveAspectRatio="xMidYMid meet"/>`:`<text x="78" y="174" fill="#fff" font-family="Arial,sans-serif" font-size="80" font-weight="900">${label}</text>`; return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs><clipPath id="c"><rect width="1600" height="900" rx="44"/></clipPath><linearGradient id="l" x1="0" x2="1"><stop stop-color="#02040a" stop-opacity=".94"/><stop offset=".5" stop-color="#02040a" stop-opacity=".62"/><stop offset="1" stop-color="#02040a" stop-opacity=".08"/></linearGradient></defs><g clip-path="url(#c)">${photo}<rect width="1600" height="900" fill="url(#l)"/></g>${icon}<rect x="74" y="592" width="10" height="208" rx="5" fill="${accent}"/><text x="112" y="704" fill="#fff" font-family="Arial,sans-serif" font-size="198" font-weight="900" letter-spacing="-4">${categoryLabel}</text><text x="118" y="770" fill="${accent}" font-family="Arial,sans-serif" font-size="44" font-weight="900" letter-spacing="4">${detailLabel}</text><text x="118" y="820" fill="#d7e2ef" font-family="Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="3">PÉRIODES · MOIS · ARCHIVES</text><rect x="0" y="0" width="1600" height="900" rx="44" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="5"/></svg>`;
 }
 
 async function handlePlatformLogo(res, url) {
@@ -2460,37 +2484,104 @@ function animeTitles(media) {
   ].filter(Boolean))];
 }
 
-function candidateMatchesAnime(candidate, media) {
+function animeTitleSimilarity(candidate, media) {
+  const wanted = animeTitles(media).map(normalizeTitle).filter(Boolean);
+  const got = [candidate?.name, candidate?.original_name].map(normalizeTitle).filter(Boolean);
+  let best = 0;
+  for (const left of wanted) {
+    for (const right of got) {
+      if (left === right) best = Math.max(best, 1);
+      else if (left.includes(right) || right.includes(left)) best = Math.max(best, 0.92);
+      const a = new Set(left.split(/\s+/).filter((token) => token.length > 1));
+      const b = new Set(right.split(/\s+/).filter((token) => token.length > 1));
+      if (a.size && b.size) {
+        let common = 0;
+        for (const token of a) if (b.has(token)) common += 1;
+        best = Math.max(best, common / Math.max(a.size, b.size));
+      }
+    }
+  }
+  return best;
+}
+
+function candidateMatchesAnime(candidate, media, relaxedYear = false) {
   const expected = new Set(animeTitles(media).map(normalizeTitle).filter(Boolean));
   if (!expected.size) return false;
   const names = [candidate?.name, candidate?.original_name].map(normalizeTitle).filter(Boolean);
-  if (!names.some((name) => expected.has(name))) return false;
+  const titleMatch = names.some((name) => expected.has(name)) || names.some((name) => [...expected].some((wanted) => name.includes(wanted) || wanted.includes(name)));
+  if (!titleMatch) return false;
   const year = Number(media?.seasonYear);
   if (Number.isFinite(year)) {
     const candidateYear = Number(String(candidate?.first_air_date || '').slice(0, 4));
-    if (!Number.isFinite(candidateYear) || candidateYear !== year) return false;
+    if (Number.isFinite(candidateYear)) {
+      const tolerance = relaxedYear ? 1 : 0;
+      if (Math.abs(candidateYear - year) > tolerance) return false;
+    } else if (!relaxedYear) {
+      return false;
+    }
   }
+  const country = String(media?.countryOfOrigin || '').toUpperCase();
+  const expectedLanguage = country === 'KR' ? 'ko' : country === 'JP' ? 'ja' : null;
+  if (expectedLanguage && candidate?.original_language && String(candidate.original_language).toLowerCase() !== expectedLanguage) return false;
   return true;
 }
 
 async function resolveAnimeToTmdb(media) {
-  const key = `anime-map:${media?.id}`;
+  const key = `anime-map-v3:${media?.id}`;
   const cached = mappingCache.get(key);
-  if (cached !== null && cached !== undefined) return cached;
-  const titles = animeTitles(media).slice(0, 2);
+  if (cached !== null && cached !== undefined) return cached || null;
+  const titles = animeTitles(media).slice(0, 3);
   let candidates = [];
+
+  // Pass 1: precise season-year search.
   for (const title of titles) {
     const params = { query: title, include_adult: false, language: getConfig().language };
     if (Number.isFinite(Number(media?.seasonYear))) params.first_air_date_year = Number(media.seasonYear);
     const payload = await tmdbFetch('/search/tv', params);
     candidates.push(...(payload?.results || []));
   }
-  const unique = [...new Map(candidates.map((candidate) => [Number(candidate.id), candidate])).values()];
-  const matches = unique.filter((candidate) => candidateMatchesAnime(candidate, media));
+
+  let unique = [...new Map(candidates.map((candidate) => [Number(candidate.id), candidate])).values()];
+  let matches = unique.filter((candidate) => candidateMatchesAnime(candidate, media, false));
+
+  // Pass 2: TMDb sometimes assigns a neighbouring year to winter anime or a
+  // later season. Retry without the year filter, then accept ±1 year.
+  if (!matches.length) {
+    candidates = [];
+    for (const title of titles) {
+      const payload = await tmdbFetch('/search/tv', { query: title, include_adult: false, language: getConfig().language });
+      candidates.push(...(payload?.results || []));
+    }
+    unique = [...new Map(candidates.map((candidate) => [Number(candidate.id), candidate])).values()];
+    matches = unique.filter((candidate) => candidateMatchesAnime(candidate, media, true));
+  }
+
+  const country = String(media?.countryOfOrigin || '').toUpperCase();
+  const expectedLanguage = country === 'KR' ? 'ko' : 'ja';
+
+  // Last-resort mapping: titles are frequently localized differently between
+  // AniList and TMDb. Keep only the correct JP/KR language and a nearby year,
+  // then require at least some token similarity instead of dropping the anime.
+  if (!matches.length) {
+    const expectedYear = Number(media?.seasonYear);
+    matches = unique.filter((candidate) => {
+      if (String(candidate?.original_language || '').toLowerCase() !== expectedLanguage) return false;
+      const candidateYear = Number(String(candidate?.first_air_date || '').slice(0, 4));
+      if (Number.isFinite(expectedYear) && Number.isFinite(candidateYear) && Math.abs(candidateYear - expectedYear) > 2) return false;
+      return animeTitleSimilarity(candidate, media) >= 0.24;
+    });
+  }
+
   matches.sort((a, b) => {
-    const langA = a.original_language === 'ja' ? 1 : 0;
-    const langB = b.original_language === 'ja' ? 1 : 0;
+    const langA = String(a.original_language || '').toLowerCase() === expectedLanguage ? 1 : 0;
+    const langB = String(b.original_language || '').toLowerCase() === expectedLanguage ? 1 : 0;
     if (langA !== langB) return langB - langA;
+    const year = Number(media?.seasonYear);
+    const yearA = Number(String(a?.first_air_date || '').slice(0, 4));
+    const yearB = Number(String(b?.first_air_date || '').slice(0, 4));
+    const deltaA = Number.isFinite(year) && Number.isFinite(yearA) ? Math.abs(yearA - year) : 9;
+    const deltaB = Number.isFinite(year) && Number.isFinite(yearB) ? Math.abs(yearB - year) : 9;
+    if (deltaA !== deltaB) return deltaA - deltaB;
     return Number(b.popularity || 0) - Number(a.popularity || 0);
   });
   const tmdbId = Number(matches[0]?.id) || null;
@@ -3370,6 +3461,11 @@ module.exports._internals = {
   buildNuvioCollectionsImport,
   buildAnimeAsiaSeriesCatalog,
   buildAnimeAsiaMovieCatalog,
+  animeTitleSimilarity,
+  candidateMatchesAnime,
+  resolveAnimeToTmdb,
+  discoverGlobalAnimeMovieCandidates,
+  animeMovieDetailsToMeta,
   buildArchiveBlueprint,
   PERIOD_OPTIONS,
   FILM_EXTRA_CATALOGS,
