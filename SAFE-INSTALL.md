@@ -1,8 +1,9 @@
-# Installation sûre — v1.3.0
+# Installation sûre — v1.3.1
 
-1. Déploie ce dossier complet sur le projet Vercel existant.
-2. Vérifie `/health` et `/coexistence-check.json`.
-3. Les manifests restent `/fr/manifest.json`, `/global/manifest.json`, `/us/manifest.json`.
-4. Réimporte ensuite `imports/nuvio-collections-fr-global-us-all.json` ou l'URL `/nuvio-collections-fr-global-usa.json`.
+1. Déployer le contenu de ce dossier/ZIP sur le même projet Vercel.
+2. Vérifier `/fr/manifest.json`, `/global/manifest.json`, `/us/manifest.json`.
+3. **Actualiser ou réinstaller le manifest Global** dans Nuvio : le manifest expose désormais correctement les types `movie` et `series`.
+4. Réimporter `imports/nuvio-collections-fr-global-us-all.json`.
+5. Les IDs existants sont conservés. Les nouvelles Collections `Genres · Séries` ont des IDs distincts et s’ajoutent sans collision.
 
-Important : la Collection Genres garde le même ID, mais ses dossiers passent maintenant de 1 source à **197 sources** : 5 périodes prédéfinies puis 192 mois pré-câblés. Les autres Collections gardent leurs IDs et leur structure déjà validée.
+Ne supprime pas les Collections existantes avant l’import : les IDs identiques servent à les mettre à jour.

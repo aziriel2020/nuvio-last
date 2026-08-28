@@ -9,7 +9,7 @@ test('manifest route exposes v1.5 periods first plus month+year catalogs',async(
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';
   try{
     const r=await call('/manifest.json',tz);assert.equal(r.statusCode,200);const m=JSON.parse(r.text);
-    assert.equal(m.version,'1.3.0');assert.equal(m.catalogs.length,10638);
+    assert.equal(m.version,'1.3.1');assert.equal(m.catalogs.length,10638);
     assert(m.catalogs.some(c=>c.name==='Aujourd’hui'&&c.type==='series'));
     assert(m.catalogs.some(c=>c.name==='La semaine suivante'&&c.type==='movie'));
     assert(m.catalogs.some(c=>c.name==='Août 2026'&&c.type==='series'));
@@ -66,7 +66,7 @@ test('collections route is platform parents -> Series/Films -> five periods -> m
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';
   try{
     const r=await call('/nuvio-collections.json',tz);assert.equal(r.statusCode,200);const p=JSON.parse(r.text);
-    assert.deepEqual(p.map(x=>x.title),['🇺🇸 Netflix','🇺🇸 Prime Video','🇺🇸 Disney+','🇺🇸 Max','🇺🇸 Apple TV+','🇺🇸 Paramount+','🇺🇸 Peacock','🇺🇸 Hulu','🇺🇸 Crunchyroll + AniList','🇺🇸 VOD','🇺🇸 TMDb Genres']);
+    assert.deepEqual(p.map(x=>x.title),['🇺🇸 Netflix','🇺🇸 Prime Video','🇺🇸 Disney+','🇺🇸 Max','🇺🇸 Apple TV+','🇺🇸 Paramount+','🇺🇸 Peacock','🇺🇸 Hulu','🇺🇸 Crunchyroll + AniList','🇺🇸 VOD','🇺🇸 Genres · Films','🇺🇸 Genres · Séries']);
     assert.deepEqual(p[0].folders.map(x=>x.title),['Séries','Films']);
     assert.deepEqual(p[8].folders.map(x=>x.title),['Séries','Films']);
     assert.deepEqual(p[9].folders.map(x=>x.title),['Films']);
@@ -78,8 +78,8 @@ test('collections route is platform parents -> Series/Films -> five periods -> m
     assert.equal(p[0].pinToTop,true);
     assert.equal(p[0].folders[0].hideTitle,true);
     assert.equal(p[0].folders[1].hideTitle,true);
-    assert.equal(p[0].folders[0].coverImageUrl,'https://archives.example/platform-category-card.svg?provider=netflix&category=series&v=coex-us130-cinematic');
-    assert.equal(p[0].folders[1].titleLogoUrl,'https://archives.example/platform-logo?provider=netflix&type=movie&v=coex-us130-cinematic');
+    assert.equal(p[0].folders[0].coverImageUrl,'https://archives.example/platform-category-card.svg?provider=netflix&category=series&v=coex-us131-cinematic');
+    assert.equal(p[0].folders[1].titleLogoUrl,'https://archives.example/platform-logo?provider=netflix&type=movie&v=coex-us131-cinematic');
   }finally{delete process.env.NUVIO_NOW_OVERRIDE}
 });
 

@@ -31,23 +31,25 @@ test('single deployment exposes three distinct addon manifests', async () => {
   assert.equal(globalVod.catalogs.length, 591);
 });
 
-test('combined import has 28 unique collections: France, Global Anime/VOD, then USA', async () => {
+test('combined import has 30 unique collections: France, Global Anime/VOD, then USA', async () => {
   const response = await call('/nuvio-collections-fr-global-usa.json');
   assert.equal(response.statusCode, 200);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 28);
+  assert.equal(collections.length, 30);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
-  assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 15);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
-  assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 11);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
   assert.equal(collections[0].title, '🇫🇷 Netflix');
   assert.equal(collections[13].title, '🇫🇷 VOD France');
-  assert.equal(collections[14].title, '🇫🇷 Genres TMDb');
-  assert.equal(collections[15].title, '🌍 Anime Japon + Corée');
-  assert.equal(collections[16].title, '🌍 VOD Mondiale');
-  assert.equal(collections[17].title, '🇺🇸 Netflix');
-  assert.equal(collections.at(-1).title, '🇺🇸 TMDb Genres');
+  assert.equal(collections[14].title, '🇫🇷 Genres · Films');
+  assert.equal(collections[15].title, '🇫🇷 Genres · Séries');
+  assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
+  assert.equal(collections[17].title, '🌍 VOD Mondiale');
+  assert.equal(collections[18].title, '🇺🇸 Netflix');
+  assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
+  assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
 
@@ -56,9 +58,9 @@ test('France stays first, Global VOD is next, and USA remains after them on Mode
   const fr = collections.filter((c) => c.title.startsWith('🇫🇷 '));
   const globalVod = collections.filter((c) => c.title.startsWith('🌍 '));
   const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
-  assert.equal(fr.length, 15);
+  assert.equal(fr.length, 16);
   assert.equal(globalVod.length, 2);
-  assert.equal(us.length, 11);
+  assert.equal(us.length, 12);
   assert(fr.every((c) => c.pinToTop === true));
   assert(globalVod.every((c) => c.pinToTop === true));
   assert(us.every((c) => c.pinToTop === false));
