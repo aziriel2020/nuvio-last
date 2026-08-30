@@ -18,28 +18,32 @@ function call(path, headers = {}) {
   });
 }
 
-test('single deployment exposes three distinct addon manifests', async () => {
+test('single deployment exposes four distinct addon manifests', async () => {
   const us = JSON.parse((await call('/us/manifest.json')).text);
   const fr = JSON.parse((await call('/fr/manifest.json')).text);
   const globalVod = JSON.parse((await call('/global/manifest.json')).text);
+  const tr = JSON.parse((await call('/tr/manifest.json')).text);
   assert.equal(us.id, 'com.nuvio.calendar.archives.us.coexist');
   assert.equal(fr.id, 'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(globalVod.id, 'com.nuvio.calendar.archives.global.coexist');
-  assert.equal(new Set([us.id, fr.id, globalVod.id]).size, 3);
+  assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
+  assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
   assert.equal(fr.catalogs.length, 12214);
   assert.equal(globalVod.catalogs.length, 591);
+  assert.equal(tr.catalogs.length, 6501);
 });
 
-test('combined import has 30 unique collections: France, Global Anime/VOD, then USA', async () => {
-  const response = await call('/nuvio-collections-fr-global-usa.json');
+test('combined import has 47 unique collections: France, Global, Türkiye, then USA', async () => {
+  const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 30);
+  assert.equal(collections.length, 47);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 17);
   assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
   assert.equal(collections[0].title, '🇫🇷 Netflix');
   assert.equal(collections[13].title, '🇫🇷 VOD France');
@@ -47,31 +51,37 @@ test('combined import has 30 unique collections: France, Global Anime/VOD, then 
   assert.equal(collections[15].title, '🇫🇷 Genres · Séries');
   assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
   assert.equal(collections[17].title, '🌍 VOD Mondiale');
-  assert.equal(collections[18].title, '🇺🇸 Netflix');
+  assert.equal(collections[18].title, '🇹🇷 Netflix');
+  assert.equal(collections[34].title, '🇹🇷 VOD Türkiye');
+  assert.equal(collections[35].title, '🇺🇸 Netflix');
   assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
 
-test('France stays first, Global VOD is next, and USA remains after them on Modern Shield', async () => {
-  const collections = JSON.parse((await call('/nuvio-collections-fr-global-usa.json')).text);
+test('France stays first, Global is next, Türkiye follows, and USA remains last on Modern Shield', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-fr-global-tr-usa.json')).text);
   const fr = collections.filter((c) => c.title.startsWith('🇫🇷 '));
   const globalVod = collections.filter((c) => c.title.startsWith('🌍 '));
+  const tr = collections.filter((c) => c.title.startsWith('🇹🇷 '));
   const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
   assert.equal(fr.length, 16);
   assert.equal(globalVod.length, 2);
+  assert.equal(tr.length, 17);
   assert.equal(us.length, 12);
   assert(fr.every((c) => c.pinToTop === true));
   assert(globalVod.every((c) => c.pinToTop === true));
+  assert(tr.every((c) => c.pinToTop === true));
   assert(us.every((c) => c.pinToTop === false));
 });
 
 
-test('USA, France and Global VOD collection sources always reference their own addon', async () => {
-  const collections = JSON.parse((await call('/nuvio-collections-fr-global-usa.json')).text);
+test('USA, France, Global and Türkiye collection sources always reference their own addon', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-fr-global-tr-usa.json')).text);
   const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
   const fr = collections.filter((c) => c.title.startsWith('🇫🇷 '));
   const globalVod = collections.filter((c) => c.title.startsWith('🌍 '));
+  const tr = collections.filter((c) => c.title.startsWith('🇹🇷 '));
   for (const collection of us) for (const folder of collection.folders) {
     assert(folder.sources.every((source) => source.addonId === 'com.nuvio.calendar.archives.us.coexist'));
   }
@@ -81,17 +91,22 @@ test('USA, France and Global VOD collection sources always reference their own a
   for (const collection of globalVod) for (const folder of collection.folders) {
     assert(folder.sources.every((source) => source.addonId === 'com.nuvio.calendar.archives.global.coexist'));
   }
+  for (const collection of tr) for (const folder of collection.folders) {
+    assert(folder.sources.every((source) => source.addonId === 'com.nuvio.calendar.archives.tr.coexist'));
+  }
 });
 
 
 test('all hosted visual URLs stay inside the correct regional/global route prefix', async () => {
-  const collections = JSON.parse((await call('/nuvio-collections-fr-global-usa.json')).text);
+  const collections = JSON.parse((await call('/nuvio-collections-fr-global-tr-usa.json')).text);
   for (const collection of collections) {
     const prefix = collection.title.startsWith('🇺🇸 ')
       ? 'https://coexist.example/us/'
       : collection.title.startsWith('🌍 ')
         ? 'https://coexist.example/global/'
-        : 'https://coexist.example/fr/';
+        : collection.title.startsWith('🇹🇷 ')
+          ? 'https://coexist.example/tr/'
+          : 'https://coexist.example/fr/';
     assert(collection.backdropImageUrl?.startsWith(prefix));
     for (const folder of collection.folders) {
       assert(folder.coverImageUrl?.startsWith(prefix));
@@ -106,6 +121,7 @@ test('Modern content artwork URLs keep the /fr and /us sub-path instead of falli
   const frApi = handler._internals.frHandler._internals;
   const usApi = handler._internals.usHandler._internals;
   const globalApi = handler._internals.globalHandler._internals;
+  const trApi = handler._internals.trHandler._internals;
   const meta = {
     id: 'tt1234567', type: 'series', name: 'Demo',
     poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
@@ -119,6 +135,7 @@ test('Modern content artwork URLs keep the /fr and /us sub-path instead of falli
   const globalCatalog = { type: 'movie', period: 'today', cardProvider: 'VOD Mondiale', name: 'Aujourd’hui' };
   const globalMeta = { ...meta, type: 'movie', _calendarProvider: 'VOD Mondiale', _calendarSource: 'tmdb-vod' };
   const globalDecorated = globalApi.decorateCatalogMetas('https://coexist.example/global', [globalMeta], globalCatalog, 'Europe/Paris')[0];
+  const trDecorated = trApi.decorateCatalogMetas('https://coexist.example/tr', [meta], catalog, 'Europe/Istanbul')[0];
   assert.match(frDecorated.background, /^https:\/\/coexist\.example\/fr\/calendar-card\.svg\?/);
   assert.match(frDecorated.poster, /^https:\/\/coexist\.example\/fr\/calendar-card\.svg\?/);
   assert.match(frDecorated.logo, /^https:\/\/coexist\.example\/fr\/calendar-transparent-logo\.svg\?/);
@@ -127,21 +144,26 @@ test('Modern content artwork URLs keep the /fr and /us sub-path instead of falli
   assert.match(usDecorated.logo, /^https:\/\/coexist\.example\/us\/calendar-transparent-logo\.svg\?/);
   assert.match(globalDecorated.background, /^https:\/\/coexist\.example\/global\/calendar-card\.svg\?/);
   assert.match(globalDecorated.poster, /^https:\/\/coexist\.example\/global\/calendar-card\.svg\?/);
+  assert.match(trDecorated.background, /^https:\/\/coexist\.example\/tr\/calendar-card\.svg\?/);
 });
 
 test('regional image routes are reachable through the wrapper', async () => {
   const us = await call('/us/platform-category-card.svg?provider=netflix&category=series');
   const fr = await call('/fr/platform-category-card.svg?provider=canal-plus&category=films');
   const globalVod = await call('/global/platform-category-card.svg?provider=vod-global&category=films');
+  const tr = await call('/tr/platform-category-card.svg?provider=exxen&category=series');
   assert.equal(us.statusCode, 200);
   assert.equal(fr.statusCode, 200);
   assert.equal(globalVod.statusCode, 200);
+  assert.equal(tr.statusCode, 200);
   assert.match(us.headers['content-type'], /image\/svg\+xml/);
   assert.match(fr.headers['content-type'], /image\/svg\+xml/);
   assert.match(globalVod.headers['content-type'], /image\/svg\+xml/);
+  assert.match(tr.headers['content-type'], /image\/svg\+xml/);
   assert.match(us.text, /SÉRIES/);
   assert.match(fr.text, /FILMS/);
   assert.match(globalVod.text, /VOD Mondiale|VOD MONDIALE/i);
+  assert.match(tr.text, /SÉRIES/);
 });
 
 
@@ -162,15 +184,19 @@ test('regional Modern calendar-card SVG routes are reachable and embed artwork',
     const fr = await call(`/fr/calendar-card.svg?src=${src}&layout=landscape&title=Demo&provider=Netflix&type=series`);
     const us = await call(`/us/calendar-card.svg?src=${src}&layout=landscape&title=Demo&provider=Netflix&type=series`);
     const globalVod = await call(`/global/calendar-card.svg?src=${src}&layout=landscape&title=Demo&provider=VOD%20Mondiale&type=movie`);
+    const tr = await call(`/tr/calendar-card.svg?src=${src}&layout=landscape&title=Demo&provider=Exxen&type=series`);
     assert.equal(fr.statusCode, 200);
     assert.equal(us.statusCode, 200);
     assert.equal(globalVod.statusCode, 200);
+    assert.equal(tr.statusCode, 200);
     assert.match(fr.headers['content-type'], /image\/svg\+xml/);
     assert.match(us.headers['content-type'], /image\/svg\+xml/);
     assert.match(globalVod.headers['content-type'], /image\/svg\+xml/);
+    assert.match(tr.headers['content-type'], /image\/svg\+xml/);
     assert.match(fr.text, /data:image\/png;base64,/);
     assert.match(us.text, /data:image\/png;base64,/);
     assert.match(globalVod.text, /data:image\/png;base64,/);
+    assert.match(tr.text, /data:image\/png;base64,/);
   } finally {
     global.fetch = oldFetch;
   }
@@ -185,13 +211,15 @@ test('coexistence checker reports zero collisions', async () => {
   assert.deepEqual(report.addonIds, [
     'com.nuvio.calendar.archives.fr.coexist',
     'com.nuvio.calendar.archives.global.coexist',
+    'com.nuvio.calendar.archives.tr.coexist',
     'com.nuvio.calendar.archives.us.coexist'
   ]);
   assert.equal(report.globalCollectionCount, 2);
+  assert.equal(report.trCollectionCount, 17);
 });
 
 test('USA and France Paramount+ remain distinct and both expose Series and Films', async () => {
-  const collections = JSON.parse((await call('/nuvio-collections-fr-global-usa.json')).text);
+  const collections = JSON.parse((await call('/nuvio-collections-fr-global-tr-usa.json')).text);
   const us = collections.find((c) => c.title === '🇺🇸 Paramount+');
   const fr = collections.find((c) => c.title === '🇫🇷 Paramount+');
   assert(us && fr);
@@ -202,7 +230,7 @@ test('USA and France Paramount+ remain distinct and both expose Series and Films
   assert(fr.folders[0].sources.every((s) => s.catalogId.startsWith('archives-fr-v1-series-paramount-plus-')));
 });
 
-test('health endpoint is green when both regions coexist safely', async () => {
+test('health endpoint is green when all regions coexist safely', async () => {
   const response = await call('/health');
   assert.equal(response.statusCode, 200);
   const body = JSON.parse(response.text);

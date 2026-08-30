@@ -7,3 +7,9 @@
 5. Les IDs existants sont conservés. Les nouvelles Collections `Genres · Séries` ont des IDs distincts et s’ajoutent sans collision.
 
 Ne supprime pas les Collections existantes avant l’import : les IDs identiques servent à les mettre à jour.
+
+## Türkiye v1.4.0
+- Addon: `https://nuvio-last.vercel.app/tr/manifest.json`
+- Import Türkiye: `https://nuvio-last.vercel.app/nuvio-collections-tr.json`
+- IDs `calendar-archives-tr-*` et addon `com.nuvio.calendar.archives.tr.coexist` sont isolés de FR/Global/US.
+- Marché forcé TR, langue tr-TR, fuseau Europe/Istanbul.
