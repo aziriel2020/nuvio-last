@@ -1,8 +1,8 @@
-# Nuvio TOTAL CINEMATIC — FR + US + Anime + Genres + VOD — v1.3.1
+# Nuvio TOTAL CINEMATIC — FR + US + Anime + Genres + VOD — v1.4.0
 
 Version corrective complète pour Nuvio Modern / Shield.
 
-## Correctifs v1.3.1
+## Correctifs v1.4.0
 
 - **Anime global** : manifest corrigé pour exposer les catalogues `series` + `movie`; résolution AniList → TMDb assouplie pour les titres localisés; films d’animation recherchés séparément en JP (`ja`) et KR (`ko`).
 - **Périodes Global Anime + VOD Mondiale** : chaque source de Collection est validée contre un catalogue nommé du manifest. Ordre fixe : Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante, puis Décembre 2030 → Janvier 2015.
@@ -30,3 +30,8 @@ Version corrective complète pour Nuvio Modern / Shield.
 - `/nuvio-collections-fr-global-usa.json`
 
 Après déploiement de cette version, actualiser/réinstaller le manifest Global dans Nuvio, puis réimporter le JSON TOTAL pour que la nouvelle structure Genres Films/Séries et les catalogues Global soient pris en compte.
+
+
+## Türkiye v1.4.0
+
+Nouvel addon `/tr/manifest.json` et import `/nuvio-collections-tr.json` : marché TR, langue tr-TR, fuseau Europe/Istanbul. 15 services turcs/internationaux, calendrier agrégé Türkiye Takvim et VOD Türkiye. Même contrat de périodes : Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante, puis Décembre 2030 → Janvier 2015.

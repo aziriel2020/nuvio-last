@@ -1,0 +1,42 @@
+{
+  "version": "1.4.0",
+  "turkeyCollections": 17,
+  "turkeyFolders": 33,
+  "sourcesPerFolder": 197,
+  "turkeyCatalogSources": 6501,
+  "periodOrder": [
+    "Aujourd’hui",
+    "Demain",
+    "Hier",
+    "Semaine passée",
+    "La semaine suivante",
+    "Décembre 2030 → Janvier 2015"
+  ],
+  "market": "TR",
+  "language": "tr-TR",
+  "timezone": "Europe/Istanbul",
+  "platforms": [
+    "🇹🇷 Netflix",
+    "🇹🇷 Prime Video",
+    "🇹🇷 Disney+",
+    "🇹🇷 Max",
+    "🇹🇷 Apple TV+",
+    "🇹🇷 MUBI",
+    "🇹🇷 Exxen",
+    "🇹🇷 GAİN",
+    "🇹🇷 tabii",
+    "🇹🇷 TOD",
+    "🇹🇷 puhutv",
+    "🇹🇷 TV+",
+    "🇹🇷 Tivibu",
+    "🇹🇷 D-Smart GO",
+    "🇹🇷 S Sport Plus",
+    "🇹🇷 Türkiye Takvim",
+    "🇹🇷 VOD Türkiye"
+  ],
+  "artFiles": 34,
+  "cards": "1600x900",
+  "backgrounds": "1920x1080",
+  "combinedCollections": 47,
+  "collisions": "checked by coexistence suite: zero"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "nuvio-calendar-archives-turkiye",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Nuvio Turkey calendar archives, TR market, 2030→2015 periods.",
+  "scripts": {
+    "test": "node --test",
+    "start": "node local-server.js",
+    "configure": "node scripts/configure.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
