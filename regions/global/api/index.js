@@ -55,6 +55,7 @@ const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/g
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime='image/jpeg') { const key=`${mime}:${absolutePath}`; if (LOCAL_VISUAL_DATA_CACHE.has(key)) return LOCAL_VISUAL_DATA_CACHE.get(key); try { const data=fs.readFileSync(absolutePath); const uri=`data:${mime};base64,${data.toString('base64')}`; LOCAL_VISUAL_DATA_CACHE.set(key,uri); return uri; } catch (_) { LOCAL_VISUAL_DATA_CACHE.set(key,null); return null; } }
 function platformPhotoDataUri(providerSlug, variant='card') { return localVisualDataUri(path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant==='backdrop'?'backdrop':'card'}.jpg`)); }
+function serveLocalJpeg(res, absolutePath, cache='public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') { try { const data=fs.readFileSync(absolutePath); res.statusCode=200; res.setHeader('Content-Type','image/jpeg'); res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control',cache); res.end(data); } catch (_) { res.statusCode=404; res.end('Not found'); } }
 function servePlatformArtJpeg(res, url, variant = 'card') {
   const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
   if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
