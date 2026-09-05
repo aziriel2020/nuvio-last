@@ -73,119 +73,53 @@ function safeDesktopAccent(value, fallback = '#38bdf8') {
 }
 
 function desktopOverlaySvg(type = 'series', accent = '#38bdf8') {
+  const movie = normalizedDesktopType(type) === 'movie';
+  const icon = movie
+    ? '<path d="M1491 73h36v36h-36z" fill="none" stroke="#fff" stroke-width="8"/><path d="M1491 86h36M1503 73v36M1515 73v36" stroke="#fff" stroke-width="5" opacity=".8"/><path d="M1502 79l16 12-16 12z" fill="#fff"/>'
+    : '<rect x="1488" y="74" width="42" height="31" rx="5" fill="none" stroke="#fff" stroke-width="7"/><path d="M1498 112h22" stroke="#fff" stroke-width="7" stroke-linecap="round"/>';
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
     <defs>
       <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#02040a" stop-opacity=".48"/>
-        <stop offset="40%" stop-color="#02040a" stop-opacity=".06"/>
+        <stop offset="0%" stop-color="#02040a" stop-opacity=".42"/>
+        <stop offset="38%" stop-color="#02040a" stop-opacity=".08"/>
         <stop offset="100%" stop-color="#02040a" stop-opacity=".30"/>
       </linearGradient>
       <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="#07111f" stop-opacity="0"/>
-        <stop offset="28%" stop-color="#072650" stop-opacity=".38"/>
-        <stop offset="100%" stop-color="#061c42" stop-opacity=".96"/>
+        <stop offset="28%" stop-color="#072650" stop-opacity=".34"/>
+        <stop offset="100%" stop-color="#061c42" stop-opacity=".94"/>
       </linearGradient>
     </defs>
     <rect width="1600" height="900" fill="url(#shade)"/>
-    <rect y="350" width="1600" height="550" fill="url(#bottom)"/>
-    <rect x="1018" y="38" width="382" height="112" rx="28" fill="#03060c" fill-opacity=".88" stroke="${accent}" stroke-width="6"/>
-    <rect x="1414" y="38" width="148" height="112" rx="28" fill="${accent}" fill-opacity=".98"/>
-    <rect x="58" y="584" width="13" height="204" rx="6.5" fill="${accent}"/>
-    <rect x="92" y="820" width="440" height="5" rx="2.5" fill="${accent}" opacity=".76"/>
+    <rect y="390" width="1600" height="510" fill="url(#bottom)"/>
+    <rect x="1130" y="44" width="292" height="94" rx="24" fill="#04060b" fill-opacity=".84" stroke="${accent}" stroke-width="5"/>
+    <rect x="1440" y="44" width="112" height="94" rx="24" fill="${accent}" fill-opacity=".96"/>
+    ${icon}
+    <rect x="54" y="575" width="12" height="212" rx="6" fill="${accent}"/>
+    <rect x="54" y="824" width="420" height="4" rx="2" fill="${accent}" opacity=".62"/>
   </svg>`);
-}
-
-function pangoEscaped(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function desktopTextComposite(text, left, top, width, height, options = {}) {
-  const value = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!value) return null;
-  const family = options.family || 'sans';
-  const weight = options.weight || 'Bold';
-  const size = Number(options.size || 48);
-  const color = options.color || '#ffffff';
-  const markup = `<span font_desc="${family} ${weight} ${size}" foreground="${color}">${pangoEscaped(value)}</span>`;
-  return {
-    input: {
-      text: {
-        text: markup,
-        font: family,
-        width,
-        height,
-        align: options.align || 'left',
-        rgba: true,
-        wrap: 'none'
-      }
-    },
-    left,
-    top
-  };
 }
 
 async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   const type = normalizedDesktopType(options.type);
   const accent = safeDesktopAccent(options.accent, '#38bdf8');
-  const movie = type === 'movie';
-  const title = compactCardText(options.title || (movie ? 'Film' : 'Série'), 52);
-  const subtitle = compactCardText(options.subtitle || '', 72);
-  const providerLabel = compactCardText(options.providerLabel || '', 22).toUpperCase();
-  const typeLabel = movie ? 'FILM' : 'SÉRIE';
-
   const composites = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
-
-  const textLayers = [
-    desktopTextComposite(title, 92, 626, 1000, 110, { size: 76, weight: 'Bold' }),
-    desktopTextComposite(subtitle, 94, 744, 980, 58, { size: 34, weight: 'Bold', color: '#e8f1ff' }),
-    desktopTextComposite(providerLabel, 1168, 67, 215, 58, { size: 27, weight: 'Bold' }),
-    desktopTextComposite(typeLabel, 1428, 68, 120, 58, { size: 26, weight: 'Bold', align: 'center' })
-  ].filter(Boolean);
-  composites.push(...textLayers);
-
   if (options.logoBuffer) {
     try {
       const logo = await sharp(options.logoBuffer)
-        .resize({ width: 118, height: 72, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 230, height: 62, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
-      composites.push({ input: logo, left: 1038, top: 58 });
+      composites.push({ input: logo, left: 1160, top: 60 });
     } catch (_) {}
   }
-
-  try {
-    return await sharp(sourceBuffer)
-      .resize(1600, 900, { fit: 'cover', position: 'attention' })
-      .modulate({ brightness: 0.94, saturation: 1.08 })
-      .composite(composites)
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
-      .toBuffer();
-  } catch (_) {
-    // Never ship tofu/missing-glyph boxes. Keep the cinematic artwork and
-    // native Nuvio title if Pango/fontconfig is unavailable.
-    const fallback = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
-    if (options.logoBuffer) {
-      try {
-        const logo = await sharp(options.logoBuffer)
-          .resize({ width: 118, height: 72, fit: 'inside', withoutEnlargement: true })
-          .png()
-          .toBuffer();
-        fallback.push({ input: logo, left: 1038, top: 58 });
-      } catch (_) {}
-    }
-    return sharp(sourceBuffer)
-      .resize(1600, 900, { fit: 'cover', position: 'attention' })
-      .modulate({ brightness: 0.94, saturation: 1.08 })
-      .composite(fallback)
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
-      .toBuffer();
-  }
+  return sharp(sourceBuffer)
+    .resize(1600, 900, { fit: 'cover', position: 'attention' })
+    .modulate({ brightness: 0.94, saturation: 1.08 })
+    .composite(composites)
+    .jpeg({ quality: 91, chromaSubsampling: '4:4:4' })
+    .toBuffer();
 }
-
 
 function sendDesktopCinematicJpeg(res, data) {
   res.statusCode = 200;
@@ -203,16 +137,7 @@ async function handleDesktopFolderCard(res, url) {
     const source = fs.readFileSync(path.join(PLATFORM_ART_DIR, `${providerSlug}-card.jpg`));
     const asset = await platformLogoAsset(providerSlug, type);
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
-    const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
-    const title = url.searchParams.get('title') || (type === 'movie' ? 'Films' : 'Séries');
-    const data = await desktopCinematicCardBuffer(source, {
-      type,
-      accent,
-      logoBuffer: asset?.buffer || null,
-      title,
-      subtitle: providerLabel,
-      providerLabel
-    });
+    const data = await desktopCinematicCardBuffer(source, { type, accent, logoBuffer: asset?.buffer || null });
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
     res.statusCode = 404;
@@ -237,17 +162,7 @@ async function handleDesktopContentCard(res, url) {
     const source = Buffer.from(await response.arrayBuffer());
     const asset = providerSlug ? await platformLogoAsset(providerSlug, type) : null;
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
-    const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
-    const title = url.searchParams.get('title') || '';
-    const subtitle = url.searchParams.get('append') || '';
-    const data = await desktopCinematicCardBuffer(source, {
-      type,
-      accent,
-      logoBuffer: asset?.buffer || null,
-      title,
-      subtitle,
-      providerLabel
-    });
+    const data = await desktopCinematicCardBuffer(source, { type, accent, logoBuffer: asset?.buffer || null });
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
     res.statusCode = 502;
@@ -1109,14 +1024,11 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop2`);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop7`);
   url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
   url.searchParams.set('type', meta?.type || catalog?.type || 'series');
-  url.searchParams.set('title', compactCardText(meta?.name || '', 62));
-  url.searchParams.set('append', calendarAppend(meta, catalog));
-  url.searchParams.set('label', compactCardText(meta?._calendarProvider || catalog?.cardProvider || platformCollectionTitle(providerSlug), 28));
   if (catalog?.genreColor) url.searchParams.set('color', catalog.genreColor);
   return url.toString();
 }
