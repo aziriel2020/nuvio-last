@@ -237,3 +237,61 @@ test('health endpoint is green when all regions coexist safely', async () => {
   assert.equal(body.ok, true);
   assert.equal(body.safe, true);
 });
+
+
+test('desktop import uses clean raster covers with native folder titles', async () => {
+  const response = await call('/nuvio-collections-desktop.json');
+  assert.equal(response.statusCode, 200);
+  const collections = JSON.parse(response.text);
+  assert.equal(collections.length, 47);
+
+  const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
+  const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
+  const usNetflix = collections.find((c) => c.title === '🇺🇸 Netflix');
+  assert(frNetflix && globalVod && usNetflix);
+
+  for (const collection of [frNetflix, globalVod, usNetflix]) {
+    for (const folder of collection.folders) {
+      assert.equal(folder.hideTitle, false);
+      assert.equal(folder.focusGifEnabled, false);
+      assert.equal(folder.focusGifUrl, null);
+      assert.match(folder.coverImageUrl, /\/platform-card\.jpg\?provider=/);
+      assert.doesNotMatch(folder.coverImageUrl, /platform-category-card\.svg/);
+    }
+  }
+
+  assert.match(frNetflix.folders[0].coverImageUrl, /\/fr\/platform-card\.jpg\?provider=netflix$/);
+  assert.match(globalVod.folders[0].coverImageUrl, /\/global\/platform-card\.jpg\?provider=vod-global$/);
+  assert.match(usNetflix.folders[0].coverImageUrl, /\/us\/platform-card\.jpg\?provider=netflix$/);
+});
+
+test('desktop banner prefers original landscape artwork while Shield keeps cinematic background', () => {
+  const apis = [
+    [handler._internals.frHandler._internals, 'https://coexist.example/fr', 'Europe/Paris'],
+    [handler._internals.usHandler._internals, 'https://coexist.example/us', 'America/New_York'],
+    [handler._internals.globalHandler._internals, 'https://coexist.example/global', 'Europe/Paris'],
+    [handler._internals.trHandler._internals, 'https://coexist.example/tr', 'Europe/Istanbul'],
+  ];
+  for (const [api, origin, tz] of apis) {
+    const meta = {
+      id: 'tt1234567',
+      type: 'movie',
+      name: 'Desktop Clean Art',
+      poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+      background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+      landscapePoster: 'https://image.tmdb.org/t/p/original/demo-landscape.jpg',
+      released: '2026-08-26',
+      _calendarProvider: 'Netflix',
+      _calendarSource: 'tmdb-streaming'
+    };
+    const [decorated] = api.decorateCatalogMetas(
+      origin,
+      [meta],
+      { type: 'movie', period: 'today', cardProvider: 'Netflix', name: 'Aujourd’hui' },
+      tz
+    );
+    assert.equal(decorated.banner, meta.landscapePoster);
+    assert.match(decorated.background, /calendar-card\.svg\?/);
+    assert.match(decorated.landscapePoster, /calendar-card\.svg\?/);
+  }
+});
