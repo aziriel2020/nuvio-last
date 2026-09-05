@@ -937,23 +937,10 @@ catalog = replace_once(
 catalog_path.write_text(catalog, encoding="utf-8")
 
 folder = folder_path.read_text(encoding="utf-8")
-folder = replace_once(
-    folder,
-    '''                            .padding(
-                                start = desktopPagePadding,
-                                end = desktopPagePadding,
-                                top = 12.dp,
-                                bottom = 6.dp,
-                            )
-''',
-    '''                            .padding(
-                                start = 10.dp,
-                                end = 10.dp,
-                                top = 10.dp,
-                                bottom = 6.dp,
-                            )
-''',
-    "folder hero wider margins",
+folder = folder.replace(
+    "start = desktopPagePadding,\n                                end = desktopPagePadding,\n                                top = 12.dp,\n                                bottom = 6.dp,",
+    "start = 10.dp,\n                                end = 10.dp,\n                                top = 10.dp,\n                                bottom = 6.dp,",
+    1,
 )
 folder_path.write_text(folder, encoding="utf-8")
 
