@@ -33,7 +33,6 @@ const {
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const opentype = require('opentype.js');
 
 const VERSION = '1.4.0';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -89,53 +88,7 @@ function safeDesktopAccent(value, fallback = '#38bdf8') {
   return /^#[0-9a-f]{6}$/i.test(token) ? token : fallback;
 }
 
-const DESKTOP_FONT_CACHE = new Map();
-
-function desktopFont(weight = 700) {
-  const key = Number(weight) >= 800 ? 900 : 700;
-  if (DESKTOP_FONT_CACHE.has(key)) return DESKTOP_FONT_CACHE.get(key);
-  const candidates = [
-    path.resolve(process.cwd(), `node_modules/@fontsource/roboto/files/roboto-latin-ext-${key}-normal.woff`),
-    path.resolve(process.cwd(), `node_modules/@fontsource/roboto/files/roboto-latin-${key}-normal.woff`)
-  ];
-  for (const file of candidates) {
-    try {
-      const font = opentype.loadSync(file);
-      DESKTOP_FONT_CACHE.set(key, font);
-      return font;
-    } catch (_) {}
-  }
-  DESKTOP_FONT_CACHE.set(key, null);
-  return null;
-}
-
-function desktopVectorText(text, x, y, maxWidth, preferredSize, options = {}) {
-  const value = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!value) return '';
-  const weight = Number(options.weight || 700);
-  const font = desktopFont(weight);
-  if (!font) return '';
-  let size = Number(preferredSize || 60);
-  const minSize = Number(options.minSize || Math.max(22, size * 0.55));
-  const measure = () => font.getAdvanceWidth(value, size, { kerning: true });
-  while (size > minSize && measure() > maxWidth) size -= 2;
-  const pathData = font.getPath(value, x, y, size, { kerning: true }).toPathData(2);
-  const fill = options.fill || '#ffffff';
-  const opacity = options.opacity == null ? 1 : Number(options.opacity);
-  return `<path d="${pathData}" fill="${fill}" opacity="${opacity}"/>`;
-}
-
-function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
-  const movie = normalizedDesktopType(type) === 'movie';
-  const title = compactCardText(options.title || (movie ? 'FILM' : 'SÉRIE'), 52);
-  const subtitle = compactCardText(options.subtitle || '', 72);
-  const providerLabel = compactCardText(options.providerLabel || '', 24).toUpperCase();
-  const typeLabel = movie ? 'FILM' : 'SÉRIE';
-  const titlePath = desktopVectorText(title, 92, 705, 980, 92, { weight: 900, minSize: 54 });
-  const subtitlePath = desktopVectorText(subtitle, 94, 774, 970, 42, { weight: 700, minSize: 28, fill: '#e8f1ff', opacity: 0.92 });
-  const providerPath = desktopVectorText(providerLabel, 1172, 103, 204, 34, { weight: 900, minSize: 22 });
-  const typePath = desktopVectorText(typeLabel, 1426, 104, 118, 34, { weight: 900, minSize: 26 });
-
+function desktopOverlaySvg(type = 'series', accent = '#38bdf8') {
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
     <defs>
       <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
@@ -153,27 +106,62 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
     <rect y="350" width="1600" height="550" fill="url(#bottom)"/>
     <rect x="1018" y="38" width="382" height="112" rx="28" fill="#03060c" fill-opacity=".88" stroke="${accent}" stroke-width="6"/>
     <rect x="1414" y="38" width="148" height="112" rx="28" fill="${accent}" fill-opacity=".98"/>
-    ${providerPath}
-    ${typePath}
     <rect x="58" y="584" width="13" height="204" rx="6.5" fill="${accent}"/>
-    ${titlePath}
-    ${subtitlePath}
     <rect x="92" y="820" width="440" height="5" rx="2.5" fill="${accent}" opacity=".76"/>
   </svg>`);
+}
+
+function pangoEscaped(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function desktopTextComposite(text, left, top, width, height, options = {}) {
+  const value = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!value) return null;
+  const family = options.family || 'sans';
+  const weight = options.weight || 'Bold';
+  const size = Number(options.size || 48);
+  const color = options.color || '#ffffff';
+  const markup = `<span font_desc="${family} ${weight} ${size}" foreground="${color}">${pangoEscaped(value)}</span>`;
+  return {
+    input: {
+      text: {
+        text: markup,
+        font: family,
+        width,
+        height,
+        align: options.align || 'left',
+        rgba: true,
+        wrap: 'none'
+      }
+    },
+    left,
+    top
+  };
 }
 
 async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   const type = normalizedDesktopType(options.type);
   const accent = safeDesktopAccent(options.accent, '#38bdf8');
-  const composites = [{
-    input: desktopOverlaySvg(type, accent, {
-      title: options.title,
-      subtitle: options.subtitle,
-      providerLabel: options.providerLabel
-    }),
-    left: 0,
-    top: 0
-  }];
+  const movie = type === 'movie';
+  const title = compactCardText(options.title || (movie ? 'Film' : 'Série'), 52);
+  const subtitle = compactCardText(options.subtitle || '', 72);
+  const providerLabel = compactCardText(options.providerLabel || '', 22).toUpperCase();
+  const typeLabel = movie ? 'FILM' : 'SÉRIE';
+
+  const composites = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
+
+  const textLayers = [
+    desktopTextComposite(title, 92, 626, 1000, 110, { size: 76, weight: 'Bold' }),
+    desktopTextComposite(subtitle, 94, 744, 980, 58, { size: 34, weight: 'Bold', color: '#e8f1ff' }),
+    desktopTextComposite(providerLabel, 1168, 67, 215, 58, { size: 27, weight: 'Bold' }),
+    desktopTextComposite(typeLabel, 1428, 68, 120, 58, { size: 26, weight: 'Bold', align: 'center' })
+  ].filter(Boolean);
+  composites.push(...textLayers);
 
   if (options.logoBuffer) {
     try {
@@ -185,12 +173,33 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
     } catch (_) {}
   }
 
-  return sharp(sourceBuffer)
-    .resize(1600, 900, { fit: 'cover', position: 'attention' })
-    .modulate({ brightness: 0.94, saturation: 1.08 })
-    .composite(composites)
-    .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
-    .toBuffer();
+  try {
+    return await sharp(sourceBuffer)
+      .resize(1600, 900, { fit: 'cover', position: 'attention' })
+      .modulate({ brightness: 0.94, saturation: 1.08 })
+      .composite(composites)
+      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+  } catch (_) {
+    // Never ship tofu/missing-glyph boxes. Keep the cinematic artwork and
+    // native Nuvio title if Pango/fontconfig is unavailable.
+    const fallback = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
+    if (options.logoBuffer) {
+      try {
+        const logo = await sharp(options.logoBuffer)
+          .resize({ width: 118, height: 72, fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        fallback.push({ input: logo, left: 1038, top: 58 });
+      } catch (_) {}
+    }
+    return sharp(sourceBuffer)
+      .resize(1600, 900, { fit: 'cover', position: 'attention' })
+      .modulate({ brightness: 0.94, saturation: 1.08 })
+      .composite(fallback)
+      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+  }
 }
 
 
