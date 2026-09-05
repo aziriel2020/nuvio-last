@@ -433,3 +433,30 @@ test('desktop cinematic content banner carries text metadata for vector renderin
   assert(url.searchParams.get('append'));
   assert.equal(url.searchParams.get('type'), 'series');
 });
+
+
+test('desktop text renderer keeps native title fallback and carries accented metadata safely', () => {
+  const api = handler._internals.frHandler._internals;
+  const meta = {
+    id: 'ttaccented',
+    type: 'movie',
+    name: "Maternité éternelle",
+    poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+    background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    landscapePoster: 'https://image.tmdb.org/t/p/original/demo-landscape.jpg',
+    releaseInfo: "Aujourd’hui • Arte",
+    released: '2022-03-01',
+    _calendarProvider: 'Arte',
+    _calendarSource: 'tmdb-streaming'
+  };
+  const [decorated] = api.decorateCatalogMetas(
+    'https://coexist.example/fr',
+    [meta],
+    { type: 'movie', period: 'archive-2022-03', cardProvider: 'Arte', providerSlug: 'arte', name: 'Mars 2022' },
+    'Europe/Paris'
+  );
+  const url = new URL(decorated.banner);
+  assert.equal(url.searchParams.get('title'), 'Maternité éternelle');
+  assert.match(url.searchParams.get('append') || '', /Aujourd/i);
+  assert.equal(url.searchParams.get('type'), 'movie');
+});
