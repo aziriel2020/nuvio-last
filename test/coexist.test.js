@@ -494,3 +494,47 @@ test('desktop final renderer produces a real JPEG with accented readable text', 
     global.fetch = oldFetch;
   }
 });
+
+
+test('desktop8 import uses adaptive cinematic routes with labels', async () => {
+  const response = await call('/nuvio-collections-desktop.json');
+  assert.equal(response.statusCode, 200);
+  const collections = JSON.parse(response.text);
+  const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
+  assert(frNetflix);
+  const folder = frNetflix.folders.find((f) => f.title === 'Séries');
+  assert(folder);
+  const url = new URL(folder.coverImageUrl);
+  assert.equal(url.pathname, '/fr/desktop-folder-card.jpg');
+  assert.equal(url.searchParams.get('v'), 'desktop8');
+  assert.equal(url.searchParams.get('title'), 'Séries');
+  assert.match(url.searchParams.get('label') || '', /Netflix/);
+});
+
+test('desktop8 content banner carries adaptive title and subtitle metadata', () => {
+  const api = handler._internals.frHandler._internals;
+  const meta = {
+    id: 'ttadaptive',
+    type: 'series',
+    name: 'Though I Am an Inept Villainess',
+    poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+    background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    landscapePoster: 'https://image.tmdb.org/t/p/original/demo-landscape.jpg',
+    releaseInfo: 'S01E05',
+    released: '2026-08-30',
+    _calendarProvider: 'Disney+',
+    _calendarSource: 'tmdb-streaming'
+  };
+  const [decorated] = api.decorateCatalogMetas(
+    'https://coexist.example/fr',
+    [meta],
+    { type: 'series', period: 'today', cardProvider: 'Disney+', providerSlug: 'disney-plus', name: 'Aujourd’hui' },
+    'Europe/Paris'
+  );
+  const url = new URL(decorated.banner);
+  assert.equal(url.pathname, '/fr/desktop-content-card.jpg');
+  assert.match(url.searchParams.get('v') || '', /desktop8$/);
+  assert.equal(url.searchParams.get('title'), meta.name);
+  assert(url.searchParams.get('append'));
+  assert.match(url.searchParams.get('label') || '', /Disney/i);
+});
