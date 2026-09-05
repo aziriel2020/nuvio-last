@@ -41,6 +41,40 @@ async function delegate(req, res, prefix, handler) {
   }
 }
 
+
+function desktopizeCollectionArt(collection) {
+  const folders = (collection.folders || []).map((folder) => {
+    const cover = String(folder.coverImageUrl || '');
+    let desktopCover = cover;
+    if (cover.includes('/platform-category-card.svg')) {
+      desktopCover = cover
+        .replace('/platform-category-card.svg', '/platform-card.jpg')
+        .replace(/([?&])category=[^&]*/g, '$1')
+        .replace(/[?&]v=[^&]*/g, '')
+        .replace(/[?&]+$/, '');
+    } else if (cover.includes('/genre-folder-art.svg')) {
+      desktopCover = cover
+        .replace('/genre-folder-art.svg', '/genre-card.jpg')
+        .replace(/([?&])(variant|label|type|color|icon|v)=[^&]*/g, '$1')
+        .replace(/\?&/, '?')
+        .replace(/&&+/g, '&')
+        .replace(/[?&]+$/, '');
+    }
+    return {
+      ...folder,
+      coverImageUrl: desktopCover,
+      focusGifUrl: null,
+      focusGifEnabled: false,
+      hideTitle: false
+    };
+  });
+  return { ...collection, folders };
+}
+
+function combinedDesktopCollections(req) {
+  return combinedCollections(req).map(desktopizeCollectionArt);
+}
+
 function combinedCollections(req) {
   const origin = originFromRequest(req);
   const nowUs = usHandler._internals.runtimeNow();
@@ -123,6 +157,9 @@ module.exports = async function handler(req, res) {
   if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
     return sendJson(res, 200, combinedCollections(req), 'no-store');
   }
+  if (path === '/nuvio-collections-desktop.json') {
+    return sendJson(res, 200, combinedDesktopCollections(req), 'no-store');
+  }
   if (path === '/nuvio-collections-global.json') {
     const origin = originFromRequest(req);
     return sendJson(
@@ -160,6 +197,7 @@ module.exports = async function handler(req, res) {
       globalCollections: `${origin}/nuvio-collections-global.json`,
       turkeyCollections: `${origin}/nuvio-collections-tr.json`,
       combinedCollections: `${origin}/nuvio-collections-fr-global-tr-usa.json`,
+      desktopCollections: `${origin}/nuvio-collections-desktop.json`,
       check: `${origin}/coexistence-check.json`
     }, 'no-store');
   }
@@ -174,6 +212,8 @@ module.exports._internals = {
   VERSION,
   originFromRequest,
   combinedCollections,
+  combinedDesktopCollections,
+  desktopizeCollectionArt,
   coexistenceReport,
   delegate,
   usHandler,
