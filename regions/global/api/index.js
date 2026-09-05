@@ -138,11 +138,10 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
 
   const titlePath = desktopPathText(title, 100, 690, 1080, 94, { minSize: 44 });
   const subtitlePath = desktopPathText(subtitle, 102, 774, 1040, 46, { minSize: 34, fill: '#eef5ff', opacity: .98 });
-  const bottomPath = desktopPathText(bottomTag, 102, 836, 680, 31, { minSize: 24, fill: accent });
-  const typePath = desktopCenteredPathText(typeLabel, 1489, 114, 120, 34, { minSize: 26 });
+  const bottomPath = desktopPathText(bottomTag, 102, 842, 760, 42, { minSize: 32, fill: accent });
   const typeIcon = movie
-    ? '<path d="M1412 65h44v40h-44z" fill="none" stroke="#fff" stroke-width="5.5"/><path d="M1412 80h44M1427 65v40M1441 65v40" stroke="#fff" stroke-width="4"/><path d="M1425 73l18 12-18 12z" fill="#fff"/>'
-    : '<rect x="1411" y="67" width="46" height="34" rx="6" fill="none" stroke="#fff" stroke-width="5.5"/><path d="M1423 112h22" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/>';
+    ? '<path d="M1440 57h58v50h-58z" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M1440 75h58M1459 57v50M1478 57v50" stroke="#fff" stroke-width="4.5"/><path d="M1456 67l24 15-24 15z" fill="#fff"/>'
+    : '<rect x="1437" y="61" width="62" height="45" rx="7" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M1453 118h30" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>';
 
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
     <defs>
@@ -162,7 +161,6 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
     <rect x="1018" y="32" width="362" height="124" rx="28" fill="#02050a" fill-opacity=".92" stroke="${accent}" stroke-width="6"/>
     <rect x="1392" y="32" width="174" height="124" rx="28" fill="${accent}" fill-opacity=".99"/>
     ${typeIcon}
-    ${typePath}
     <rect x="58" y="585" width="14" height="220" rx="7" fill="${accent}"/>
     ${titlePath}
     ${subtitlePath}
@@ -1142,7 +1140,7 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop9`);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop10`);
   url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
