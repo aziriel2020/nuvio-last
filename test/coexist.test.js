@@ -329,3 +329,60 @@ test('desktop import also replaces folder and collection backdrops with clean JP
     }
   }
 });
+
+
+test('desktop cinematic import points platform and genre folders to dedicated 16:9 cards', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
+  const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
+  const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
+  const trNetflix = collections.find((c) => c.title === '🇹🇷 Netflix');
+  const usNetflix = collections.find((c) => c.title === '🇺🇸 Netflix');
+  const frGenres = collections.find((c) => c.title === '🇫🇷 Genres · Films');
+
+  for (const collection of [frNetflix, globalVod, trNetflix, usNetflix]) {
+    assert(collection);
+    for (const folder of collection.folders) {
+      assert.match(folder.coverImageUrl, /\/desktop-folder-card\.jpg\?provider=/);
+      assert.match(folder.coverImageUrl, /[?&]type=(movie|series)/);
+      assert.equal(folder.hideTitle, false);
+    }
+  }
+
+  assert(frGenres);
+  assert(frGenres.folders.length > 0);
+  assert.match(frGenres.folders[0].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=/);
+  assert.match(frGenres.folders[0].coverImageUrl, /[?&]type=movie/);
+});
+
+test('desktop catalog banner uses dedicated cinematic JPEG while Shield background stays original cinematic SVG', () => {
+  const regional = [
+    [handler._internals.frHandler._internals, 'https://coexist.example/fr', 'Europe/Paris', 'netflix'],
+    [handler._internals.usHandler._internals, 'https://coexist.example/us', 'America/New_York', 'netflix'],
+    [handler._internals.globalHandler._internals, 'https://coexist.example/global', 'Europe/Paris', 'vod-global'],
+    [handler._internals.trHandler._internals, 'https://coexist.example/tr', 'Europe/Istanbul', 'netflix'],
+  ];
+
+  for (const [api, origin, tz, providerSlug] of regional) {
+    const meta = {
+      id: 'tt1234567',
+      type: 'series',
+      name: 'Desktop Cinematic',
+      poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+      background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+      landscapePoster: 'https://image.tmdb.org/t/p/original/demo-landscape.jpg',
+      released: '2026-08-26',
+      _calendarProvider: 'Netflix',
+      _calendarSource: 'tmdb-streaming'
+    };
+    const [decorated] = api.decorateCatalogMetas(
+      origin,
+      [meta],
+      { type: 'series', period: 'today', cardProvider: 'Netflix', providerSlug, name: 'Aujourd’hui' },
+      tz
+    );
+    assert.match(decorated.banner, /\/desktop-content-card\.jpg\?/);
+    assert.match(decorated.banner, /[?&]provider=/);
+    assert.match(decorated.background, /\/calendar-card\.svg\?/);
+    assert.match(decorated.landscapePoster, /\/calendar-card\.svg\?/);
+  }
+});
