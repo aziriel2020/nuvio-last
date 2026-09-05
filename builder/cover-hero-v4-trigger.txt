@@ -1,0 +1,1 @@
+Trigger cover hero v4 Windows MSI build.
