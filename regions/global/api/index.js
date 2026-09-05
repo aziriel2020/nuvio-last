@@ -137,12 +137,12 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
   const bottomTag = normalizedDesktopText(options.bottomTag || providerLabel).toUpperCase();
 
   const titlePath = desktopPathText(title, 100, 690, 1080, 94, { minSize: 44 });
-  const subtitlePath = desktopPathText(subtitle, 102, 765, 1020, 38, { minSize: 28, fill: '#eef5ff', opacity: .96 });
-  const bottomPath = desktopPathText(bottomTag, 102, 824, 620, 28, { minSize: 22, fill: accent });
-  const typePath = desktopCenteredPathText(typeLabel, 1492, 110, 112, 30, { minSize: 23 });
+  const subtitlePath = desktopPathText(subtitle, 102, 774, 1040, 46, { minSize: 34, fill: '#eef5ff', opacity: .98 });
+  const bottomPath = desktopPathText(bottomTag, 102, 836, 680, 31, { minSize: 24, fill: accent });
+  const typePath = desktopCenteredPathText(typeLabel, 1489, 114, 120, 34, { minSize: 26 });
   const typeIcon = movie
-    ? '<path d="M1418 68h38v34h-38z" fill="none" stroke="#fff" stroke-width="5"/><path d="M1418 81h38M1430 68v34M1442 68v34" stroke="#fff" stroke-width="3.5"/><path d="M1429 75l15 10-15 10z" fill="#fff"/>'
-    : '<rect x="1418" y="71" width="40" height="29" rx="5" fill="none" stroke="#fff" stroke-width="5"/><path d="M1428 108h20" stroke="#fff" stroke-width="5" stroke-linecap="round"/>';
+    ? '<path d="M1412 65h44v40h-44z" fill="none" stroke="#fff" stroke-width="5.5"/><path d="M1412 80h44M1427 65v40M1441 65v40" stroke="#fff" stroke-width="4"/><path d="M1425 73l18 12-18 12z" fill="#fff"/>'
+    : '<rect x="1411" y="67" width="46" height="34" rx="6" fill="none" stroke="#fff" stroke-width="5.5"/><path d="M1423 112h22" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/>';
 
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
     <defs>
@@ -159,8 +159,8 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
     </defs>
     <rect width="1600" height="900" fill="url(#shade)"/>
     <rect y="330" width="1600" height="570" fill="url(#bottom)"/>
-    <rect x="1050" y="38" width="330" height="112" rx="26" fill="#02050a" fill-opacity=".91" stroke="${accent}" stroke-width="6"/>
-    <rect x="1396" y="38" width="166" height="112" rx="26" fill="${accent}" fill-opacity=".99"/>
+    <rect x="1018" y="32" width="362" height="124" rx="28" fill="#02050a" fill-opacity=".92" stroke="${accent}" stroke-width="6"/>
+    <rect x="1392" y="32" width="174" height="124" rx="28" fill="${accent}" fill-opacity=".99"/>
     ${typeIcon}
     ${typePath}
     <rect x="58" y="585" width="14" height="220" rx="7" fill="${accent}"/>
@@ -188,21 +188,21 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   if (options.logoBuffer) {
     try {
       const logo = await sharp(options.logoBuffer)
-        .resize({ width: 250, height: 72, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 290, height: 86, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
       const meta = await sharp(logo).metadata();
-      const width = Math.min(250, meta.width || 250);
-      composites.push({ input: logo, left: 1215 - Math.round(width / 2), top: 58 });
+      const width = Math.min(290, meta.width || 290);
+      composites.push({ input: logo, left: 1199 - Math.round(width / 2), top: 51 });
     } catch (_) {}
   } else if (options.providerLabel) {
     const providerFallback = desktopCenteredPathText(
       normalizedDesktopText(options.providerLabel).replace(/^[^\p{L}\p{N}]+/u, '').toUpperCase(),
-      1215,
-      110,
-      270,
-      31,
-      { minSize: 22 }
+      1199,
+      114,
+      310,
+      36,
+      { minSize: 27 }
     );
     if (providerFallback) {
       composites.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">${providerFallback}</svg>`), left: 0, top: 0 });
@@ -1142,7 +1142,7 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop8`);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop9`);
   url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
