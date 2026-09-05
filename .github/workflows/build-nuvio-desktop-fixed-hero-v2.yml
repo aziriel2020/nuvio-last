@@ -1,0 +1,89 @@
+name: Build Nuvio Desktop Fixed Catalog Hero V2 MSI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+
+      - name: Checkout NuvioDesktop Dev
+        shell: pwsh
+        run: |
+          git clone --branch Dev --single-branch https://github.com/NuvioMedia/NuvioDesktop.git NuvioDesktop
+
+      - name: Apply fixed catalog hero v2 patch
+        shell: pwsh
+        run: |
+          python builder/apply_nuvio_desktop_fixed_hero_v2.py NuvioDesktop
+
+      - name: Fetch Windows runtime
+        shell: bash
+        working-directory: NuvioDesktop
+        run: |
+          git lfs pull --include="composeApp/src/desktopMain/native/windows/runtime/**,composeApp/src/desktopMain/resources/torrserver/windows-amd64/TorrServer.exe" --exclude=""
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Write neutral local.properties
+        shell: bash
+        working-directory: NuvioDesktop
+        run: |
+          cat > local.properties <<'EOF'
+          NUVIO_SUPABASE_URL=https://example.invalid
+          NUVIO_SUPABASE_ANON_KEY=placeholder
+          TRAKT_CLIENT_ID=placeholder
+          TRAKT_CLIENT_SECRET=placeholder
+          SENTRY_DSN=
+          SENTRY_DESKTOP_DSN=
+          EOF
+
+      - name: Install WebView2 SDK
+        shell: pwsh
+        run: |
+          $version = "1.0.4078.44"
+          nuget install Microsoft.Web.WebView2 -Version $version -OutputDirectory "$env:RUNNER_TEMP\nuget" -DirectDownload -NonInteractive -NoCache
+          $root = Join-Path $env:RUNNER_TEMP "nuget\Microsoft.Web.WebView2.$version"
+          "WEBVIEW2_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Compile Desktop
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+
+      - name: Build MSI
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+
+      - name: Collect MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "NuvioDesktop\composeApp\build\compose" -Recurse -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw "No MSI produced." }
+          Copy-Item $msi.FullName "NuvioDesktop-Fixed-Catalog-Hero-V2.msi"
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-desktop-fixed-catalog-hero-v2-windows-msi
+          path: NuvioDesktop-Fixed-Catalog-Hero-V2.msi
+          retention-days: 14
