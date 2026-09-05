@@ -53,42 +53,48 @@ function cleanVisualQuery(url, removeKeys) {
     .replace(/[?&]+$/, '');
 }
 
-function desktopCollectionVisualUrl(url, variant = 'card') {
+function desktopCollectionVisualUrl(url, folder = null, variant = 'card') {
   const value = String(url || '');
-  if (value.includes('/platform-category-card.svg')) {
-    return cleanVisualQuery(
-      value.replace('/platform-category-card.svg', '/platform-card.jpg'),
-      ['category', 'v']
-    );
+  const type = String(folder?.title || '').toLowerCase().includes('film') ? 'movie' : 'series';
+
+  if (value.includes('/platform-category-card.svg') || value.includes('/platform-card.jpg')) {
+    const next = value
+      .replace('/platform-category-card.svg', '/desktop-folder-card.jpg')
+      .replace('/platform-card.jpg', '/desktop-folder-card.jpg');
+    const cleaned = cleanVisualQuery(next, ['category', 'v']);
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + `type=${type}&v=desktop2`;
   }
-  if (value.includes('/platform-backdrop.svg')) {
-    return cleanVisualQuery(
-      value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'),
-      ['type', 'v']
-    );
+
+  if (value.includes('/genre-folder-art.svg') || value.includes('/genre-card.jpg')) {
+    const next = value
+      .replace('/genre-folder-art.svg', '/desktop-genre-card.jpg')
+      .replace('/genre-card.jpg', '/desktop-genre-card.jpg');
+    const colorMatch = value.match(/[?&]color=([^&]+)/);
+    const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
+    const color = colorMatch ? `&color=${colorMatch[1]}` : '';
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + `type=${type}&v=desktop2${color}`;
   }
-  if (value.includes('/genre-folder-art.svg')) {
-    return cleanVisualQuery(
-      value.replace('/genre-folder-art.svg', variant === 'backdrop' ? '/genre-backdrop.jpg' : '/genre-card.jpg'),
-      ['variant', 'label', 'type', 'color', 'icon', 'v']
-    );
+
+  if (variant === 'backdrop' && value.includes('/platform-backdrop.svg')) {
+    return cleanVisualQuery(value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'), ['type', 'v']);
   }
+
   return value;
 }
 
 function desktopizeCollectionArt(collection) {
   const folders = (collection.folders || []).map((folder) => ({
     ...folder,
-    coverImageUrl: desktopCollectionVisualUrl(folder.coverImageUrl, 'card'),
+    coverImageUrl: desktopCollectionVisualUrl(folder.coverImageUrl, folder, 'card'),
     focusGifUrl: null,
     focusGifEnabled: false,
     hideTitle: false,
-    heroBackdropUrl: desktopCollectionVisualUrl(folder.heroBackdropUrl, 'backdrop'),
+    heroBackdropUrl: desktopCollectionVisualUrl(folder.heroBackdropUrl, folder, 'backdrop'),
     titleLogoUrl: null
   }));
   return {
     ...collection,
-    backdropImageUrl: desktopCollectionVisualUrl(collection.backdropImageUrl, 'backdrop'),
+    backdropImageUrl: desktopCollectionVisualUrl(collection.backdropImageUrl, null, 'backdrop'),
     folders
   };
 }
