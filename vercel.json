@@ -1,9 +1,15 @@
 {
   "version": 2,
   "functions": {
-    "api/index.js": { "maxDuration": 30 }
+    "api/index.js": {
+      "maxDuration": 30,
+      "includeFiles": "node_modules/dejavu-fonts-ttf/ttf/*.ttf"
+    }
   },
   "routes": [
-    { "src": "/(.*)", "dest": "/api/index.js" }
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.js"
+    }
   ]
 }
