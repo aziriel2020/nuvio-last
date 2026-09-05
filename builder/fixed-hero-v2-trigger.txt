@@ -1,0 +1,1 @@
+Trigger fixed catalog hero v2 Windows MSI build.
