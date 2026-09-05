@@ -286,8 +286,8 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8') {
     </defs>
     <rect width="1600" height="900" fill="url(#shade)"/>
     <rect y="340" width="1600" height="560" fill="url(#bottom)"/>
-    <rect x="1018" y="36" width="360" height="116" rx="28" fill="#03060c" fill-opacity=".90" stroke="${accent}" stroke-width="6"/>
-    <rect x="1394" y="36" width="168" height="116" rx="28" fill="${accent}" fill-opacity=".98"/>
+    <rect x="1018" y="36" width="360" height="116" rx="28" fill="#03060c" fill-opacity=".92" stroke="${accent}" stroke-width="6"/>
+    <rect x="1394" y="36" width="168" height="116" rx="28" fill="${accent}" fill-opacity=".99"/>
     ${typeIcon}
     <rect x="58" y="575" width="14" height="232" rx="7" fill="${accent}"/>
     <rect x="96" y="846" width="460" height="5" rx="2.5" fill="${accent}" opacity=".82"/>
@@ -309,18 +309,24 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   if (options.logoBuffer) {
     try {
       const logo = await sharp(options.logoBuffer)
-        .resize({ width: 116, height: 68, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 245, height: 72, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
-      composites.push({ input: logo, left: 1042, top: 59 });
+      const info = await sharp(logo).metadata();
+      const logoWidth = Math.min(245, info.width || 245);
+      composites.push({ input: logo, left: 1198 - Math.round(logoWidth / 2), top: 58 });
     } catch (_) {}
   }
 
+  const topProviderFallback = options.logoBuffer
+    ? null
+    : desktopTextComposite(providerLabel, 1052, 67, 292, 58, { size: 30, align: 'center' });
+
   composites.push(...[
-    desktopTextComposite(providerLabel, 1168, 67, 190, 58, { size: 28 }),
+    topProviderFallback,
     desktopTextComposite(typeLabel, 1470, 67, 78, 58, { size: 27, align: 'center' }),
     desktopTextComposite(title, 98, 620, 1080, 116, { size: 86 }),
-    desktopTextComposite(subtitle, 100, 742, 1030, 58, { size: 38, color: '#e8f1ff' }),
+    desktopTextComposite(subtitle, 100, 742, 1030, 58, { size: 38, color: '#eef5ff' }),
     desktopTextComposite(bottomTag, 100, 800, 620, 38, { size: 25, color: accent })
   ].filter(Boolean));
 
@@ -337,10 +343,12 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
     if (options.logoBuffer) {
       try {
         const logo = await sharp(options.logoBuffer)
-          .resize({ width: 116, height: 68, fit: 'inside', withoutEnlargement: true })
+          .resize({ width: 245, height: 72, fit: 'inside', withoutEnlargement: true })
           .png()
           .toBuffer();
-        fallback.push({ input: logo, left: 1042, top: 59 });
+        const info = await sharp(logo).metadata();
+        const logoWidth = Math.min(245, info.width || 245);
+        fallback.push({ input: logo, left: 1198 - Math.round(logoWidth / 2), top: 58 });
       } catch (_) {}
     }
     return sharp(sourceBuffer)
@@ -1470,7 +1478,7 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop5`);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop6`);
   url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
