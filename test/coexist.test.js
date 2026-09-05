@@ -386,3 +386,50 @@ test('desktop catalog banner uses dedicated cinematic JPEG while Shield backgrou
     assert.match(decorated.landscapePoster, /\/calendar-card\.svg\?/);
   }
 });
+
+
+test('desktop cinematic URLs carry visible title, subtitle and provider labels', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
+  const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
+  const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
+  assert(frNetflix && globalVod);
+
+  const frFolder = frNetflix.folders.find((f) => f.title === 'Séries');
+  const globalFolder = globalVod.folders.find((f) => f.title === 'Films');
+  assert(frFolder && globalFolder);
+  for (const folder of [frFolder, globalFolder]) {
+    const url = new URL(folder.coverImageUrl);
+    assert.equal(url.pathname.endsWith('/desktop-folder-card.jpg'), true);
+    assert(url.searchParams.get('title'));
+    assert(url.searchParams.get('label'));
+    assert(url.searchParams.get('type'));
+  }
+});
+
+test('desktop cinematic content banner carries text metadata for vector rendering', () => {
+  const api = handler._internals.frHandler._internals;
+  const meta = {
+    id: 'tt1234567',
+    type: 'series',
+    name: 'Teen Titans Go!',
+    poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+    background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    landscapePoster: 'https://image.tmdb.org/t/p/original/demo-landscape.jpg',
+    releaseInfo: 'S01E48 • Aujourd’hui',
+    released: '2026-09-05',
+    _calendarProvider: 'Netflix',
+    _calendarSource: 'tmdb-streaming'
+  };
+  const [decorated] = api.decorateCatalogMetas(
+    'https://coexist.example/fr',
+    [meta],
+    { type: 'series', period: 'today', cardProvider: 'Netflix', providerSlug: 'netflix', name: 'Aujourd’hui' },
+    'Europe/Paris'
+  );
+  const url = new URL(decorated.banner);
+  assert.equal(url.pathname, '/fr/desktop-content-card.jpg');
+  assert.equal(url.searchParams.get('title'), 'Teen Titans Go!');
+  assert.match(url.searchParams.get('label') || '', /Netflix/i);
+  assert(url.searchParams.get('append'));
+  assert.equal(url.searchParams.get('type'), 'series');
+});

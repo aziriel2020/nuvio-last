@@ -53,7 +53,7 @@ function cleanVisualQuery(url, removeKeys) {
     .replace(/[?&]+$/, '');
 }
 
-function desktopCollectionVisualUrl(url, folder = null, variant = 'card') {
+function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const value = String(url || '');
   const type = String(folder?.title || '').toLowerCase().includes('film') ? 'movie' : 'series';
 
@@ -62,7 +62,8 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card') {
       .replace('/platform-category-card.svg', '/desktop-folder-card.jpg')
       .replace('/platform-card.jpg', '/desktop-folder-card.jpg');
     const cleaned = cleanVisualQuery(next, ['category', 'v']);
-    return cleaned + (cleaned.includes('?') ? '&' : '?') + `type=${type}&v=desktop2`;
+    const extra = new URLSearchParams({ type, v: 'desktop3', title: folder?.title || '', label: collectionTitle || '' });
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
   }
 
   if (value.includes('/genre-folder-art.svg') || value.includes('/genre-card.jpg')) {
@@ -71,8 +72,9 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card') {
       .replace('/genre-card.jpg', '/desktop-genre-card.jpg');
     const colorMatch = value.match(/[?&]color=([^&]+)/);
     const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
-    const color = colorMatch ? `&color=${colorMatch[1]}` : '';
-    return cleaned + (cleaned.includes('?') ? '&' : '?') + `type=${type}&v=desktop2${color}`;
+    const extra = new URLSearchParams({ type, v: 'desktop3', title: folder?.title || '', label: collectionTitle || '' });
+    if (colorMatch) extra.set('color', colorMatch[1]);
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
   }
 
   if (variant === 'backdrop' && value.includes('/platform-backdrop.svg')) {
@@ -85,16 +87,16 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card') {
 function desktopizeCollectionArt(collection) {
   const folders = (collection.folders || []).map((folder) => ({
     ...folder,
-    coverImageUrl: desktopCollectionVisualUrl(folder.coverImageUrl, folder, 'card'),
+    coverImageUrl: desktopCollectionVisualUrl(folder.coverImageUrl, folder, 'card', collection.title),
     focusGifUrl: null,
     focusGifEnabled: false,
     hideTitle: false,
-    heroBackdropUrl: desktopCollectionVisualUrl(folder.heroBackdropUrl, folder, 'backdrop'),
+    heroBackdropUrl: desktopCollectionVisualUrl(folder.heroBackdropUrl, folder, 'backdrop', collection.title),
     titleLogoUrl: null
   }));
   return {
     ...collection,
-    backdropImageUrl: desktopCollectionVisualUrl(collection.backdropImageUrl, null, 'backdrop'),
+    backdropImageUrl: desktopCollectionVisualUrl(collection.backdropImageUrl, null, 'backdrop', collection.title),
     folders
   };
 }
