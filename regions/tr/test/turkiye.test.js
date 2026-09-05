@@ -62,3 +62,29 @@ test('dynamic periods resolve to Istanbul-local calendar windows', () => {
   assert.notEqual(today.start, tomorrow.start);
   assert.ok(lastweek.start < lastweek.end);
 });
+
+
+test('desktop gets the exact cinematic 16:9 card through banner', () => {
+  const meta = {
+    id: 'tt1234567',
+    type: 'movie',
+    name: 'Desktop Cinematic Test',
+    poster: 'https://image.tmdb.org/t/p/w500/demo.jpg',
+    background: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    landscapePoster: 'https://image.tmdb.org/t/p/original/demo-bg.jpg',
+    releaseInfo: 'Test',
+    released: '2026-08-30',
+    _calendarProvider: 'Netflix',
+    _calendarSource: 'tmdb-streaming'
+  };
+  const [decorated] = I.decorateCatalogMetas(
+    'https://catalog.example',
+    [meta],
+    { period: 'today', type: 'movie', cardProvider: 'Netflix' },
+    TZ
+  );
+  assert.equal(decorated.posterShape, 'landscape');
+  assert.match(decorated.background, /calendar-card\.svg/);
+  assert.match(decorated.banner, /calendar-card\.svg/);
+  assert.equal(decorated.banner, decorated.background);
+});
