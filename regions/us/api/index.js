@@ -1471,11 +1471,11 @@ async function handleCalendarCard(res, url) {
     clearTimeout(timeout);
   }
 
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
-  return res.end(calendarCardSvg({ imageDataUri, title, provider, append, type, layout }));
+  return rasterizedSvgJpeg(
+    res,
+    calendarCardSvg({ imageDataUri, title, provider, append, type, layout }),
+    'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000'
+  );
 }
 
 function requestTimeZone(req) {
