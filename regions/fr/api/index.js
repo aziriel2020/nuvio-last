@@ -32,7 +32,6 @@ const {
 
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
 
 const VERSION = '1.3.1';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -63,7 +62,17 @@ function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   catch (_) { LOCAL_VISUAL_DATA_CACHE.set(key, null); return null; }
 }
 function platformPhotoDataUri(providerSlug, variant = 'card') { return localVisualDataUri(path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`)); }
+function servePlatformArtJpeg(res, url, variant = 'card') {
+  const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
+  return serveLocalJpeg(res, path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`));
+}
 function genreCinematicDataUri(genreSlug, variant='card') { const v=variant==='backdrop'?'backdrop':'card'; return localVisualDataUri(path.join(GENRE_CINEMATIC_ART_DIR, `${String(genreSlug || '').trim().toLowerCase()}-${v}.jpg`)); }
+function serveGenreCinematicJpeg(res, url, variant = 'card') {
+  const genreSlug = String(url.searchParams.get('genre') || '').trim().toLowerCase();
+  if (!/^[a-z0-9-]+$/.test(genreSlug)) { res.statusCode = 404; return res.end('Not found'); }
+  return serveLocalJpeg(res, path.join(GENRE_CINEMATIC_ART_DIR, `${genreSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`));
+}
 function serveLocalJpeg(res, absolutePath, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
   try { const data = fs.readFileSync(absolutePath); res.statusCode=200; res.setHeader('Content-Type','image/jpeg'); res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control',cache); res.end(data); }
   catch (_) { res.statusCode=404; res.end('Not found'); }
@@ -1096,21 +1105,6 @@ function svg(res, body, cache = 'public, max-age=86400, s-maxage=86400') {
   res.end(body);
 }
 
-async function rasterizedSvgJpeg(res, body, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
-  try {
-    const data = await sharp(Buffer.from(String(body || '')))
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
-      .toBuffer();
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', cache);
-    res.end(data);
-  } catch (_) {
-    return svg(res, body, cache);
-  }
-}
-
 function serveGenrePosterPng(res, params = {}) {
   const typeToken = String(params.type || 'movie') === 'series' ? 'series' : 'movie';
   const genreSlug = String(params.genre || '').trim().toLowerCase();
@@ -1392,7 +1386,7 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
       landscapePoster: widePoster,
       // NuvioDesktop landscape cards prefer `banner`. Mirror the exact same
       // approved 16:9 cinematic card there; the Shield renderer stays unchanged.
-      banner: homeVisible ? (widePoster || originalLandscape || originalPoster) : (meta?.banner || null),
+      banner: homeVisible ? (originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
       // Critical Modern View targeting: when landscape-card style is active,
       // Nuvio reads/freeze-selects the backdrop. Feed it the Calendar card here.
       background: homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground,
@@ -1597,11 +1591,11 @@ async function handleCalendarCard(res, url) {
     clearTimeout(timeout);
   }
 
-  return rasterizedSvgJpeg(
-    res,
-    calendarCardSvg({ imageDataUri, title, provider, append, type, layout }),
-    'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000'
-  );
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  return res.end(calendarCardSvg({ imageDataUri, title, provider, append, type, layout }));
 }
 
 function requestTimeZone(req) {
@@ -2005,7 +1999,7 @@ async function handlePlatformBackdrop(res, url) {
   if (!provider) return svg(res, platformBackdropSvg('', type, null), 'public, max-age=3600');
   const asset = await platformLogoAsset(providerSlug, type);
   const photo = platformPhotoDataUri(providerSlug, 'backdrop');
-  return rasterizedSvgJpeg(res, platformBackdropSvg(providerSlug, type, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  return svg(res, platformBackdropSvg(providerSlug, type, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
 }
 
 async function handlePlatformCategoryCard(res, url) {
@@ -2015,7 +2009,7 @@ async function handlePlatformCategoryCard(res, url) {
   if (!provider) return svg(res, platformCategoryCardSvg('', category, null), 'public, max-age=3600');
   const asset = await platformLogoAsset(providerSlug, category === 'films' ? 'movie' : 'series');
   const photo = platformPhotoDataUri(providerSlug, 'card');
-  return rasterizedSvgJpeg(res, platformCategoryCardSvg(providerSlug, category, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  return svg(res, platformCategoryCardSvg(providerSlug, category, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
 }
 
 function discoverParams(catalog, window, providerIds, page, timeZone = DEFAULT_TIMEZONE) {
@@ -3807,9 +3801,13 @@ module.exports = async function handler(req, res) {
     if (path === '/archive-year-card.svg') return svg(res, archiveYearCardSvg(url.searchParams.get('year'), url.searchParams.get('category')), 'public, max-age=86400, s-maxage=86400');
     if (path === '/platform-logo') return await handlePlatformLogo(res, url);
     if (path === '/platform-backdrop.svg') return await handlePlatformBackdrop(res, url);
+    if (path === '/platform-card.jpg') return servePlatformArtJpeg(res, url, 'card');
+    if (path === '/platform-backdrop.jpg') return servePlatformArtJpeg(res, url, 'backdrop');
     if (path === '/platform-category-card.svg') return await handlePlatformCategoryCard(res, url);
     if (path === '/genre-poster.png') return serveGenrePosterPng(res, Object.fromEntries(url.searchParams.entries()));
-    if (path === '/genre-folder-art.svg') return rasterizedSvgJpeg(res, genreFolderArtSvg(Object.fromEntries(url.searchParams.entries())), 'public, max-age=3600, s-maxage=86400');
+    if (path === '/genre-folder-art.svg') return svg(res, genreFolderArtSvg(Object.fromEntries(url.searchParams.entries())), 'public, max-age=3600, s-maxage=86400');
+    if (path === '/genre-card.jpg') return serveGenreCinematicJpeg(res, url, 'card');
+    if (path === '/genre-backdrop.jpg') return serveGenreCinematicJpeg(res, url, 'backdrop');
     if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/fr-genres-backdrop.jpg`);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
