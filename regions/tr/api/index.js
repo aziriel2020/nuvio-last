@@ -32,6 +32,7 @@ const {
 
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 
 const VERSION = '1.4.0';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -1114,6 +1115,21 @@ function svg(res, body, cache = 'public, max-age=86400, s-maxage=86400') {
   res.end(body);
 }
 
+async function rasterizedSvgJpeg(res, body, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
+  try {
+    const data = await sharp(Buffer.from(String(body || '')))
+      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', cache);
+    res.end(data);
+  } catch (_) {
+    return svg(res, body, cache);
+  }
+}
+
 function serveGenrePosterPng(res, params = {}) {
   const typeToken = String(params.type || 'movie') === 'series' ? 'series' : 'movie';
   const genreSlug = String(params.genre || '').trim().toLowerCase();
@@ -1600,11 +1616,11 @@ async function handleCalendarCard(res, url) {
     clearTimeout(timeout);
   }
 
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
-  return res.end(calendarCardSvg({ imageDataUri, title, provider, append, type, layout }));
+  return rasterizedSvgJpeg(
+    res,
+    calendarCardSvg({ imageDataUri, title, provider, append, type, layout }),
+    'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000'
+  );
 }
 
 function requestTimeZone(req) {
@@ -2018,7 +2034,7 @@ async function handlePlatformBackdrop(res, url) {
   if (!provider) return svg(res, platformBackdropSvg('', type, null), 'public, max-age=3600');
   const asset = await platformLogoAsset(providerSlug, type);
   const photo = platformPhotoDataUri(providerSlug, 'backdrop');
-  return svg(res, platformBackdropSvg(providerSlug, type, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  return rasterizedSvgJpeg(res, platformBackdropSvg(providerSlug, type, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
 }
 
 async function handlePlatformCategoryCard(res, url) {
@@ -2028,7 +2044,7 @@ async function handlePlatformCategoryCard(res, url) {
   if (!provider) return svg(res, platformCategoryCardSvg('', category, null), 'public, max-age=3600');
   const asset = await platformLogoAsset(providerSlug, category === 'films' ? 'movie' : 'series');
   const photo = platformPhotoDataUri(providerSlug, 'card');
-  return svg(res, platformCategoryCardSvg(providerSlug, category, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  return rasterizedSvgJpeg(res, platformCategoryCardSvg(providerSlug, category, asset?.dataUri || null, photo), 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
 }
 
 function discoverParams(catalog, window, providerIds, page, timeZone = DEFAULT_TIMEZONE) {
@@ -3822,7 +3838,7 @@ module.exports = async function handler(req, res) {
     if (path === '/platform-backdrop.svg') return await handlePlatformBackdrop(res, url);
     if (path === '/platform-category-card.svg') return await handlePlatformCategoryCard(res, url);
     if (path === '/genre-poster.png') return serveGenrePosterPng(res, Object.fromEntries(url.searchParams.entries()));
-    if (path === '/genre-folder-art.svg') return svg(res, genreFolderArtSvg(Object.fromEntries(url.searchParams.entries())), 'public, max-age=3600, s-maxage=86400');
+    if (path === '/genre-folder-art.svg') return rasterizedSvgJpeg(res, genreFolderArtSvg(Object.fromEntries(url.searchParams.entries())), 'public, max-age=3600, s-maxage=86400');
     if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/fr-genres-backdrop.jpg`);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
