@@ -460,3 +460,37 @@ test('desktop text renderer keeps native title fallback and carries accented met
   assert.match(url.searchParams.get('append') || '', /Aujourd/i);
   assert.equal(url.searchParams.get('type'), 'movie');
 });
+
+
+test('desktop final renderer produces a real JPEG with accented readable text', async () => {
+  const oldFetch = global.fetch;
+  // Valid 1x1 PNG. Sharp will resize it to the 16:9 card before compositing text.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Qzq6WQAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.startsWith('https://image.tmdb.org/')) {
+      return new Response(png, {
+        status: 200,
+        headers: { 'content-type': 'image/png', 'content-length': String(png.length) }
+      });
+    }
+    throw new Error(`unexpected fetch ${value}`);
+  };
+
+  try {
+    const src = encodeURIComponent('https://image.tmdb.org/t/p/w780/demo.jpg');
+    const response = await call(
+      `/fr/desktop-content-card.jpg?src=${src}&type=series&title=${encodeURIComponent('Maternité éternelle')}&append=${encodeURIComponent('Aujourd’hui • S01E04')}&label=HBO%20Max&v=desktop5`
+    );
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'], /image\/jpeg/);
+    assert(response.body.length > 5000);
+    assert.equal(response.body[0], 0xff);
+    assert.equal(response.body[1], 0xd8);
+  } finally {
+    global.fetch = oldFetch;
+  }
+});

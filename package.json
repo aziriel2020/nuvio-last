@@ -11,6 +11,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "sharp": "^0.34.3"
+    "sharp": "^0.34.3",
+    "dejavu-fonts-ttf": "^2.37.3"
   }
 }
