@@ -32,6 +32,7 @@ const {
 
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 
 const VERSION = '1.4.0';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -76,6 +77,130 @@ function serveGenreCinematicJpeg(res, url, variant = 'card') {
 function serveLocalJpeg(res, absolutePath, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
   try { const data = fs.readFileSync(absolutePath); res.statusCode=200; res.setHeader('Content-Type','image/jpeg'); res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control',cache); res.end(data); }
   catch (_) { res.statusCode=404; res.end('Not found'); }
+}
+
+function normalizedDesktopType(value) {
+  return String(value || '').toLowerCase() === 'movie' ? 'movie' : 'series';
+}
+
+function safeDesktopAccent(value, fallback = '#38bdf8') {
+  const token = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(token) ? token : fallback;
+}
+
+function desktopOverlaySvg(type = 'series', accent = '#38bdf8') {
+  const movie = normalizedDesktopType(type) === 'movie';
+  const icon = movie
+    ? '<path d="M1491 73h36v36h-36z" fill="none" stroke="#fff" stroke-width="8"/><path d="M1491 86h36M1503 73v36M1515 73v36" stroke="#fff" stroke-width="5" opacity=".8"/><path d="M1502 79l16 12-16 12z" fill="#fff"/>'
+    : '<rect x="1488" y="74" width="42" height="31" rx="5" fill="none" stroke="#fff" stroke-width="7"/><path d="M1498 112h22" stroke="#fff" stroke-width="7" stroke-linecap="round"/>';
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+    <defs>
+      <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#02040a" stop-opacity=".42"/>
+        <stop offset="38%" stop-color="#02040a" stop-opacity=".08"/>
+        <stop offset="100%" stop-color="#02040a" stop-opacity=".30"/>
+      </linearGradient>
+      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#07111f" stop-opacity="0"/>
+        <stop offset="28%" stop-color="#072650" stop-opacity=".34"/>
+        <stop offset="100%" stop-color="#061c42" stop-opacity=".94"/>
+      </linearGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#shade)"/>
+    <rect y="390" width="1600" height="510" fill="url(#bottom)"/>
+    <rect x="1130" y="44" width="292" height="94" rx="24" fill="#04060b" fill-opacity=".84" stroke="${accent}" stroke-width="5"/>
+    <rect x="1440" y="44" width="112" height="94" rx="24" fill="${accent}" fill-opacity=".96"/>
+    ${icon}
+    <rect x="54" y="575" width="12" height="212" rx="6" fill="${accent}"/>
+    <rect x="54" y="824" width="420" height="4" rx="2" fill="${accent}" opacity=".62"/>
+  </svg>`);
+}
+
+async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
+  const type = normalizedDesktopType(options.type);
+  const accent = safeDesktopAccent(options.accent, '#38bdf8');
+  const composites = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
+  if (options.logoBuffer) {
+    try {
+      const logo = await sharp(options.logoBuffer)
+        .resize({ width: 230, height: 62, fit: 'inside', withoutEnlargement: true })
+        .png()
+        .toBuffer();
+      composites.push({ input: logo, left: 1160, top: 60 });
+    } catch (_) {}
+  }
+  return sharp(sourceBuffer)
+    .resize(1600, 900, { fit: 'cover', position: 'attention' })
+    .modulate({ brightness: 0.94, saturation: 1.08 })
+    .composite(composites)
+    .jpeg({ quality: 91, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
+function sendDesktopCinematicJpeg(res, data) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  res.end(data);
+}
+
+async function handleDesktopFolderCard(res, url) {
+  const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  const type = normalizedDesktopType(url.searchParams.get('type'));
+  if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
+  try {
+    const source = fs.readFileSync(path.join(PLATFORM_ART_DIR, `${providerSlug}-card.jpg`));
+    const asset = await platformLogoAsset(providerSlug, type);
+    const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
+    const data = await desktopCinematicCardBuffer(source, { type, accent, logoBuffer: asset?.buffer || null });
+    return sendDesktopCinematicJpeg(res, data);
+  } catch (_) {
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
+}
+
+async function handleDesktopGenreCard(res, url) {
+  const genreSlug = String(url.searchParams.get('genre') || '').trim().toLowerCase();
+  const type = normalizedDesktopType(url.searchParams.get('type'));
+  if (!/^[a-z0-9-]+$/.test(genreSlug)) { res.statusCode = 404; return res.end('Not found'); }
+  try {
+    const source = fs.readFileSync(path.join(GENRE_CINEMATIC_ART_DIR, `${genreSlug}-card.jpg`));
+    const accent = safeDesktopAccent(url.searchParams.get('color'), '#a855f7');
+    const data = await desktopCinematicCardBuffer(source, { type, accent });
+    return sendDesktopCinematicJpeg(res, data);
+  } catch (_) {
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
+}
+
+async function handleDesktopContentCard(res, url) {
+  const src = optimizedCardSource(url.searchParams.get('src') || '', 'landscape');
+  const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  const type = normalizedDesktopType(url.searchParams.get('type'));
+  if (!src || !isAllowedPosterSource(src)) { res.statusCode = 400; return res.end('Invalid source'); }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6500);
+  try {
+    const response = await fetch(src, {
+      signal: controller.signal,
+      headers: { Accept: 'image/jpeg,image/png,image/webp,*/*;q=0.8', 'User-Agent': `NuvioCalendar/${VERSION}` }
+    });
+    if (!response.ok) { res.statusCode = 502; return res.end('Image unavailable'); }
+    const source = Buffer.from(await response.arrayBuffer());
+    const asset = providerSlug ? await platformLogoAsset(providerSlug, type) : null;
+    const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
+    const data = await desktopCinematicCardBuffer(source, { type, accent, logoBuffer: asset?.buffer || null });
+    return sendDesktopCinematicJpeg(res, data);
+  } catch (_) {
+    res.statusCode = 502;
+    return res.end('Image unavailable');
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 const GENRE_POSTER_DIR = path.resolve(__dirname, '../../../assets/genre-posters');
@@ -1367,6 +1492,23 @@ function calendarCardUrl(origin, meta, catalog, timeZone, layout = 'portrait', s
   return url.toString();
 }
 
+function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
+  const source = optimizedCardSource(
+    sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster,
+    'landscape'
+  );
+  if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
+  const base = `${String(origin || '').replace(/\/$/, '')}/`;
+  const url = new URL('desktop-content-card.jpg', base);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop2`);
+  url.searchParams.set('src', source);
+  const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
+  if (providerSlug) url.searchParams.set('provider', providerSlug);
+  url.searchParams.set('type', meta?.type || catalog?.type || 'series');
+  if (catalog?.genreColor) url.searchParams.set('color', catalog.genreColor);
+  return url.toString();
+}
+
 function transparentModernLogoUrl(origin) {
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('calendar-transparent-logo.svg', base);
@@ -1397,6 +1539,9 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
     const widePoster = getConfig().calendarCards && wideSource
       ? (calendarCardUrl(origin, meta, catalog, timeZone, 'landscape', wideSource) || wideSource)
       : (meta?.landscapePoster || wideSource);
+    const desktopPoster = homeVisible
+      ? desktopContentCardUrl(origin, meta, catalog, wideSource)
+      : null;
 
     const copy = {
       ...meta,
@@ -1405,7 +1550,7 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
       landscapePoster: widePoster,
       // NuvioDesktop landscape cards prefer `banner`. Mirror the exact same
       // approved 16:9 cinematic card there; the Shield renderer stays unchanged.
-      banner: homeVisible ? (originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
+      banner: homeVisible ? (desktopPoster || originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
       // Critical Modern View targeting: when landscape-card style is active,
       // Nuvio reads/freeze-selects the backdrop. Feed it the Calendar card here.
       background: homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground,
@@ -3830,6 +3975,9 @@ module.exports = async function handler(req, res) {
     if (path === '/archive-year-card.svg') return svg(res, archiveYearCardSvg(url.searchParams.get('year'), url.searchParams.get('category')), 'public, max-age=86400, s-maxage=86400');
     if (path === '/platform-logo') return await handlePlatformLogo(res, url);
     if (path === '/platform-backdrop.svg') return await handlePlatformBackdrop(res, url);
+    if (path === '/desktop-folder-card.jpg') return await handleDesktopFolderCard(res, url);
+    if (path === '/desktop-content-card.jpg') return await handleDesktopContentCard(res, url);
+    if (path === '/desktop-genre-card.jpg') return await handleDesktopGenreCard(res, url);
     if (path === '/platform-card.jpg') return servePlatformArtJpeg(res, url, 'card');
     if (path === '/platform-backdrop.jpg') return servePlatformArtJpeg(res, url, 'backdrop');
     if (path === '/platform-category-card.svg') return await handlePlatformCategoryCard(res, url);
