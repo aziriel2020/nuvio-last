@@ -42,33 +42,55 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
+function cleanVisualQuery(url, removeKeys) {
+  let value = String(url || '');
+  for (const key of removeKeys) {
+    value = value.replace(new RegExp(`([?&])${key}=[^&]*`, 'g'), '$1');
+  }
+  return value
+    .replace(/\?&/, '?')
+    .replace(/&&+/g, '&')
+    .replace(/[?&]+$/, '');
+}
+
+function desktopCollectionVisualUrl(url, variant = 'card') {
+  const value = String(url || '');
+  if (value.includes('/platform-category-card.svg')) {
+    return cleanVisualQuery(
+      value.replace('/platform-category-card.svg', '/platform-card.jpg'),
+      ['category', 'v']
+    );
+  }
+  if (value.includes('/platform-backdrop.svg')) {
+    return cleanVisualQuery(
+      value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'),
+      ['type', 'v']
+    );
+  }
+  if (value.includes('/genre-folder-art.svg')) {
+    return cleanVisualQuery(
+      value.replace('/genre-folder-art.svg', variant === 'backdrop' ? '/genre-backdrop.jpg' : '/genre-card.jpg'),
+      ['variant', 'label', 'type', 'color', 'icon', 'v']
+    );
+  }
+  return value;
+}
+
 function desktopizeCollectionArt(collection) {
-  const folders = (collection.folders || []).map((folder) => {
-    const cover = String(folder.coverImageUrl || '');
-    let desktopCover = cover;
-    if (cover.includes('/platform-category-card.svg')) {
-      desktopCover = cover
-        .replace('/platform-category-card.svg', '/platform-card.jpg')
-        .replace(/([?&])category=[^&]*/g, '$1')
-        .replace(/[?&]v=[^&]*/g, '')
-        .replace(/[?&]+$/, '');
-    } else if (cover.includes('/genre-folder-art.svg')) {
-      desktopCover = cover
-        .replace('/genre-folder-art.svg', '/genre-card.jpg')
-        .replace(/([?&])(variant|label|type|color|icon|v)=[^&]*/g, '$1')
-        .replace(/\?&/, '?')
-        .replace(/&&+/g, '&')
-        .replace(/[?&]+$/, '');
-    }
-    return {
-      ...folder,
-      coverImageUrl: desktopCover,
-      focusGifUrl: null,
-      focusGifEnabled: false,
-      hideTitle: false
-    };
-  });
-  return { ...collection, folders };
+  const folders = (collection.folders || []).map((folder) => ({
+    ...folder,
+    coverImageUrl: desktopCollectionVisualUrl(folder.coverImageUrl, 'card'),
+    focusGifUrl: null,
+    focusGifEnabled: false,
+    hideTitle: false,
+    heroBackdropUrl: desktopCollectionVisualUrl(folder.heroBackdropUrl, 'backdrop'),
+    titleLogoUrl: null
+  }));
+  return {
+    ...collection,
+    backdropImageUrl: desktopCollectionVisualUrl(collection.backdropImageUrl, 'backdrop'),
+    folders
+  };
 }
 
 function combinedDesktopCollections(req) {
