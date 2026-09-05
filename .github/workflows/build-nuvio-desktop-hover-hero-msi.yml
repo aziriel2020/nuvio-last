@@ -1,6 +1,12 @@
 name: Build Nuvio Desktop Hover Hero MSI
 
 on:
+  push:
+    branches:
+      - build/nuvio-desktop-hover-hero-msi
+    paths:
+      - ".github/workflows/build-nuvio-desktop-hover-hero-msi.yml"
+      - "builder/apply_nuvio_desktop_hover_hero.py"
   workflow_dispatch:
 
 permissions:
