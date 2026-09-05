@@ -295,3 +295,37 @@ test('desktop banner prefers original landscape artwork while Shield keeps cinem
     assert.match(decorated.landscapePoster, /calendar-card\.svg\?/);
   }
 });
+
+
+test('desktop JPEG collection routes exist in every region', async () => {
+  const urls = [
+    '/fr/platform-card.jpg?provider=netflix',
+    '/global/platform-card.jpg?provider=vod-global',
+    '/tr/platform-card.jpg?provider=netflix',
+    '/us/platform-card.jpg?provider=netflix',
+  ];
+  for (const url of urls) {
+    const response = await call(url);
+    assert.equal(response.statusCode, 200, url);
+    assert.match(response.headers['content-type'], /image\/jpeg/, url);
+    assert(response.body.length > 1000, url);
+  }
+});
+
+test('desktop import also replaces folder and collection backdrops with clean JPEGs', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
+  const targets = [
+    collections.find((c) => c.title === '🇫🇷 Netflix'),
+    collections.find((c) => c.title === '🌍 VOD Mondiale'),
+    collections.find((c) => c.title === '🇹🇷 Netflix'),
+    collections.find((c) => c.title === '🇺🇸 Netflix'),
+  ];
+  for (const collection of targets) {
+    assert(collection);
+    assert.match(collection.backdropImageUrl, /\/platform-backdrop\.jpg\?provider=/);
+    for (const folder of collection.folders) {
+      assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
+      assert.equal(folder.titleLogoUrl, null);
+    }
+  }
+});
