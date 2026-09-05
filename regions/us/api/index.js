@@ -271,7 +271,7 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
   const typeLabel = movie ? 'FILM' : 'SÉRIE';
   const titlePath = desktopVectorText(title, 92, 705, 980, 92, { weight: 900, minSize: 54 });
   const subtitlePath = desktopVectorText(subtitle, 94, 774, 970, 42, { weight: 700, minSize: 28, fill: '#e8f1ff', opacity: 0.92 });
-  const providerPath = desktopVectorText(providerLabel, 1060, 103, 315, 39, { weight: 900, minSize: 24 });
+  const providerPath = desktopVectorText(providerLabel, 1172, 103, 204, 34, { weight: 900, minSize: 22 });
   const typePath = desktopVectorText(typeLabel, 1426, 104, 118, 34, { weight: 900, minSize: 26 });
 
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
@@ -348,7 +348,7 @@ async function handleDesktopFolderCard(res, url) {
     const source = fs.readFileSync(path.join(PLATFORM_ART_DIR, `${providerSlug}-card.jpg`));
     const asset = await platformLogoAsset(providerSlug, type);
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
-    const providerLabel = url.searchParams.get('label') || platformCollectionTitle(providerSlug);
+    const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
     const title = url.searchParams.get('title') || (type === 'movie' ? 'Films' : 'Séries');
     const data = await desktopCinematicCardBuffer(source, {
       type,
@@ -405,7 +405,7 @@ async function handleDesktopContentCard(res, url) {
     const source = Buffer.from(await response.arrayBuffer());
     const asset = providerSlug ? await platformLogoAsset(providerSlug, type) : null;
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
-    const providerLabel = url.searchParams.get('label') || platformCollectionTitle(providerSlug);
+    const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
     const title = url.searchParams.get('title') || '';
     const subtitle = url.searchParams.get('append') || '';
     const data = await desktopCinematicCardBuffer(source, {
