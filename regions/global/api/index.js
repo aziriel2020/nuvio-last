@@ -72,50 +72,33 @@ function safeDesktopAccent(value, fallback = '#38bdf8') {
   return /^#[0-9a-f]{6}$/i.test(token) ? token : fallback;
 }
 
-function desktopOverlaySvg(type = 'series', accent = '#38bdf8') {
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-    <defs>
-      <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#02040a" stop-opacity=".48"/>
-        <stop offset="40%" stop-color="#02040a" stop-opacity=".06"/>
-        <stop offset="100%" stop-color="#02040a" stop-opacity=".30"/>
-      </linearGradient>
-      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#07111f" stop-opacity="0"/>
-        <stop offset="28%" stop-color="#072650" stop-opacity=".38"/>
-        <stop offset="100%" stop-color="#061c42" stop-opacity=".96"/>
-      </linearGradient>
-    </defs>
-    <rect width="1600" height="900" fill="url(#shade)"/>
-    <rect y="350" width="1600" height="550" fill="url(#bottom)"/>
-    <rect x="1018" y="38" width="382" height="112" rx="28" fill="#03060c" fill-opacity=".88" stroke="${accent}" stroke-width="6"/>
-    <rect x="1414" y="38" width="148" height="112" rx="28" fill="${accent}" fill-opacity=".98"/>
-    <rect x="58" y="584" width="13" height="204" rx="6.5" fill="${accent}"/>
-    <rect x="92" y="820" width="440" height="5" rx="2.5" fill="${accent}" opacity=".76"/>
-  </svg>`);
+function desktopFontFile() {
+  try {
+    return require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf');
+  } catch (_) {
+    return '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+  }
 }
 
-function pangoEscaped(value) {
+function desktopTextEscape(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/>/g, '&gt;');
 }
 
 function desktopTextComposite(text, left, top, width, height, options = {}) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
   if (!value) return null;
-  const family = options.family || 'sans';
-  const weight = options.weight || 'Bold';
-  const size = Number(options.size || 48);
   const color = options.color || '#ffffff';
-  const markup = `<span font_desc="${family} ${weight} ${size}" foreground="${color}">${pangoEscaped(value)}</span>`;
+  const size = Number(options.size || 48);
+  const fontfile = desktopFontFile();
   return {
     input: {
       text: {
-        text: markup,
-        font: family,
+        text: `<span foreground="${color}">${desktopTextEscape(value)}</span>`,
+        font: `DejaVu Sans Bold ${size}`,
+        fontfile,
         width,
         height,
         align: options.align || 'left',
@@ -128,60 +111,89 @@ function desktopTextComposite(text, left, top, width, height, options = {}) {
   };
 }
 
+function desktopOverlaySvg(type = 'series', accent = '#38bdf8') {
+  const movie = normalizedDesktopType(type) === 'movie';
+  const typeIcon = movie
+    ? `<path d="M1418 68h42v38h-42z" fill="none" stroke="#fff" stroke-width="6"/><path d="M1418 82h42M1432 68v38M1446 68v38" stroke="#fff" stroke-width="4"/><path d="M1430 76l17 11-17 11z" fill="#fff"/>`
+    : `<rect x="1418" y="70" width="43" height="32" rx="5" fill="none" stroke="#fff" stroke-width="6"/><path d="M1429 112h22" stroke="#fff" stroke-width="6" stroke-linecap="round"/>`;
+
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+    <defs>
+      <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#02040a" stop-opacity=".52"/>
+        <stop offset="42%" stop-color="#02040a" stop-opacity=".08"/>
+        <stop offset="100%" stop-color="#02040a" stop-opacity=".28"/>
+      </linearGradient>
+      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#061021" stop-opacity="0"/>
+        <stop offset="32%" stop-color="#072650" stop-opacity=".40"/>
+        <stop offset="100%" stop-color="#061c42" stop-opacity=".97"/>
+      </linearGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#shade)"/>
+    <rect y="340" width="1600" height="560" fill="url(#bottom)"/>
+    <rect x="1018" y="36" width="360" height="116" rx="28" fill="#03060c" fill-opacity=".90" stroke="${accent}" stroke-width="6"/>
+    <rect x="1394" y="36" width="168" height="116" rx="28" fill="${accent}" fill-opacity=".98"/>
+    ${typeIcon}
+    <rect x="58" y="575" width="14" height="232" rx="7" fill="${accent}"/>
+    <rect x="96" y="846" width="460" height="5" rx="2.5" fill="${accent}" opacity=".82"/>
+  </svg>`);
+}
+
 async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   const type = normalizedDesktopType(options.type);
   const accent = safeDesktopAccent(options.accent, '#38bdf8');
   const movie = type === 'movie';
-  const title = compactCardText(options.title || (movie ? 'Film' : 'Série'), 52);
+  const title = compactCardText(options.title || (movie ? 'Film' : 'Série'), 58);
   const subtitle = compactCardText(options.subtitle || '', 72);
-  const providerLabel = compactCardText(options.providerLabel || '', 22).toUpperCase();
+  const providerLabel = compactCardText(options.providerLabel || '', 24).replace(/^[^\p{L}\p{N}]+/u, '').toUpperCase();
   const typeLabel = movie ? 'FILM' : 'SÉRIE';
+  const bottomTag = compactCardText(options.bottomTag || '', 24).toUpperCase();
 
   const composites = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
-
-  const textLayers = [
-    desktopTextComposite(title, 92, 626, 1000, 110, { size: 76, weight: 'Bold' }),
-    desktopTextComposite(subtitle, 94, 744, 980, 58, { size: 34, weight: 'Bold', color: '#e8f1ff' }),
-    desktopTextComposite(providerLabel, 1168, 67, 215, 58, { size: 27, weight: 'Bold' }),
-    desktopTextComposite(typeLabel, 1428, 68, 120, 58, { size: 26, weight: 'Bold', align: 'center' })
-  ].filter(Boolean);
-  composites.push(...textLayers);
 
   if (options.logoBuffer) {
     try {
       const logo = await sharp(options.logoBuffer)
-        .resize({ width: 118, height: 72, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 116, height: 68, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
-      composites.push({ input: logo, left: 1038, top: 58 });
+      composites.push({ input: logo, left: 1042, top: 59 });
     } catch (_) {}
   }
+
+  composites.push(...[
+    desktopTextComposite(providerLabel, 1168, 67, 190, 58, { size: 28 }),
+    desktopTextComposite(typeLabel, 1470, 67, 78, 58, { size: 27, align: 'center' }),
+    desktopTextComposite(title, 98, 620, 1080, 116, { size: 86 }),
+    desktopTextComposite(subtitle, 100, 742, 1030, 58, { size: 38, color: '#e8f1ff' }),
+    desktopTextComposite(bottomTag, 100, 800, 620, 38, { size: 25, color: accent })
+  ].filter(Boolean));
 
   try {
     return await sharp(sourceBuffer)
       .resize(1600, 900, { fit: 'cover', position: 'attention' })
-      .modulate({ brightness: 0.94, saturation: 1.08 })
+      .modulate({ brightness: 0.95, saturation: 1.07 })
       .composite(composites)
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      .jpeg({ quality: 93, chromaSubsampling: '4:4:4' })
       .toBuffer();
   } catch (_) {
-    // Never ship tofu/missing-glyph boxes. Keep the cinematic artwork and
-    // native Nuvio title if Pango/fontconfig is unavailable.
+    // Safe fallback: never render broken glyphs.
     const fallback = [{ input: desktopOverlaySvg(type, accent), left: 0, top: 0 }];
     if (options.logoBuffer) {
       try {
         const logo = await sharp(options.logoBuffer)
-          .resize({ width: 118, height: 72, fit: 'inside', withoutEnlargement: true })
+          .resize({ width: 116, height: 68, fit: 'inside', withoutEnlargement: true })
           .png()
           .toBuffer();
-        fallback.push({ input: logo, left: 1038, top: 58 });
+        fallback.push({ input: logo, left: 1042, top: 59 });
       } catch (_) {}
     }
     return sharp(sourceBuffer)
       .resize(1600, 900, { fit: 'cover', position: 'attention' })
-      .modulate({ brightness: 0.94, saturation: 1.08 })
+      .modulate({ brightness: 0.95, saturation: 1.07 })
       .composite(fallback)
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      .jpeg({ quality: 93, chromaSubsampling: '4:4:4' })
       .toBuffer();
   }
 }
@@ -211,7 +223,8 @@ async function handleDesktopFolderCard(res, url) {
       logoBuffer: asset?.buffer || null,
       title,
       subtitle: providerLabel,
-      providerLabel
+      providerLabel,
+      bottomTag: ''
     });
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
@@ -246,7 +259,8 @@ async function handleDesktopContentCard(res, url) {
       logoBuffer: asset?.buffer || null,
       title,
       subtitle,
-      providerLabel
+      providerLabel,
+      bottomTag: providerLabel
     });
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
@@ -1109,7 +1123,7 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop2`);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop5`);
   url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
