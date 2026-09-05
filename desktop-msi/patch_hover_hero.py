@@ -268,7 +268,7 @@ replace_once(
     """private const val HERO_AUTO_SCROLL_INTERVAL_MS = 8_000L
 """,
     """private const val HERO_AUTO_SCROLL_INTERVAL_MS = 8_000L
-private const val DESKTOP_HOVER_HERO_ENRICH_DEBOUNCE_MS = 450L
+private const val DESKTOP_HOVER_HERO_ENRICH_DEBOUNCE_MS = 120L
 """,
 )
 replace_once(
@@ -369,6 +369,7 @@ private fun DesktopHoveredHomeHeroFrame(
     val posterCardStyle = rememberPosterCardStyleUiState()
     val trailerPlaybackEnabled =
         AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP &&
+            posterCardStyle.hoverPreviewEnabled &&
             posterCardStyle.hoverPreviewTrailerEnabled
 
     var resolvedItem by remember(item.stableKey()) { mutableStateOf(item) }
@@ -376,11 +377,9 @@ private fun DesktopHoveredHomeHeroFrame(
         mutableStateOf<TrailerPlaybackSource?>(null)
     }
 
-    LaunchedEffect(item.stableKey(), trailerPlaybackEnabled) {
+    LaunchedEffect(item.stableKey()) {
         resolvedItem = item
-        trailerPlaybackSource = null
         delay(DESKTOP_HOVER_HERO_ENRICH_DEBOUNCE_MS)
-
         val meta = try {
             MetaDetailsRepository.peek(type = item.type, id = item.id)
                 ?: MetaDetailsRepository.fetch(type = item.type, id = item.id)
@@ -390,15 +389,22 @@ private fun DesktopHoveredHomeHeroFrame(
             null
         }
         resolvedItem = mergeDesktopHoverHeroMeta(item, meta)
+    }
 
-        if (trailerPlaybackEnabled) {
-            trailerPlaybackSource = try {
-                resolveHomePosterHoverTrailerPlaybackSource(item)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Throwable) {
-                null
-            }
+    LaunchedEffect(
+        item.stableKey(),
+        trailerPlaybackEnabled,
+        posterCardStyle.hoverPreviewOpenDelayMillis,
+    ) {
+        trailerPlaybackSource = null
+        if (!trailerPlaybackEnabled) return@LaunchedEffect
+        delay(posterCardStyle.hoverPreviewOpenDelayMillis.toLong())
+        trailerPlaybackSource = try {
+            resolveHomePosterHoverTrailerPlaybackSource(item)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
         }
     }
 
@@ -423,12 +429,19 @@ private fun DesktopHoveredHomeHeroFrame(
         }
 
         if (trailerPlaybackEnabled) {
-            HomePosterHoverTrailer(
-                playbackSource = trailerPlaybackSource,
-                soundEnabled = posterCardStyle.hoverPreviewTrailerSoundEnabled,
-                startPositionSeconds = posterCardStyle.hoverPreviewTrailerStartSeconds,
-                modifier = Modifier.fillMaxSize(),
-            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.68f),
+            ) {
+                HomePosterHoverTrailer(
+                    playbackSource = trailerPlaybackSource,
+                    soundEnabled = posterCardStyle.hoverPreviewTrailerSoundEnabled,
+                    startPositionSeconds = posterCardStyle.hoverPreviewTrailerStartSeconds,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         Box(
@@ -452,13 +465,13 @@ private fun DesktopHoveredHomeHeroFrame(
                 .background(
                     Brush.horizontalGradient(
                         colorStops = arrayOf(
-                            0.00f to backgroundColor.copy(alpha = 0.96f),
-                            0.08f to backgroundColor.copy(alpha = 0.90f),
-                            0.16f to backgroundColor.copy(alpha = 0.76f),
-                            0.26f to backgroundColor.copy(alpha = 0.54f),
-                            0.36f to backgroundColor.copy(alpha = 0.30f),
-                            0.46f to backgroundColor.copy(alpha = 0.12f),
-                            0.54f to Color.Transparent,
+                            0.00f to backgroundColor.copy(alpha = 0.99f),
+                            0.12f to backgroundColor.copy(alpha = 0.97f),
+                            0.24f to backgroundColor.copy(alpha = 0.90f),
+                            0.34f to backgroundColor.copy(alpha = 0.72f),
+                            0.44f to backgroundColor.copy(alpha = 0.44f),
+                            0.54f to backgroundColor.copy(alpha = 0.16f),
+                            0.62f to Color.Transparent,
                         ),
                     ),
                 ),
