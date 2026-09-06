@@ -109,6 +109,7 @@ jobs:
           root=Path(".")
           win=(root/"composeApp/src/windowsDesktopMain/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.desktop.kt").read_text(encoding="utf-8")
           hero=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
+          hoverTrailer=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterHoverTrailer.kt").read_text(encoding="utf-8")
           platform=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/features/trailer/TrailerExtractionPlatform.desktop.kt").read_text(encoding="utf-8")
           main=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt").read_text(encoding="utf-8")
           bridge=(root/"composeApp/src/desktopMain/native/windows/player_bridge.cpp").read_text(encoding="utf-8")
@@ -139,6 +140,16 @@ jobs:
               (platform,"windowsHost"),
               (hero,"fillMaxWidth(0.54f)"),
               (hero,"fillMaxWidth(0.43f)"),
+              (hero,"fillMaxWidth(0.46f)"),
+              (hero,"CatalogHeroInformationBed"),
+              (hero,"trailerVisuallyReady"),
+              (hero,"zIndex(10f)"),
+              (hero,"zIndex(20f)"),
+              (hero,"zIndex(30f)"),
+              (hero,"zIndex(50f)"),
+              (hero,"0.72f to Color.Black"),
+              (hoverTrailer,"onPlaybackVisibilityChanged"),
+              (hoverTrailer,"DisposableEffect"),
               (hero,"0.44f to backgroundColor.copy(alpha = 0.54f)"),
               (hero,"0.86f to backgroundColor.copy(alpha = 0.42f)"),
               (hero,"isCatalogHeroTrailerPlaybackEnabled"),
@@ -152,6 +163,8 @@ jobs:
               (main,"HeroTrailerSmokeHarness"),
               (main,"error:hero-gate-disabled"),
               (main,"muted = false"),
+              (main,"HERO INFORMATION"),
+              (main,"CatalogHeroInformationBed"),
           ]:
               if token not in text:
                   raise SystemExit("Missing V9 contract: "+token)
