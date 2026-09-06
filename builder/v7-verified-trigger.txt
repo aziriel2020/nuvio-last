@@ -1,0 +1,1 @@
+Trigger V7 verified Windows MSI build.
