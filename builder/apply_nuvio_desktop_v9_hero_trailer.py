@@ -4723,3 +4723,18 @@ bridge = bridge.replace(
 bridge_path.write_text(bridge, encoding="utf-8")
 
 print("Applied V9.16 exact full-black left panel + 90%-black video edge")
+
+
+# V9.17: seamless full-black seam + ~97% black video edge.
+# The exact seam pixel is black so it visually merges with the full-black info panel.
+# By ~1% into the player the video is still ~97% black, then it fades smoothly
+# to full brightness across ~45% of the video width.
+bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+bridge = bridge_path.read_text(encoding="utf-8")
+bridge = bridge.replace(
+    "(0.10+0.90*pow(clip(X/(W*0.40),0,1),0.72))",
+    "pow(clip(X/(W*0.45),0,1),0.95)",
+)
+bridge_path.write_text(bridge, encoding="utf-8")
+
+print("Applied V9.17 seamless black seam + ~97%-black video edge over 45% width")
