@@ -2593,12 +2593,17 @@ private fun WindowsHeroTrailerSession(
         if (!hostReady.value) return@LaunchedEffect
         while (true) {
             val snapshot = controller.snapshot()
+            val hasPlaybackProgress =
+                snapshot.positionMs >= (startPositionMillis.coerceAtLeast(0L) + 250L)
             if (
                 !readyReported.value &&
                 !terminalReported.value &&
-                !snapshot.isLoading &&
                 !snapshot.isEnded &&
-                (snapshot.isPlaying || snapshot.durationMs > 0L)
+                (
+                    hasPlaybackProgress ||
+                        snapshot.isPlaying ||
+                        (!snapshot.isLoading && snapshot.durationMs > 0L)
+                    )
             ) {
                 readyReported.value = true
                 latestOnReady.value()
@@ -2820,6 +2825,7 @@ private fun HeroTrailerSmokeHarness(
         androidx.compose.runtime.mutableStateOf<com.nuvio.app.features.trailer.TrailerPlaybackSource?>(null)
     }
     val terminal = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val readyObserved = remember { androidx.compose.runtime.mutableStateOf(false) }
 
     fun mark(value: String) {
         runCatching {
@@ -2864,10 +2870,15 @@ private fun HeroTrailerSmokeHarness(
             fillFrame = true,
             modifier = Modifier.fillMaxSize(),
             onReady = {
-                if (!terminal.value) mark("ready")
+                if (!terminal.value) {
+                    readyObserved.value = true
+                    mark("ready")
+                }
             },
             onEnded = {
-                if (!terminal.value) mark("ended")
+                if (!terminal.value && !readyObserved.value) {
+                    mark("ended-before-ready")
+                }
             },
             onError = {
                 terminal.value = true
