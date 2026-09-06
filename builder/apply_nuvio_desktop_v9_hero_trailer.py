@@ -4517,3 +4517,79 @@ main = replace_once(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9.13 full black left information bed + explicit Hero layer order")
+
+
+# V9.14: make the black information bed deterministic and non-animated.
+hero = hero_path.read_text(encoding="utf-8")
+
+hero = replace_once(
+    hero,
+    '''        CatalogHeroInformationBed(
+            visible = trailerVisuallyReady,
+''',
+    '''        CatalogHeroInformationBed(
+            visible = trailerPlaybackSource != null || trailerVisuallyReady,
+''',
+    "v9.14 black bed follows resolved trailer source",
+)
+
+hero = replace_once(
+    hero,
+    '''@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(tween(220)),
+        exit = fadeOut(tween(180)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Black,
+                            0.72f to Color.Black,
+                            0.90f to Color.Black.copy(alpha = 0.995f),
+                            1f to Color.Black.copy(alpha = 0.985f),
+                        ),
+                    ),
+                ),
+        )
+    }
+}
+''',
+    '''@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .background(Color.Black),
+    )
+}
+''',
+    "v9.14 deterministic solid black information bed",
+)
+hero_path.write_text(hero, encoding="utf-8")
+
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''            com.nuvio.app.features.home.components.CatalogHeroInformationBed(
+                visible = readyObserved.value,
+''',
+    '''            com.nuvio.app.features.home.components.CatalogHeroInformationBed(
+                visible = source.value != null,
+''',
+    "v9.14 deterministic visual smoke black bed",
+)
+main_path.write_text(main, encoding="utf-8")
+
+print("Applied V9.14 deterministic solid black information bed")
