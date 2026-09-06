@@ -4738,3 +4738,15 @@ bridge = bridge.replace(
 bridge_path.write_text(bridge, encoding="utf-8")
 
 print("Applied V9.17 seamless black seam + ~97%-black video edge over 45% width")
+
+
+# V9.18: make native WebView Hero overlay pure black to eliminate the #0D0D0D seam.
+bridge_kt_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt"
+bridge_kt = bridge_kt_path.read_text(encoding="utf-8")
+bridge_kt = bridge_kt.replace(
+    "rgba(13,13,13,",
+    "rgba(0,0,0,",
+)
+bridge_kt_path.write_text(bridge_kt, encoding="utf-8")
+
+print("Applied V9.18 pure-black native overlay; seam target RGB 0,0,0")
