@@ -3931,3 +3931,169 @@ import androidx.compose.foundation.layout.fillMaxWidth
 )
 main_path.write_text(main, encoding="utf-8")
 print("Applied V9.9.1 visual smoke layout imports")
+
+
+# V9.10: harden native Hero stacking with explicit CSS !important and keep native video out of the text column.
+hero = hero_path.read_text(encoding="utf-8")
+hero = replace_once(
+    hero,
+    '''                .fillMaxWidth(0.58f)
+                .fillMaxHeight(),
+''',
+    '''                .fillMaxWidth(0.54f)
+                .fillMaxHeight(),
+''',
+    "v9.10 keep native player clear of text column",
+)
+hero = replace_once(
+    hero,
+    '''                .padding(start = 34.dp, end = 28.dp, bottom = 34.dp)
+                .widthIn(max = 570.dp),
+''',
+    '''                .padding(start = 34.dp, end = 28.dp, bottom = 34.dp)
+                .fillMaxWidth(0.43f),
+''',
+    "v9.10 explicit top information layer width",
+)
+hero = replace_once(
+    hero,
+    '''                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 1.00f),
+                            0.28f to backgroundColor.copy(alpha = 0.99f),
+                            0.40f to backgroundColor.copy(alpha = 0.96f),
+                            0.50f to backgroundColor.copy(alpha = 0.82f),
+                            0.60f to backgroundColor.copy(alpha = 0.56f),
+                            0.70f to backgroundColor.copy(alpha = 0.28f),
+                            0.82f to backgroundColor.copy(alpha = 0.07f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+''',
+    '''                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 1.00f),
+                            0.24f to backgroundColor.copy(alpha = 0.98f),
+                            0.36f to backgroundColor.copy(alpha = 0.88f),
+                            0.44f to backgroundColor.copy(alpha = 0.54f),
+                            0.50f to backgroundColor.copy(alpha = 0.16f),
+                            0.56f to Color.Transparent,
+                            1f to Color.Transparent,
+                        ),
+                    ),
+''',
+    "v9.10 Compose backdrop-only blend",
+)
+hero_path.write_text(hero, encoding="utf-8")
+
+bridge_kt_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt"
+bridge_kt = bridge_kt_path.read_text(encoding="utf-8")
+bridge_kt = replace_once(
+    bridge_kt,
+    '''                html, body {
+                  width: 100%;
+                  height: 100%;
+                  margin: 0;
+                  overflow: hidden;
+                  background: transparent !important;
+                  pointer-events: none;
+                }
+                #heroBlend {
+                  position: fixed;
+                  inset: 0;
+                  pointer-events: none;
+                  background:
+''',
+    '''                html,
+                body {
+                  position: fixed !important;
+                  inset: 0 !important;
+                  width: 100% !important;
+                  height: 100% !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  overflow: hidden !important;
+                  background: transparent !important;
+                  pointer-events: none !important;
+                  isolation: isolate !important;
+                  z-index: 2147483640 !important;
+                }
+
+                body > * {
+                  pointer-events: none !important;
+                }
+
+                #heroBlend {
+                  display: block !important;
+                  position: fixed !important;
+                  inset: 0 !important;
+                  width: 100% !important;
+                  height: 100% !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  opacity: 1 !important;
+                  visibility: visible !important;
+                  pointer-events: none !important;
+                  z-index: 2147483647 !important;
+                  transform: translateZ(0) !important;
+                  will-change: opacity !important;
+                  background:
+''',
+    "v9.10 native CSS important stacking",
+)
+bridge_kt = replace_once(
+    bridge_kt,
+    '''                      rgba(13,13,13,1.00) 0%,
+                      rgba(13,13,13,0.98) 7%,
+                      rgba(13,13,13,0.90) 13%,
+                      rgba(13,13,13,0.72) 19%,
+                      rgba(13,13,13,0.48) 25%,
+                      rgba(13,13,13,0.24) 31%,
+                      rgba(13,13,13,0.08) 37%,
+                      rgba(13,13,13,0.00) 43%
+''',
+    '''                      rgba(13,13,13,1.00) 0%,
+                      rgba(13,13,13,0.99) 10%,
+                      rgba(13,13,13,0.94) 18%,
+                      rgba(13,13,13,0.82) 27%,
+                      rgba(13,13,13,0.64) 36%,
+                      rgba(13,13,13,0.42) 45%,
+                      rgba(13,13,13,0.22) 54%,
+                      rgba(13,13,13,0.08) 63%,
+                      rgba(13,13,13,0.00) 72%
+''',
+    "v9.10 wider native left fade",
+)
+bridge_kt = replace_once(
+    bridge_kt,
+    '''                      rgba(13,13,13,0.08) 0%,
+                      rgba(13,13,13,0.00) 14%,
+                      rgba(13,13,13,0.00) 70%,
+                      rgba(13,13,13,0.38) 87%,
+                      rgba(13,13,13,0.92) 100%
+''',
+    '''                      rgba(13,13,13,0.10) 0%,
+                      rgba(13,13,13,0.00) 16%,
+                      rgba(13,13,13,0.00) 68%,
+                      rgba(13,13,13,0.30) 82%,
+                      rgba(13,13,13,0.66) 92%,
+                      rgba(13,13,13,0.96) 100%
+''',
+    "v9.10 stronger native shelf blend",
+)
+bridge_kt_path.write_text(bridge_kt, encoding="utf-8")
+
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''                        .fillMaxWidth(0.58f)
+                        .fillMaxHeight(),
+''',
+    '''                        .fillMaxWidth(0.54f)
+                        .fillMaxHeight(),
+''',
+    "v9.10 visual smoke native width",
+)
+main_path.write_text(main, encoding="utf-8")
+
+print("Applied V9.10 CSS !important stacking + non-overlapping text/player geometry")
