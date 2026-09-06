@@ -135,7 +135,7 @@ jobs:
               (platform,"windowsHost"),
               (hero,"fillMaxWidth(0.54f)"),
               (hero,"fillMaxWidth(0.43f)"),
-              (hero,"0.60f to backgroundColor.copy(alpha = 0.56f)"),
+              (hero,"0.44f to backgroundColor.copy(alpha = 0.54f)"),
               (hero,"0.86f to backgroundColor.copy(alpha = 0.42f)"),
               (hero,"isCatalogHeroTrailerPlaybackEnabled"),
               (policy,"actual val heroTrailerPlaybackSupported: Boolean = true"),
