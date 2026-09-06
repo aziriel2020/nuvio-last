@@ -1,0 +1,64 @@
+name: Probe Official Nuvio Service
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe official discovery and auth
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+
+          discovery_url = "https://api.nuvio.tv/.well-known/nuvio"
+          req = urllib.request.Request(discovery_url, headers={"User-Agent":"NuvioDesktop-V8-Probe"})
+          with urllib.request.urlopen(req, timeout=20) as response:
+              if response.status != 200:
+                  raise SystemExit(f"Discovery HTTP {response.status}")
+              data = json.load(response)
+
+          backend = str(data.get("backend_url","")).rstrip("/")
+          key = str(data.get("publishable_key",""))
+          print("discovery_version=", data.get("version"))
+          print("service=", data.get("service"))
+          print("self_hosted=", data.get("self_hosted"))
+          print("backend_url=", backend)
+          print("publishable_key_present=", bool(key), "length=", len(key))
+          print("capabilities=", data.get("capabilities"))
+
+          if data.get("service") != "nuvio":
+              raise SystemExit("Wrong discovery service")
+          if backend != "https://api.nuvio.tv":
+              raise SystemExit(f"Unexpected official backend: {backend}")
+          if not key:
+              raise SystemExit("Missing publishable key")
+
+          auth_url = backend + "/auth/v1/settings"
+          auth_req = urllib.request.Request(
+              auth_url,
+              headers={
+                  "apikey": key,
+                  "Authorization": "Bearer " + key,
+                  "User-Agent":"NuvioDesktop-V8-Probe",
+              },
+          )
+          try:
+              with urllib.request.urlopen(auth_req, timeout=20) as response:
+                  body = response.read(4096)
+                  print("auth_settings_http=", response.status, "bytes=", len(body))
+                  if response.status != 200:
+                      raise SystemExit(f"Auth settings HTTP {response.status}")
+          except urllib.error.HTTPError as e:
+              raise SystemExit(f"Auth settings HTTP {e.code}")
+
+          print("OFFICIAL_NUVIO_PROBE_OK")
+          PY
