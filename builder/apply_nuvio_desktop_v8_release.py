@@ -1173,6 +1173,13 @@ print("Applied V5: single cover hero + bundled/resilient profile avatars")
 shelf_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt"
 shelf = shelf_path.read_text(encoding="utf-8")
 
+if "import androidx.compose.foundation.border\n" not in shelf:
+    shelf = shelf.replace(
+        "import androidx.compose.foundation.background\n",
+        "import androidx.compose.foundation.background\nimport androidx.compose.foundation.border\n",
+        1,
+    )
+
 shelf = replace_once(
     shelf,
     "import androidx.compose.foundation.interaction.collectIsHoveredAsState\n",
