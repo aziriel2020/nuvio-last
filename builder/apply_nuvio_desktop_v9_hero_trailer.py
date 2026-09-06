@@ -4660,3 +4660,66 @@ bridge = bridge.replace(
 bridge_path.write_text(bridge, encoding="utf-8")
 
 print("Applied V9.15 approved backdrop-visible information gradient + 13% screen fusion")
+
+
+# V9.16: exact user-locked black information panel + 90% black video edge.
+hero = hero_path.read_text(encoding="utf-8")
+hero = replace_once(
+    hero,
+    '''@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .background(
+                Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0f to Color.Black.copy(alpha = 0.92f),
+                        0.56f to Color.Black.copy(alpha = 0.90f),
+                        0.74f to Color.Black.copy(alpha = 0.84f),
+                        0.88f to Color.Black.copy(alpha = 0.72f),
+                        1f to Color.Black.copy(alpha = 0.58f),
+                    ),
+                ),
+            )
+            .background(
+                Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        0f to Color.Black.copy(alpha = 0.10f),
+                        0.70f to Color.Transparent,
+                        0.84f to Color.Black.copy(alpha = 0.22f),
+                        1f to Color.Black.copy(alpha = 0.72f),
+                    ),
+                ),
+            ),
+    )
+}
+''',
+    '''@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .background(Color.Black),
+    )
+}
+''',
+    "v9.16 full black information panel",
+)
+hero_path.write_text(hero, encoding="utf-8")
+
+bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+bridge = bridge_path.read_text(encoding="utf-8")
+bridge = bridge.replace(
+    "pow(clip(X/(W*0.24),0,1),0.72)",
+    "(0.10+0.90*pow(clip(X/(W*0.40),0,1),0.72))",
+)
+bridge_path.write_text(bridge, encoding="utf-8")
+
+print("Applied V9.16 exact full-black left panel + 90%-black video edge")
