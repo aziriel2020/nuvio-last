@@ -4593,3 +4593,70 @@ main = replace_once(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9.14 deterministic solid black information bed")
+
+
+# V9.15: match the approved layering diagram exactly.
+# Keep the left backdrop image visible under a strong black information gradient,
+# while the native video performs its own smooth black->video fusion at the seam.
+hero = hero_path.read_text(encoding="utf-8")
+
+hero = replace_once(
+    hero,
+    '''@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .background(Color.Black),
+    )
+}
+''',
+    '''@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .background(
+                Brush.horizontalGradient(
+                    colorStops = arrayOf(
+                        0f to Color.Black.copy(alpha = 0.92f),
+                        0.56f to Color.Black.copy(alpha = 0.90f),
+                        0.74f to Color.Black.copy(alpha = 0.84f),
+                        0.88f to Color.Black.copy(alpha = 0.72f),
+                        1f to Color.Black.copy(alpha = 0.58f),
+                    ),
+                ),
+            )
+            .background(
+                Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        0f to Color.Black.copy(alpha = 0.10f),
+                        0.70f to Color.Transparent,
+                        0.84f to Color.Black.copy(alpha = 0.22f),
+                        1f to Color.Black.copy(alpha = 0.72f),
+                    ),
+                ),
+            ),
+    )
+}
+''',
+    "v9.15 backdrop-visible black information gradient",
+)
+
+hero_path.write_text(hero, encoding="utf-8")
+
+bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+bridge = bridge_path.read_text(encoding="utf-8")
+bridge = bridge.replace(
+    "pow(clip(X/(W*0.42),0,1),0.70)",
+    "pow(clip(X/(W*0.24),0,1),0.72)",
+)
+bridge_path.write_text(bridge, encoding="utf-8")
+
+print("Applied V9.15 approved backdrop-visible information gradient + 13% screen fusion")
