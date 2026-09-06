@@ -3915,3 +3915,19 @@ main = replace_once(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9.9 native WebView2 Hero blend + 58% placement + visual smoke")
+
+
+# V9.9.1: visual smoke harness layout imports.
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''import androidx.compose.foundation.layout.fillMaxSize
+''',
+    '''import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+''',
+    "v9.9.1 visual smoke layout imports",
+)
+main_path.write_text(main, encoding="utf-8")
+print("Applied V9.9.1 visual smoke layout imports")
