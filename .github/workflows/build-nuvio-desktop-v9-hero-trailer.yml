@@ -124,13 +124,10 @@ jobs:
               (win,"PlayerResizeMode.Zoom"),
               (win,"TrailerExtractionPlatform.defaultHeaders"),
               (win,"decoderPriority = 1"),
-              (win,"setHeroTrailerOverlay("),
               (win,"heroTrailerControlsPageUrl"),
               (win,"requiredSize(2.dp)"),
               (bridge,'setMpvOptionStringLocked("user-agent"'),
               (bridge,'setMpvOptionStringLocked("referrer"'),
-              (bridge,"nuvioHeroTrailerBlend"),
-              (bridge,"applyHeroTrailerOverlay"),
               (bridgeKt,"hero-player-ui"),
               (bridgeKt,"rgba(13,13,13,0.48) 25%"),
               (platform,"windowsHost"),
@@ -233,44 +230,10 @@ jobs:
             throw "Hero trailer did not reach ready state. Marker=$result"
           }
           Write-Host "Hero trailer native Windows first-frame smoke PASSED."
-          Start-Sleep -Seconds 2
-          $visualPath = Join-Path $env:RUNNER_TEMP "nuvio-hero-visual-smoke.png"
-          Add-Type -AssemblyName System.Drawing
-          Add-Type @"
-          using System;
-          using System.Runtime.InteropServices;
-          public static class NuvioWinRect {
-              [StructLayout(LayoutKind.Sequential)]
-              public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
-              [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-          }
-"@
-          $app.Refresh()
-          $hwnd = $app.MainWindowHandle
-          if ($hwnd -eq [IntPtr]::Zero) { throw "Hero visual smoke window handle unavailable." }
-          $rect = New-Object NuvioWinRect+RECT
-          if (-not [NuvioWinRect]::GetWindowRect($hwnd, [ref]$rect)) { throw "GetWindowRect failed." }
-          $w = [Math]::Max(1, $rect.Right - $rect.Left)
-          $h = [Math]::Max(1, $rect.Bottom - $rect.Top)
-          $bmp = New-Object System.Drawing.Bitmap $w,$h
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($rect.Left,$rect.Top,0,0,(New-Object System.Drawing.Size $w,$h))
-          $g.Dispose()
-          $bmp.Save($visualPath,[System.Drawing.Imaging.ImageFormat]::Png)
-          $bmp.Dispose()
-          Copy-Item $visualPath (Join-Path (Get-Location) "nuvio-hero-visual-smoke.png")
-          Write-Host "Hero visual smoke captured: $w x $h"
           if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
           Start-Sleep -Milliseconds 300
           if (Test-Path $stdout) { Get-Content $stdout -Tail 120 }
           if (Test-Path $stderr) { Get-Content $stderr -Tail 120 }
-
-      - name: Upload Hero visual smoke
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuvio-hero-visual-smoke
-          path: nuvio-hero-visual-smoke.png
-          retention-days: 14
 
       - name: Final official service check
         shell: pwsh
