@@ -1358,10 +1358,12 @@ poster = replace_once(
 )
 poster = replace_once(
     poster,
-    '''            isWatched = isWatched,
+    '''            bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
+            isWatched = isWatched,
             onClick = onClick,
 ''',
-    '''            isWatched = isWatched,
+    '''            bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
+            isWatched = isWatched,
             onFocusChanged = if (onHoverChanged != null) {
                 { focused ->
                     keyboardFocused = focused
