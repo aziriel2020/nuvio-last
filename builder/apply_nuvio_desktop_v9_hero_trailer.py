@@ -2962,7 +2962,7 @@ trailer_platform = replace_once(
                 (bestVideo == null || bestManifest.height >= bestVideo.height)
         }
         val combinedUrl = if (bestCombinedIsManifest) {
-            bestManifest.selectedVariantUrl
+            bestManifest?.selectedVariantUrl
         } else {
             bestProgressive?.url ?: bestManifest?.selectedVariantUrl
         }
