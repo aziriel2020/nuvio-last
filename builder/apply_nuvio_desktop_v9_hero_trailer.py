@@ -3394,10 +3394,10 @@ extractor = replace_once(
             timeoutMillis = TRAILER_REQUEST_TIMEOUT_MS,
         )
         if (!watchResponse.ok) {
-            throw IllegalStateException("Failed to fetch watch page (\${watchResponse.status})")
+            throw IllegalStateException("Failed to fetch watch page (${watchResponse.status})")
         }
         TrailerExtractionPlatform.diagnostic(
-            "watch ok status=\${watchResponse.status} bytes=\${watchResponse.body.length}",
+            "watch ok status=${watchResponse.status} bytes=${watchResponse.body.length}",
         )
 
         val watchConfig = getWatchConfig(watchResponse.body)
@@ -3415,12 +3415,12 @@ extractor = replace_once(
         )
         val watchConfig = if (watchResponse.ok) {
             TrailerExtractionPlatform.diagnostic(
-                "watch config ok status=\${watchResponse.status} bytes=\${watchResponse.body.length}",
+                "watch config ok status=${watchResponse.status} bytes=${watchResponse.body.length}",
             )
             getWatchConfig(watchResponse.body)
         } else {
             TrailerExtractionPlatform.diagnostic(
-                "watch config unavailable status=\${watchResponse.status}; using fallback key",
+                "watch config unavailable status=${watchResponse.status}; using fallback key",
             )
             WatchConfig(apiKey = null, visitorData = null)
         }
@@ -3456,7 +3456,7 @@ extractor = replace_once(
                     !watchConfig.visitorData.isNullOrBlank()
                 ) {
                     TrailerExtractionPlatform.diagnostic(
-                        "client=\${client.key} status=LOGIN_REQUIRED; retrying without visitor data",
+                        "client=${client.key} status=LOGIN_REQUIRED; retrying without visitor data",
                     )
                     playerResponse = fetchPlayerResponse(
                         apiKey = apiKey,
@@ -3472,7 +3472,7 @@ extractor = replace_once(
                         ?.stringValue("reason")
                         .orEmpty()
                     TrailerExtractionPlatform.diagnostic(
-                        "client=\${client.key} playability=$playabilityStatus reason=$reason",
+                        "client=${client.key} playability=$playabilityStatus reason=$reason",
                     )
                     return@runCatching
                 }
