@@ -108,6 +108,7 @@ jobs:
           hero=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
           platform=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/features/trailer/TrailerExtractionPlatform.desktop.kt").read_text(encoding="utf-8")
           main=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt").read_text(encoding="utf-8")
+          bridge=(root/"composeApp/src/desktopMain/native/windows/player_bridge.cpp").read_text(encoding="utf-8")
           for text,token in [
               (win,"NativePlayerController"),
               (win,"SwingPanel"),
@@ -116,6 +117,9 @@ jobs:
               (platform,"windowsHost"),
               (hero,"fillMaxWidth(0.62f)"),
               (main,"HeroTrailerSmokeHarness"),
+              (win,"TrailerExtractionPlatform.defaultHeaders"),
+              (bridge,"setMpvOptionStringLocked(\"user-agent\""),
+              (bridge,"setMpvOptionStringLocked(\"referrer\""),
           ]:
               if token not in text:
                   raise SystemExit("Missing V9 contract: "+token)
@@ -171,7 +175,10 @@ jobs:
           $marker = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-smoke.txt"
           Remove-Item $marker -Force -ErrorAction SilentlyContinue
           $env:NUVIO_HERO_TRAILER_SMOKE_MARKER = $marker
-          $app = Start-Process -FilePath $exe -PassThru
+          $stdout = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-stderr.log"
+          Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+          $app = Start-Process -FilePath $exe -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 
           $deadline = (Get-Date).AddSeconds(90)
           $result = $null
@@ -189,6 +196,10 @@ jobs:
           }
           if ($result -ne "ready") {
             if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+            Write-Host "=== Nuvio stdout ==="
+            if (Test-Path $stdout) { Get-Content $stdout -Tail 400 }
+            Write-Host "=== Nuvio stderr ==="
+            if (Test-Path $stderr) { Get-Content $stderr -Tail 400 }
             throw "Hero trailer did not reach ready state. Marker=$result"
           }
           Write-Host "Hero trailer native Windows first-frame smoke PASSED."
