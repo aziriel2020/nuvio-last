@@ -3671,3 +3671,247 @@ main = replace_once(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9.8 reference Hero blend + Windows sound-on migration")
+
+
+# V9.9: render the Hero blend in the native WebView2 layer that actually sits above mpv.
+hero = hero_path.read_text(encoding="utf-8")
+hero = replace_once(
+    hero,
+    '''                .fillMaxWidth(0.68f)
+                .fillMaxHeight(),
+''',
+    '''                .fillMaxWidth(0.58f)
+                .fillMaxHeight(),
+''',
+    "v9.9 reference player width",
+)
+hero_path.write_text(hero, encoding="utf-8")
+
+bridge_kt_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt"
+bridge_kt = bridge_kt_path.read_text(encoding="utf-8")
+bridge_kt = replace_once(
+    bridge_kt,
+    '''    val controlsPageUrl: String by lazy { controlsPageAssets.url }
+    private val controlsPageAssets: ControlsPageAssets by lazy { exportControlsPageAssets() }
+''',
+    '''    val controlsPageUrl: String by lazy { controlsPageAssets.url }
+    val heroTrailerControlsPageUrl: String by lazy { heroTrailerControlsPageAssets.url }
+
+    private val controlsPageAssets: ControlsPageAssets by lazy { exportControlsPageAssets() }
+    private val heroTrailerControlsPageAssets: ControlsPageAssets by lazy {
+        val html = """
+            <!doctype html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <style>
+                html, body {
+                  width: 100%;
+                  height: 100%;
+                  margin: 0;
+                  overflow: hidden;
+                  background: transparent !important;
+                  pointer-events: none;
+                }
+                #heroBlend {
+                  position: fixed;
+                  inset: 0;
+                  pointer-events: none;
+                  background:
+                    linear-gradient(
+                      90deg,
+                      rgba(13,13,13,1.00) 0%,
+                      rgba(13,13,13,0.98) 7%,
+                      rgba(13,13,13,0.90) 13%,
+                      rgba(13,13,13,0.72) 19%,
+                      rgba(13,13,13,0.48) 25%,
+                      rgba(13,13,13,0.24) 31%,
+                      rgba(13,13,13,0.08) 37%,
+                      rgba(13,13,13,0.00) 43%
+                    ),
+                    linear-gradient(
+                      180deg,
+                      rgba(13,13,13,0.08) 0%,
+                      rgba(13,13,13,0.00) 14%,
+                      rgba(13,13,13,0.00) 70%,
+                      rgba(13,13,13,0.38) 87%,
+                      rgba(13,13,13,0.92) 100%
+                    );
+                }
+              </style>
+            </head>
+            <body><div id="heroBlend"></div></body>
+            </html>
+        """.trimIndent().toByteArray(Charsets.UTF_8)
+        val heroRoot = DesktopCache.installVersionedFiles(
+            "hero-player-ui",
+            mapOf("hero.html" to html),
+        ).toFile()
+        ControlsPageAssets(url = heroRoot.resolve("hero.html").toURI().toASCIIString())
+    }
+''',
+    "v9.9 native Hero overlay controls page",
+)
+bridge_kt_path.write_text(bridge_kt, encoding="utf-8")
+
+native_controller_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt"
+native_controller = native_controller_path.read_text(encoding="utf-8")
+native_controller = replace_once(
+    native_controller,
+    '''    private val onCreateWaitCompleted: () -> Unit = {},
+) : PlayerEngineController {
+''',
+    '''    private val onCreateWaitCompleted: () -> Unit = {},
+    private val controlsPageUrl: String = NativePlayerBridge.controlsPageUrl,
+) : PlayerEngineController {
+''',
+    "v9.9 configurable native controls page",
+)
+native_controller = replace_once(
+    native_controller,
+    '''                        NativePlayerBridge.controlsPageUrl,
+''',
+    '''                        controlsPageUrl,
+''',
+    "v9.9 use configured controls page",
+)
+native_controller_path.write_text(native_controller, encoding="utf-8")
+
+windows_hero_player_path = root / "composeApp/src/windowsDesktopMain/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.desktop.kt"
+win = windows_hero_player_path.read_text(encoding="utf-8")
+win = replace_once(
+    win,
+    '''import com.nuvio.app.features.player.desktop.NativePlayerController
+import com.nuvio.app.features.player.desktop.NativePlayerHost
+''',
+    '''import com.nuvio.app.features.player.desktop.NativePlayerBridge
+import com.nuvio.app.features.player.desktop.NativePlayerController
+import com.nuvio.app.features.player.desktop.NativePlayerHost
+''',
+    "v9.9 Hero bridge import",
+)
+win = replace_once(
+    win,
+    '''    val platformDensity = LocalNuvioPlatformDensity.current
+    val host = remember { NativePlayerHost() }
+    val controller = remember(host) { NativePlayerController(host) }
+''',
+    '''    val platformDensity = LocalNuvioPlatformDensity.current
+    val host = remember { NativePlayerHost() }
+    val controller = remember(host) {
+        NativePlayerController(
+            host = host,
+            controlsPageUrl = NativePlayerBridge.heroTrailerControlsPageUrl,
+        )
+    }
+''',
+    "v9.9 Hero native gradient page",
+)
+win = replace_once(
+    win,
+    '''                modifier = if (hostFirstPaintComplete.value) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .requiredSize(1.dp)
+                },
+''',
+    '''                modifier = if (readyReported.value) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .requiredSize(2.dp)
+                },
+''',
+    "v9.9 keep native player tiny until first real frame",
+)
+windows_hero_player_path.write_text(win, encoding="utf-8")
+
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''    source.value?.let { playbackSource ->
+        com.nuvio.app.features.details.components.HeroTrailerPlayerSurface(
+''',
+    '''    androidx.compose.material3.Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = androidx.compose.ui.graphics.Color(0xFF0D0D0D),
+    ) {
+        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+            source.value?.let { playbackSource ->
+                com.nuvio.app.features.details.components.HeroTrailerPlayerSurface(
+''',
+    "v9.9 visual smoke Hero container",
+)
+main = replace_once(
+    main,
+    '''            modifier = Modifier.fillMaxSize(),
+            onReady = {
+                if (!terminal.value) {
+                    readyObserved.value = true
+                    mark("ready")
+                }
+            },
+''',
+    '''                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.CenterEnd)
+                        .fillMaxWidth(0.58f)
+                        .fillMaxHeight(),
+                    onReady = {
+                        if (!terminal.value) {
+                            readyObserved.value = true
+                            val screenshotPath =
+                                System.getenv("NUVIO_HERO_TRAILER_SMOKE_SCREENSHOT")
+                                    ?.takeIf { it.isNotBlank() }
+                            if (screenshotPath == null) {
+                                mark("ready")
+                            } else {
+                                Thread {
+                                    runCatching {
+                                        Thread.sleep(900L)
+                                        val toolkit = java.awt.Toolkit.getDefaultToolkit()
+                                        val screen = java.awt.Rectangle(toolkit.screenSize)
+                                        val image = java.awt.Robot().createScreenCapture(screen)
+                                        val file = java.io.File(screenshotPath)
+                                        file.parentFile?.mkdirs()
+                                        javax.imageio.ImageIO.write(image, "png", file)
+                                    }
+                                    mark("ready")
+                                }.apply {
+                                    isDaemon = true
+                                    name = "nuvio-hero-visual-smoke"
+                                    start()
+                                }
+                            }
+                        }
+                    },
+''',
+    "v9.9 visual smoke screenshot after ready",
+)
+main = replace_once(
+    main,
+    '''            onError = {
+                terminal.value = true
+                mark("error:player")
+            },
+        )
+    }
+}
+''',
+    '''                    onError = {
+                        terminal.value = true
+                        mark("error:player")
+                    },
+                )
+            }
+        }
+    }
+}
+''',
+    "v9.9 close visual smoke container",
+)
+main_path.write_text(main, encoding="utf-8")
+
+print("Applied V9.9 native WebView2 Hero blend + 58% placement + visual smoke")

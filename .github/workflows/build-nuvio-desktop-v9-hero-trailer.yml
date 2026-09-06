@@ -112,6 +112,7 @@ jobs:
           platform=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/features/trailer/TrailerExtractionPlatform.desktop.kt").read_text(encoding="utf-8")
           main=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt").read_text(encoding="utf-8")
           bridge=(root/"composeApp/src/desktopMain/native/windows/player_bridge.cpp").read_text(encoding="utf-8")
+          bridgeKt=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt").read_text(encoding="utf-8")
           policy=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/core/build/AppFeaturePolicy.desktop.kt").read_text(encoding="utf-8")
           settings=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt").read_text(encoding="utf-8")
           style=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt").read_text(encoding="utf-8")
@@ -123,10 +124,14 @@ jobs:
               (win,"PlayerResizeMode.Zoom"),
               (win,"TrailerExtractionPlatform.defaultHeaders"),
               (win,"decoderPriority = 1"),
+              (win,"heroTrailerControlsPageUrl"),
+              (win,"requiredSize(2.dp)"),
               (bridge,'setMpvOptionStringLocked("user-agent"'),
               (bridge,'setMpvOptionStringLocked("referrer"'),
+              (bridgeKt,"hero-player-ui"),
+              (bridgeKt,"rgba(13,13,13,0.48) 25%"),
               (platform,"windowsHost"),
-              (hero,"fillMaxWidth(0.68f)"),
+              (hero,"fillMaxWidth(0.58f)"),
               (hero,"0.60f to backgroundColor.copy(alpha = 0.56f)"),
               (hero,"0.86f to backgroundColor.copy(alpha = 0.42f)"),
               (hero,"isCatalogHeroTrailerPlaybackEnabled"),
@@ -195,6 +200,7 @@ jobs:
           $marker = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-smoke.txt"
           Remove-Item $marker -Force -ErrorAction SilentlyContinue
           $env:NUVIO_HERO_TRAILER_SMOKE_MARKER = $marker
+          $env:NUVIO_HERO_TRAILER_SMOKE_SCREENSHOT = Join-Path $env:GITHUB_WORKSPACE "NuvioDesktop-V9-Hero-Visual-Smoke.png"
           $stdout = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-stdout.txt"
           $stderr = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-stderr.txt"
           Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
@@ -239,5 +245,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nuvio-desktop-v9-hero-trailer-windows-msi
-          path: NuvioDesktop-V9-Hero-Trailer.msi
+          path: |
+            NuvioDesktop-V9-Hero-Trailer.msi
+            NuvioDesktop-V9-Hero-Visual-Smoke.png
           retention-days: 14
