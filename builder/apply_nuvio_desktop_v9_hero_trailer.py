@@ -3191,10 +3191,28 @@ import com.nuvio.app.isWindows
 )
 style = replace_once(
     style,
-    '''    val hoverPreviewTrailerEnabled: Boolean = false,
+    '''@Serializable
+private data class StoredPosterCardStylePreferences(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,
+    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = false,
     val hoverPreviewTrailerSoundEnabled: Boolean = false,
 ''',
-    '''    val hoverPreviewTrailerEnabled: Boolean = false,
+    '''@Serializable
+private data class StoredPosterCardStylePreferences(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,
+    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = false,
     val hoverPreviewTrailerConfigured: Boolean = false,
     val hoverPreviewTrailerSoundEnabled: Boolean = false,
 ''',
@@ -3202,10 +3220,26 @@ style = replace_once(
 )
 style = replace_once(
     style,
-    '''    val hoverPreviewTrailerEnabled: Boolean = false,
+    '''data class PosterCardStyleUiState(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,
+    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = false,
     val hoverPreviewTrailerSoundEnabled: Boolean = false,
 ''',
-    '''    val hoverPreviewTrailerEnabled: Boolean = isWindows,
+    '''data class PosterCardStyleUiState(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,
+    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = isWindows,
     val hoverPreviewTrailerSoundEnabled: Boolean = false,
 ''',
     "v9.6 Windows Hero trailer default",
