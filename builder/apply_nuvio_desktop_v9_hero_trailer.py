@@ -3068,3 +3068,22 @@ windows_bridge = replace_once(
 windows_bridge_path.write_text(windows_bridge, encoding="utf-8")
 
 print("Applied V9.4 mpv User-Agent/referrer option mapping on Windows")
+
+# V9.5: use Nuvio's normal decoder policy for the Hero player. Priority 0 disables
+# software fallback in the Windows bridge; priority 1 keeps hwdec=auto but allows
+# libavcodec fallback, matching PlayerSettingsRepository's default.
+windows_hero_player = windows_hero_player_path.read_text(encoding="utf-8")
+windows_hero_player = replace_once(
+    windows_hero_player,
+    '''            decoderPriority = 0,
+            nvidiaRtxSuperResolutionEnabled = false,
+''',
+    '''            decoderPriority = 1,
+            nvidiaRtxSuperResolutionEnabled = false,
+''',
+    "v9 hero decoder software fallback",
+)
+windows_hero_player_path.write_text(windows_hero_player, encoding="utf-8")
+
+print("Applied V9.5 normal decoder fallback policy for Windows Hero trailer")
+
