@@ -2932,3 +2932,43 @@ resolver = replace_once(
 resolver_path.write_text(resolver, encoding="utf-8")
 
 print("Applied V9.1 transient YouTube resolver retry")
+
+
+# V9.2: Windows Hero autoplay prefers one-file progressive YouTube streams over HLS.
+trailer_platform_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/trailer/TrailerExtractionPlatform.desktop.kt"
+trailer_platform = trailer_platform_path.read_text(encoding="utf-8")
+trailer_platform = replace_once(
+    trailer_platform,
+    '''        val bestCombinedIsManifest = bestManifest != null &&
+            (bestProgressive == null || bestManifest.height > bestProgressive.height)
+        val preferManifestPlayback = bestManifest != null &&
+            (bestVideo == null || bestManifest.height >= bestVideo.height)
+        val combinedUrl = if (bestCombinedIsManifest) {
+            bestManifest.manifestUrl
+        } else {
+            bestProgressive?.url
+        }
+''',
+    '''        val bestCombinedIsManifest = if (windowsHost) {
+            bestProgressive == null && bestManifest != null
+        } else {
+            bestManifest != null &&
+                (bestProgressive == null || bestManifest.height > bestProgressive.height)
+        }
+        val preferManifestPlayback = if (windowsHost) {
+            bestProgressive == null && bestManifest != null
+        } else {
+            bestManifest != null &&
+                (bestVideo == null || bestManifest.height >= bestVideo.height)
+        }
+        val combinedUrl = if (bestCombinedIsManifest) {
+            bestManifest.selectedVariantUrl
+        } else {
+            bestProgressive?.url ?: bestManifest?.selectedVariantUrl
+        }
+''',
+    "v9 Windows progressive Hero source priority",
+)
+trailer_platform_path.write_text(trailer_platform, encoding="utf-8")
+
+print("Applied V9.2 Windows progressive-first Hero trailer source policy")
