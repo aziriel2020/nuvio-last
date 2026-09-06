@@ -143,11 +143,12 @@ jobs:
               (hero,"fillMaxWidth(0.46f)"),
               (hero,"CatalogHeroInformationBed"),
               (hero,"trailerVisuallyReady"),
+              (hero,"trailerPlaybackSource != null || trailerVisuallyReady"),
               (hero,"zIndex(10f)"),
               (hero,"zIndex(20f)"),
               (hero,"zIndex(30f)"),
               (hero,"zIndex(50f)"),
-              (hero,"0.72f to Color.Black"),
+              (hero,"background(Color.Black)"),
               (hoverTrailer,"onPlaybackVisibilityChanged"),
               (hoverTrailer,"DisposableEffect"),
               (hero,"0.44f to backgroundColor.copy(alpha = 0.54f)"),
@@ -165,6 +166,7 @@ jobs:
               (main,"muted = false"),
               (main,"HERO INFORMATION"),
               (main,"CatalogHeroInformationBed"),
+              (main,"visible = source.value != null"),
           ]:
               if token not in text:
                   raise SystemExit("Missing V9 contract: "+token)
