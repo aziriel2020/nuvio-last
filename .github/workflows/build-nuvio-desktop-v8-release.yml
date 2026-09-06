@@ -1,0 +1,231 @@
+name: Build Nuvio Desktop V8 Release MSI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+
+      - name: Checkout NuvioDesktop Dev
+        shell: pwsh
+        run: |
+          git clone --branch Dev --single-branch https://github.com/NuvioMedia/NuvioDesktop.git NuvioDesktop
+
+      - name: Apply V8 patch
+        shell: pwsh
+        run: |
+          python builder/apply_nuvio_desktop_v8_release.py NuvioDesktop
+
+      - name: Fetch Windows runtime
+        shell: bash
+        working-directory: NuvioDesktop
+        run: |
+          git lfs pull --include="composeApp/src/desktopMain/native/windows/runtime/**,composeApp/src/desktopMain/resources/torrserver/windows-amd64/TorrServer.exe" --exclude=""
+
+      - name: Resolve official Nuvio runtime configuration
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          request = Request("https://api.nuvio.tv/.well-known/nuvio", headers={"User-Agent":"NuvioDesktop-V8-Release"})
+          with urlopen(request, timeout=20) as response:
+              if response.status != 200:
+                  raise SystemExit(f"Discovery failed: HTTP {response.status}")
+              data = json.load(response)
+          backend = str(data.get("backend_url","")).strip().rstrip("/")
+          key = str(data.get("publishable_key","")).strip()
+          service = str(data.get("service","")).strip().lower()
+          if service != "nuvio":
+              raise SystemExit(f"Unexpected service: {service}")
+          if backend != "https://api.nuvio.tv":
+              raise SystemExit(f"Unexpected official backend: {backend}")
+          if not key:
+              raise SystemExit("Official publishable key is missing")
+          if "placeholder" in key.lower() or "example.invalid" in key.lower():
+              raise SystemExit("Invalid placeholder publishable key")
+          Path("local.properties").write_text("\n".join([
+              f"NUVIO_SUPABASE_URL={backend}",
+              f"NUVIO_SUPABASE_ANON_KEY={key}",
+              "NUVIO_SUPABASE_FALLBACK_URL=",
+              "TRAKT_CLIENT_ID=",
+              "TRAKT_CLIENT_SECRET=",
+              "SENTRY_DSN=",
+              "SENTRY_DESKTOP_DSN=",
+              "",
+          ]), encoding="utf-8")
+          print("Official Nuvio configuration resolved.")
+          print("backend=", backend)
+          print("publishable_key_present=", bool(key), "length=", len(key))
+          '@ | python -
+
+      - name: Verify official Nuvio auth with exact build config
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          @'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          values = {}
+          for line in Path("local.properties").read_text(encoding="utf-8").splitlines():
+              if "=" in line:
+                  k,v = line.split("=",1)
+                  values[k.strip()] = v.strip()
+          backend = values.get("NUVIO_SUPABASE_URL","").rstrip("/")
+          key = values.get("NUVIO_SUPABASE_ANON_KEY","")
+          if backend != "https://api.nuvio.tv" or not key:
+              raise SystemExit("Invalid exact MSI Nuvio config")
+          request = Request(backend + "/auth/v1/settings", headers={
+              "apikey": key,
+              "Authorization": "Bearer " + key,
+              "User-Agent":"NuvioDesktop-V8-Release",
+          })
+          with urlopen(request, timeout=20) as response:
+              body = response.read(8192)
+              if response.status != 200 or not body:
+                  raise SystemExit(f"Official auth settings failed: HTTP {response.status}")
+              print("Official Nuvio auth endpoint OK; bytes=", len(body))
+          '@ | python -
+
+      - name: Verify no placeholder runtime config
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          $content = Get-Content local.properties -Raw
+          if ($content -match "example\.invalid|placeholder") { throw "Placeholder runtime configuration detected." }
+          if ($content -notmatch "NUVIO_SUPABASE_URL=https://api\.nuvio\.tv") { throw "Official Nuvio backend is not configured." }
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install WebView2 SDK
+        shell: pwsh
+        run: |
+          $version = "1.0.4078.44"
+          nuget install Microsoft.Web.WebView2 -Version $version -OutputDirectory "$env:RUNNER_TEMP\nuget" -DirectDownload -NonInteractive -NoCache
+          $root = Join-Path $env:RUNNER_TEMP "nuget\Microsoft.Web.WebView2.$version"
+          "WEBVIEW2_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify V8 behavior contracts
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          @'
+          from pathlib import Path
+          root = Path(".")
+          poster = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt").read_text(encoding="utf-8")
+          shelf = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt").read_text(encoding="utf-8")
+          catalog = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogScreen.kt").read_text(encoding="utf-8")
+          folder = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt").read_text(encoding="utf-8")
+          hero = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
+          profiles = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles/ProfileModels.kt").read_text(encoding="utf-8")
+          for text, token in [
+              (poster, "isKeyboardSelected = isKeyboardSelected"),
+              (shelf, "isKeyboardSelected: Boolean = false"),
+              (catalog, "Key.DirectionLeft"),
+              (catalog, "Key.DirectionRight"),
+              (catalog, "Key.DirectionUp"),
+              (catalog, "Key.DirectionDown"),
+              (catalog, "gridState.animateScrollToItem(next)"),
+              (folder, "nextPosterRowPosition"),
+              (hero, 'text = "IMDb"'),
+              (hero, "Color(0xFFF5C518)"),
+              (profiles, "profileAvatarImageUrl"),
+          ]:
+              if token not in text:
+                  raise SystemExit(f"Missing V8 behavior contract: {token}")
+          if "keyboardSelectionModifier" in poster or ".then(keyboardSelectionModifier)" in poster:
+              raise SystemExit("Keyboard styling still wraps title area.")
+          expected = ".aspectRatio(shape.aspectRatio)\n                .then(\n                    if (isKeyboardSelected)"
+          if expected not in shelf:
+              raise SystemExit("Focus ring is not attached to artwork box.")
+          print("V8 UI contracts OK.")
+          '@ | python -
+
+      - name: Compile Desktop
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+
+      - name: Verify generated runtime configuration
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          $config = Get-ChildItem -Path composeApp\build -Recurse -Filter SupabaseConfig.kt | Select-Object -First 1
+          if (-not $config) { throw "Generated SupabaseConfig.kt not found." }
+          $content = Get-Content $config.FullName -Raw
+          if ($content -match "example\.invalid|placeholder") { throw "Generated app contains placeholder config." }
+          if ($content -notmatch 'const val URL = "https://api\.nuvio\.tv"') { throw "Generated app is not using official Nuvio backend." }
+
+      - name: Build MSI
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+
+      - name: Collect MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "NuvioDesktop\composeApp\build\compose" -Recurse -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw "No MSI produced." }
+          Copy-Item $msi.FullName "NuvioDesktop-V8-Official-Service.msi"
+
+      - name: Install packaged MSI
+        shell: pwsh
+        run: |
+          $msiPath = (Resolve-Path "NuvioDesktop-V8-Official-Service.msi").Path
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart" -Wait -PassThru
+          if ($proc.ExitCode -notin 0,3010) { throw "MSI installation failed with exit code $($proc.ExitCode)" }
+
+      - name: Launch installed Nuvio smoke test
+        shell: pwsh
+        run: |
+          $candidates = @("$env:ProgramFiles\Nuvio\Nuvio.exe", "$env:LOCALAPPDATA\Programs\Nuvio\Nuvio.exe")
+          $exe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $exe) {
+            foreach ($root in @("$env:ProgramFiles", "$env:LOCALAPPDATA")) {
+              if ($root -and (Test-Path $root)) {
+                $found = Get-ChildItem -Path $root -Filter "Nuvio.exe" -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) { $exe = $found.FullName; break }
+              }
+            }
+          }
+          if (-not $exe) { throw "Installed Nuvio.exe not found." }
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 12
+          $app.Refresh()
+          if ($app.HasExited) { throw "Installed Nuvio exited during runtime smoke test. Exit code: $($app.ExitCode)" }
+          Write-Host "Installed Nuvio stayed alive during runtime smoke test."
+          Stop-Process -Id $app.Id -Force
+
+      - name: Recheck official service after installed-app smoke
+        shell: pwsh
+        run: |
+          $response = Invoke-WebRequest -Uri "https://api.nuvio.tv/.well-known/nuvio" -UseBasicParsing -TimeoutSec 20
+          if ($response.StatusCode -ne 200) { throw "Official Nuvio service unavailable after smoke test." }
+
+      - name: Upload verified MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-desktop-v8-official-service-windows-msi
+          path: NuvioDesktop-V8-Official-Service.msi
+          retention-days: 14
