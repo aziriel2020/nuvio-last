@@ -3368,3 +3368,120 @@ main = replace_once(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9.6 Windows Hero capability gate + trailer preference migration")
+
+
+# V9.7: port NuvioTV's resilient Innertube config path to Desktop.
+extractor_path = root / "composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/trailer/InAppYouTubeExtractor.kt"
+extractor = extractor_path.read_text(encoding="utf-8")
+extractor = replace_once(
+    extractor,
+    '''private const val PREFERRED_SEPARATE_CLIENT = "visionos"
+''',
+    '''private const val PREFERRED_SEPARATE_CLIENT = "visionos"
+private const val FALLBACK_INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+private const val STABLE_WATCH_CONFIG_VIDEO_ID = "dQw4w9WgXcQ"
+''',
+    "v9.7 NuvioTV Innertube fallback constants",
+)
+extractor = replace_once(
+    extractor,
+    '''        val watchUrl = "https://www.youtube.com/watch?v=$videoId&hl=en"
+        val watchResponse = TrailerExtractionPlatform.performRequest(
+            url = watchUrl,
+            method = "GET",
+            headers = TrailerExtractionPlatform.defaultHeaders,
+            body = null,
+            timeoutMillis = TRAILER_REQUEST_TIMEOUT_MS,
+        )
+        if (!watchResponse.ok) {
+            throw IllegalStateException("Failed to fetch watch page (\${watchResponse.status})")
+        }
+        TrailerExtractionPlatform.diagnostic(
+            "watch ok status=\${watchResponse.status} bytes=\${watchResponse.body.length}",
+        )
+
+        val watchConfig = getWatchConfig(watchResponse.body)
+        val apiKey = watchConfig.apiKey
+            ?: throw IllegalStateException("Unable to extract INNERTUBE_API_KEY")
+''',
+    '''        val watchUrl =
+            "https://www.youtube.com/watch?v=$STABLE_WATCH_CONFIG_VIDEO_ID&hl=en"
+        val watchResponse = TrailerExtractionPlatform.performRequest(
+            url = watchUrl,
+            method = "GET",
+            headers = TrailerExtractionPlatform.defaultHeaders,
+            body = null,
+            timeoutMillis = TRAILER_REQUEST_TIMEOUT_MS,
+        )
+        val watchConfig = if (watchResponse.ok) {
+            TrailerExtractionPlatform.diagnostic(
+                "watch config ok status=\${watchResponse.status} bytes=\${watchResponse.body.length}",
+            )
+            getWatchConfig(watchResponse.body)
+        } else {
+            TrailerExtractionPlatform.diagnostic(
+                "watch config unavailable status=\${watchResponse.status}; using fallback key",
+            )
+            WatchConfig(apiKey = null, visitorData = null)
+        }
+        val apiKey = watchConfig.apiKey ?: FALLBACK_INNERTUBE_API_KEY
+        if (watchConfig.apiKey == null) {
+            TrailerExtractionPlatform.diagnostic("watch config using NuvioTV fallback Innertube key")
+        }
+''',
+    "v9.7 resilient watch config and fallback key",
+)
+extractor = replace_once(
+    extractor,
+    '''                val playerResponse = fetchPlayerResponse(
+                    apiKey = apiKey,
+                    videoId = videoId,
+                    client = client,
+                    visitorData = watchConfig.visitorData,
+                )
+
+                val streamingData = playerResponse.objectValue("streamingData")
+                    ?: throw IllegalStateException("missing streamingData")
+''',
+    '''                var playerResponse = fetchPlayerResponse(
+                    apiKey = apiKey,
+                    videoId = videoId,
+                    client = client,
+                    visitorData = watchConfig.visitorData,
+                )
+                var playabilityStatus =
+                    playerResponse.objectValue("playabilityStatus")?.stringValue("status")
+                if (
+                    playabilityStatus == "LOGIN_REQUIRED" &&
+                    !watchConfig.visitorData.isNullOrBlank()
+                ) {
+                    TrailerExtractionPlatform.diagnostic(
+                        "client=\${client.key} status=LOGIN_REQUIRED; retrying without visitor data",
+                    )
+                    playerResponse = fetchPlayerResponse(
+                        apiKey = apiKey,
+                        videoId = videoId,
+                        client = client,
+                        visitorData = null,
+                    )
+                    playabilityStatus =
+                        playerResponse.objectValue("playabilityStatus")?.stringValue("status")
+                }
+                if (playabilityStatus != null && playabilityStatus != "OK") {
+                    val reason = playerResponse.objectValue("playabilityStatus")
+                        ?.stringValue("reason")
+                        .orEmpty()
+                    TrailerExtractionPlatform.diagnostic(
+                        "client=\${client.key} playability=$playabilityStatus reason=$reason",
+                    )
+                    return@runCatching
+                }
+
+                val streamingData = playerResponse.objectValue("streamingData")
+                    ?: throw IllegalStateException("missing streamingData")
+''',
+    "v9.7 playability diagnostics and visitor fallback",
+)
+extractor_path.write_text(extractor, encoding="utf-8")
+
+print("Applied V9.7 NuvioTV Innertube fallback + playability diagnostics")

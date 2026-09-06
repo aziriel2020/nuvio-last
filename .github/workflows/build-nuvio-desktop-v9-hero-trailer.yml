@@ -115,6 +115,7 @@ jobs:
           policy=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/core/build/AppFeaturePolicy.desktop.kt").read_text(encoding="utf-8")
           settings=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt").read_text(encoding="utf-8")
           style=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt").read_text(encoding="utf-8")
+          extractor=(root/"composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/trailer/InAppYouTubeExtractor.kt").read_text(encoding="utf-8")
           for text,token in [
               (win,"NativePlayerController"),
               (win,"SwingPanel"),
@@ -130,6 +131,8 @@ jobs:
               (policy,"actual val heroTrailerPlaybackSupported: Boolean = true"),
               (settings,"AppFeaturePolicy.heroTrailerPlaybackSupported ||"),
               (style,"hoverPreviewTrailerConfigured"),
+              (extractor,"FALLBACK_INNERTUBE_API_KEY"),
+              (extractor,"retrying without visitor data"),
               (main,"HeroTrailerSmokeHarness"),
               (main,"error:hero-gate-disabled"),
           ]:
@@ -187,7 +190,10 @@ jobs:
           $marker = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-smoke.txt"
           Remove-Item $marker -Force -ErrorAction SilentlyContinue
           $env:NUVIO_HERO_TRAILER_SMOKE_MARKER = $marker
-          $app = Start-Process -FilePath $exe -PassThru
+          $stdout = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-stdout.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "nuvio-hero-trailer-stderr.txt"
+          Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+          $app = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 
           $deadline = (Get-Date).AddSeconds(90)
           $result = $null
@@ -205,10 +211,18 @@ jobs:
           }
           if ($result -ne "ready") {
             if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+            Start-Sleep -Milliseconds 300
+            Write-Host "=== Nuvio stdout ==="
+            if (Test-Path $stdout) { Get-Content $stdout -Tail 400 }
+            Write-Host "=== Nuvio stderr ==="
+            if (Test-Path $stderr) { Get-Content $stderr -Tail 400 }
             throw "Hero trailer did not reach ready state. Marker=$result"
           }
           Write-Host "Hero trailer native Windows first-frame smoke PASSED."
           if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          Start-Sleep -Milliseconds 300
+          if (Test-Path $stdout) { Get-Content $stdout -Tail 120 }
+          if (Test-Path $stderr) { Get-Content $stderr -Tail 120 }
 
       - name: Final official service check
         shell: pwsh
