@@ -4097,3 +4097,88 @@ main = replace_once(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9.10 CSS !important stacking + non-overlapping text/player geometry")
+
+
+# V9.11: native mpv Hero fade.
+bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+bridge = bridge_path.read_text(encoding="utf-8")
+
+bridge = replace_once(
+    bridge,
+    '''    void startMpv(
+        const std::string &sourceUrl,
+        const std::vector<std::string> &headerLines,
+        bool playWhenReady,
+        long long initialPositionMs,
+        int decoderPriority,
+        bool nvidiaRtxSuperResolutionEnabled
+    ) {
+''',
+    '''    void startMpv(
+        const std::string &sourceUrl,
+        const std::vector<std::string> &headerLines,
+        bool playWhenReady,
+        long long initialPositionMs,
+        int decoderPriority,
+        bool nvidiaRtxSuperResolutionEnabled,
+        bool heroTrailerMode
+    ) {
+''',
+    "v9.11 hero mode argument",
+)
+
+bridge = replace_once(
+    bridge,
+    '''            if (nvidiaRtxSuperResolutionEnabled) {
+                setMpvOptionStringLocked("vf", "d3d11vpp=scale=2:scaling-mode=nvidia");
+            }
+''',
+    '''            if (nvidiaRtxSuperResolutionEnabled) {
+                setMpvOptionStringLocked("vf", "d3d11vpp=scale=2:scaling-mode=nvidia");
+            } else if (heroTrailerMode) {
+                setMpvOptionStringLocked(
+                    "vf",
+                    "lavfi=["
+                    "drawbox=x=0:y=0:w=iw*0.045:h=ih:color=black@1.00:t=fill,"
+                    "drawbox=x=iw*0.045:y=0:w=iw*0.045:h=ih:color=black@0.96:t=fill,"
+                    "drawbox=x=iw*0.09:y=0:w=iw*0.045:h=ih:color=black@0.86:t=fill,"
+                    "drawbox=x=iw*0.135:y=0:w=iw*0.045:h=ih:color=black@0.72:t=fill,"
+                    "drawbox=x=iw*0.18:y=0:w=iw*0.045:h=ih:color=black@0.54:t=fill,"
+                    "drawbox=x=iw*0.225:y=0:w=iw*0.045:h=ih:color=black@0.36:t=fill,"
+                    "drawbox=x=iw*0.27:y=0:w=iw*0.045:h=ih:color=black@0.20:t=fill,"
+                    "drawbox=x=iw*0.315:y=0:w=iw*0.045:h=ih:color=black@0.08:t=fill,"
+                    "drawbox=x=0:y=ih*0.82:w=iw:h=ih*0.03:color=black@0.08:t=fill,"
+                    "drawbox=x=0:y=ih*0.85:w=iw:h=ih*0.03:color=black@0.16:t=fill,"
+                    "drawbox=x=0:y=ih*0.88:w=iw:h=ih*0.03:color=black@0.28:t=fill,"
+                    "drawbox=x=0:y=ih*0.91:w=iw:h=ih*0.03:color=black@0.44:t=fill,"
+                    "drawbox=x=0:y=ih*0.94:w=iw:h=ih*0.03:color=black@0.66:t=fill,"
+                    "drawbox=x=0:y=ih*0.97:w=iw:h=ih*0.03:color=black@0.92:t=fill"
+                    "]"
+                );
+            }
+''',
+    "v9.11 in-frame hero fade",
+)
+
+bridge = replace_once(
+    bridge,
+    '''        startWebView(controlsUrl);
+        startMpv(sourceUrl, headerLines, playWhenReady, initialPositionMs, decoderPriority, nvidiaRtxSuperResolutionEnabled);
+''',
+    '''        const bool heroTrailerMode =
+            controlsUrl.find("hero.html") != std::string::npos;
+        startWebView(controlsUrl);
+        startMpv(
+            sourceUrl,
+            headerLines,
+            playWhenReady,
+            initialPositionMs,
+            decoderPriority,
+            nvidiaRtxSuperResolutionEnabled,
+            heroTrailerMode
+        );
+''',
+    "v9.11 detect hero session",
+)
+bridge_path.write_text(bridge, encoding="utf-8")
+print("Applied V9.11 native mpv Hero fade")
