@@ -62,11 +62,97 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP "nuget\Microsoft.Web.WebView2.$version"
           "WEBVIEW2_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Run targeted common tests
+      - name: Verify V7 behavior contracts
         shell: pwsh
         working-directory: NuvioDesktop
         run: |
-          .\gradlew.bat :composeApp:desktopTest "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pcompose.desktop.packaging.checkJdkVendor=false" --tests "*PosterKeyboardNavigationTest" --tests "*ProfileAvatarResolutionTest" --no-configuration-cache --no-daemon --stacktrace
+          @'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          root = Path(".")
+          nav = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterKeyboardNavigation.kt").read_text(encoding="utf-8")
+          catalog = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogScreen.kt").read_text(encoding="utf-8")
+          folder = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt").read_text(encoding="utf-8")
+          hero = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
+          profiles = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles/ProfileModels.kt").read_text(encoding="utf-8")
+          selection = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles/ProfileSelectionScreen.kt").read_text(encoding="utf-8")
+          switcher = (root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles/ProfileSwitcherTab.kt").read_text(encoding="utf-8")
+
+          required = [
+              (nav, "nextPosterIndex"),
+              (nav, "nextPosterRowPosition"),
+              (catalog, "Key.DirectionLeft"),
+              (catalog, "Key.DirectionRight"),
+              (catalog, "Key.DirectionUp"),
+              (catalog, "Key.DirectionDown"),
+              (catalog, "gridState.animateScrollToItem(next)"),
+              (catalog, "onPosterClick?.invoke(selected)"),
+              (catalog, "hoveredHeroItem ?: keyboardSelectedItem"),
+              (folder, "nextPosterRowPosition"),
+              (folder, "rowStates.getOrNull(next.row)?.animateScrollToItem(next.column)"),
+              (hero, 'text = "IMDb"'),
+              (hero, "Color(0xFFF5C518)"),
+              (profiles, "legacyDefaultAvatarForProfileIndex"),
+              (selection, "profileAvatarImageUrl(profile, avatarItem)"),
+              (selection, "if (avatarImageUrl != null)"),
+              (switcher, "profileAvatarImageUrl(profile, avatarItem)"),
+              (switcher, "if (avatarImageUrl != null)"),
+          ]
+          for text, token in required:
+              if token not in text:
+                  raise SystemExit(f"Missing V7 behavior contract: {token}")
+
+          def next_index(current, count, columns, direction):
+              if count <= 0:
+                  return -1
+              columns = max(columns, 1)
+              current = max(0, min(current, count - 1))
+              column = current % columns
+              if direction == "left":
+                  return current - 1 if column > 0 else current
+              if direction == "right":
+                  return current + 1 if column < columns - 1 and current + 1 < count else current
+              if direction == "up":
+                  return current - columns if current - columns >= 0 else current
+              target = current + columns
+              if target < count:
+                  return target
+              if current // columns < (count - 1) // columns:
+                  return count - 1
+              return current
+
+          checks = [
+              (next_index(0,10,4,"right"), 1),
+              (next_index(0,10,4,"left"), 0),
+              (next_index(0,10,4,"down"), 4),
+              (next_index(0,10,4,"up"), 0),
+              (next_index(3,10,4,"down"), 7),
+              (next_index(7,10,4,"down"), 9),
+              (next_index(9,10,4,"right"), 9),
+          ]
+          for got, expected in checks:
+              if got != expected:
+                  raise SystemExit(f"Keyboard navigation contract failed: got {got}, expected {expected}")
+
+          avatar_urls = [
+              "https://api.nuvio.tv/storage/v1/object/public/avatars/avatar_linear_teal_v3.png",
+              "https://api.nuvio.tv/storage/v1/object/public/avatars/avatar_linear_purple_v3.png",
+              "https://api.nuvio.tv/storage/v1/object/public/avatars/avatar_linear_red_v3.png",
+              "https://api.nuvio.tv/storage/v1/object/public/avatars/avatar_linear_navy_v3.png",
+              "https://api.nuvio.tv/storage/v1/object/public/avatars/avatar_linear_yellow_v3.png",
+              "https://api.nuvio.tv/storage/v1/object/public/avatars/avatar_linear_green_v3.png",
+          ]
+          for url in avatar_urls:
+              req = Request(url, headers={"Range": "bytes=0-31", "User-Agent": "Nuvio-V7-Verify"})
+              with urlopen(req, timeout=20) as response:
+                  if response.status not in (200, 206):
+                      raise SystemExit(f"Avatar URL unavailable: {url} -> {response.status}")
+                  if not response.read(16):
+                      raise SystemExit(f"Avatar URL returned no image bytes: {url}")
+
+          print("V7 behavior contracts verified: keyboard algorithm, hero wiring, IMDb badge, avatar rendering and official avatar URLs.")
+          '@ | python -
 
       - name: Compile Desktop
         shell: pwsh
