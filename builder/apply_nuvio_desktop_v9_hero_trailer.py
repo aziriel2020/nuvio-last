@@ -2891,3 +2891,44 @@ private fun HeroTrailerSmokeHarness(
 main_path.write_text(main, encoding="utf-8")
 
 print("Applied V9 Windows inline Hero trailer player + CI first-frame smoke harness")
+
+
+# V9.1: transient YouTube extraction failures must not kill Hero autoplay.
+resolver_path = root / "composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/trailer/TrailerPlaybackResolver.kt"
+resolver = resolver_path.read_text(encoding="utf-8")
+resolver = resolver.replace(
+    "import kotlinx.coroutines.sync.Mutex\n",
+    "import kotlinx.coroutines.delay\nimport kotlinx.coroutines.sync.Mutex\n",
+    1,
+)
+resolver = replace_once(
+    resolver,
+    '''        val source = extractor.extractPlaybackSource(youtubeUrl)
+        if (source != null) {
+''',
+    '''        var source: TrailerPlaybackSource? = null
+        val retryDelaysMillis = listOf(0L, 350L, 1_000L)
+        for ((attemptIndex, retryDelayMillis) in retryDelaysMillis.withIndex()) {
+            if (retryDelayMillis > 0L) {
+                delay(retryDelayMillis)
+            }
+            source = extractor.extractPlaybackSource(youtubeUrl)
+            if (source != null) {
+                if (attemptIndex > 0) {
+                    TrailerExtractionPlatform.diagnostic(
+                        "resolver recovered attempt=${attemptIndex + 1}",
+                    )
+                }
+                break
+            }
+            TrailerExtractionPlatform.diagnostic(
+                "resolver miss attempt=${attemptIndex + 1}/${retryDelaysMillis.size}",
+            )
+        }
+        if (source != null) {
+''',
+    "v9 resolver retry",
+)
+resolver_path.write_text(resolver, encoding="utf-8")
+
+print("Applied V9.1 transient YouTube resolver retry")
