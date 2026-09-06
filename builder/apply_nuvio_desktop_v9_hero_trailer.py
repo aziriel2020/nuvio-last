@@ -3007,3 +3007,330 @@ windows_hero_player = replace_once(
 windows_hero_player_path.write_text(windows_hero_player, encoding="utf-8")
 
 print("Applied V9.3 YouTube playback headers for Windows native Hero player")
+
+
+# V9.4: keep the extractor/player HTTP identity consistent and map special headers to mpv options.
+windows_hero_player_path = root / "composeApp/src/windowsDesktopMain/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.desktop.kt"
+windows_hero_player = windows_hero_player_path.read_text(encoding="utf-8")
+windows_hero_player = replace_once(
+    windows_hero_player,
+    '''import com.nuvio.app.features.player.desktop.NativePlayerHost
+''',
+    '''import com.nuvio.app.features.player.desktop.NativePlayerHost
+import com.nuvio.app.features.trailer.TrailerExtractionPlatform
+''',
+    "v9.4 hero trailer platform headers import",
+)
+windows_hero_player = replace_once(
+    windows_hero_player,
+    '''private val HeroTrailerPlaybackHeaders = mapOf(
+    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "Referer" to "https://www.youtube.com/",
+    "Origin" to "https://www.youtube.com",
+    "Accept-Language" to "en-US,en;q=0.9",
+)
+''',
+    '''private val HeroTrailerPlaybackHeaders = TrailerExtractionPlatform.defaultHeaders
+''',
+    "v9.4 use extractor headers for native Hero playback",
+)
+windows_hero_player_path.write_text(windows_hero_player, encoding="utf-8")
+
+bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+bridge = bridge_path.read_text(encoding="utf-8")
+bridge = replace_once(
+    bridge,
+    r'''            if (!headerLines.empty()) {
+                std::string headers;
+                for (size_t index = 0; index < headerLines.size(); index++) {
+                    if (index > 0) headers.push_back(',');
+                    // Escape backslashes and commas in header values
+                    for (char c : headerLines[index]) {
+                        if (c == '\\' || c == ',') headers.push_back('\\');
+                        headers.push_back(c);
+                    }
+                }
+                setMpvOptionStringLocked("http-header-fields", headers.c_str());
+            }
+''',
+    r'''            if (!headerLines.empty()) {
+                std::vector<std::string> genericHeaders;
+                for (const std::string &headerLine : headerLines) {
+                    const size_t separator = headerLine.find(':');
+                    if (separator == std::string::npos) {
+                        genericHeaders.push_back(headerLine);
+                        continue;
+                    }
+
+                    std::string name = headerLine.substr(0, separator);
+                    std::string value = headerLine.substr(separator + 1);
+                    while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
+                        value.erase(value.begin());
+                    }
+
+                    std::string lowerName = name;
+                    std::transform(
+                        lowerName.begin(),
+                        lowerName.end(),
+                        lowerName.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); }
+                    );
+
+                    if (lowerName == "user-agent") {
+                        setMpvOptionStringLocked("user-agent", value.c_str());
+                    } else if (lowerName == "referer" || lowerName == "referrer") {
+                        setMpvOptionStringLocked("referrer", value.c_str());
+                    } else {
+                        genericHeaders.push_back(headerLine);
+                    }
+                }
+
+                if (!genericHeaders.empty()) {
+                    std::string headers;
+                    for (size_t index = 0; index < genericHeaders.size(); index++) {
+                        if (index > 0) headers.push_back(',');
+                        for (char c : genericHeaders[index]) {
+                            if (c == '\\' || c == ',') headers.push_back('\\');
+                            headers.push_back(c);
+                        }
+                    }
+                    setMpvOptionStringLocked("http-header-fields", headers.c_str());
+                }
+            }
+''',
+    "v9.4 mpv dedicated user-agent and referrer options",
+)
+bridge_path.write_text(bridge, encoding="utf-8")
+
+print("Applied V9.4 mpv User-Agent/referrer option mapping on Windows")
+
+
+# V9.5: the Hero player must keep software decode fallback available on generic Windows machines.
+windows_hero_player = windows_hero_player_path.read_text(encoding="utf-8")
+windows_hero_player = replace_once(
+    windows_hero_player,
+    '''            decoderPriority = 0,
+''',
+    '''            decoderPriority = 1,
+''',
+    "v9.5 normal Hero decoder fallback priority",
+)
+windows_hero_player_path.write_text(windows_hero_player, encoding="utf-8")
+
+print("Applied V9.5 normal decoder fallback policy for Windows Hero trailer")
+
+
+# V9.6: Windows catalog Hero must pass the real in-app Hero capability gate.
+hero = hero_path.read_text(encoding="utf-8")
+hero = replace_once(
+    hero,
+    '''import com.nuvio.app.core.build.TrailerPlaybackMode
+''',
+    '''''',
+    "v9.6 remove obsolete catalog trailer mode import",
+)
+hero = replace_once(
+    hero,
+    '''    val trailerPlaybackEnabled =
+        AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP &&
+            posterCardStyle.hoverPreviewTrailerEnabled
+''',
+    '''    val trailerPlaybackEnabled = isCatalogHeroTrailerPlaybackEnabled(posterCardStyle)
+''',
+    "v9.6 catalog Hero capability gate",
+)
+hero += r'''
+
+internal fun isCatalogHeroTrailerPlaybackEnabled(
+    posterCardStyle: com.nuvio.app.core.ui.PosterCardStyleUiState,
+): Boolean =
+    AppFeaturePolicy.heroTrailerPlaybackSupported &&
+        posterCardStyle.hoverPreviewTrailerEnabled
+'''
+hero_path.write_text(hero, encoding="utf-8")
+
+policy_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/core/build/AppFeaturePolicy.desktop.kt"
+policy = policy_path.read_text(encoding="utf-8")
+policy = replace_once(
+    policy,
+    '''    actual val heroTrailerPlaybackSupported: Boolean = !isWindowsDesktop
+''',
+    '''    actual val heroTrailerPlaybackSupported: Boolean = true
+''',
+    "v9.6 enable native Hero trailer capability on Windows",
+)
+policy_path.write_text(policy, encoding="utf-8")
+
+settings_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt"
+settings = settings_path.read_text(encoding="utf-8")
+settings = replace_once(
+    settings,
+    '''    if (AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP) {
+''',
+    '''    if (
+        AppFeaturePolicy.heroTrailerPlaybackSupported ||
+        AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP
+    ) {
+''',
+    "v9.6 expose Hero trailer controls when Hero playback is supported",
+)
+settings_path.write_text(settings, encoding="utf-8")
+
+style_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt"
+style = style_path.read_text(encoding="utf-8")
+style = replace_once(
+    style,
+    '''package com.nuvio.app.core.ui
+
+''',
+    '''package com.nuvio.app.core.ui
+
+import com.nuvio.app.isWindows
+''',
+    "v9.6 Windows trailer preference migration import",
+)
+style = replace_once(
+    style,
+    '''    val hoverPreviewTrailerEnabled: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+''',
+    '''    val hoverPreviewTrailerEnabled: Boolean = false,
+    val hoverPreviewTrailerConfigured: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+''',
+    "v9.6 stored trailer configured flag",
+)
+style = replace_once(
+    style,
+    '''    val hoverPreviewTrailerEnabled: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+''',
+    '''    val hoverPreviewTrailerEnabled: Boolean = isWindows,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+''',
+    "v9.6 Windows Hero trailer default",
+)
+style = replace_once(
+    style,
+    '''    private var hasLoaded = false
+''',
+    '''    private var hasLoaded = false
+    private var hoverPreviewTrailerConfigured = false
+''',
+    "v9.6 trailer preference migration state",
+)
+style = replace_once(
+    style,
+    '''    fun clearLocalState() {
+        hasLoaded = false
+        _uiState.value = PosterCardStyleUiState()
+    }
+''',
+    '''    fun clearLocalState() {
+        hasLoaded = false
+        hoverPreviewTrailerConfigured = false
+        _uiState.value = PosterCardStyleUiState()
+    }
+''',
+    "v9.6 clear trailer preference migration state",
+)
+style = replace_once(
+    style,
+    '''    fun setHoverPreviewTrailerEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.hoverPreviewTrailerEnabled == enabled) return
+        _uiState.value = _uiState.value.copy(hoverPreviewTrailerEnabled = enabled)
+        persist()
+    }
+''',
+    '''    fun setHoverPreviewTrailerEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.hoverPreviewTrailerEnabled == enabled && hoverPreviewTrailerConfigured) return
+        hoverPreviewTrailerConfigured = true
+        _uiState.value = _uiState.value.copy(hoverPreviewTrailerEnabled = enabled)
+        persist()
+    }
+''',
+    "v9.6 mark explicit trailer enable preference",
+)
+style = replace_once(
+    style,
+    '''        if (payload.isEmpty()) {
+            _uiState.value = PosterCardStyleUiState()
+            return
+        }
+''',
+    '''        if (payload.isEmpty()) {
+            hoverPreviewTrailerConfigured = false
+            _uiState.value = PosterCardStyleUiState()
+            return
+        }
+''',
+    "v9.6 empty preference migration",
+)
+style = replace_once(
+    style,
+    '''        val stored = runCatching {
+            json.decodeFromString<StoredPosterCardStylePreferences>(payload)
+        }.getOrNull()
+
+        _uiState.value = if (stored != null) {
+''',
+    '''        val stored = runCatching {
+            json.decodeFromString<StoredPosterCardStylePreferences>(payload)
+        }.getOrNull()
+        hoverPreviewTrailerConfigured = stored?.hoverPreviewTrailerConfigured ?: false
+
+        _uiState.value = if (stored != null) {
+''',
+    "v9.6 load trailer configured flag",
+)
+style = replace_once(
+    style,
+    '''                hoverPreviewTrailerEnabled = stored.hoverPreviewTrailerEnabled,
+                hoverPreviewTrailerSoundEnabled = stored.hoverPreviewTrailerSoundEnabled,
+''',
+    '''                hoverPreviewTrailerEnabled =
+                    if (isWindows && !hoverPreviewTrailerConfigured) true
+                    else stored.hoverPreviewTrailerEnabled,
+                hoverPreviewTrailerSoundEnabled = stored.hoverPreviewTrailerSoundEnabled,
+''',
+    "v9.6 migrate legacy Windows disabled trailer default",
+)
+style = replace_once(
+    style,
+    '''                    hoverPreviewTrailerEnabled = _uiState.value.hoverPreviewTrailerEnabled,
+                    hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,
+''',
+    '''                    hoverPreviewTrailerEnabled = _uiState.value.hoverPreviewTrailerEnabled,
+                    hoverPreviewTrailerConfigured = hoverPreviewTrailerConfigured,
+                    hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,
+''',
+    "v9.6 persist trailer configured flag",
+)
+style_path.write_text(style, encoding="utf-8")
+
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''    LaunchedEffect(youtubeUrl) {
+        runCatching {
+            com.nuvio.app.features.trailer.TrailerPlaybackResolver.resolveFromYouTubeUrl(youtubeUrl)
+''',
+    '''    LaunchedEffect(youtubeUrl) {
+        com.nuvio.app.core.ui.PosterCardStyleRepository.ensureLoaded()
+        val heroStyle = com.nuvio.app.core.ui.PosterCardStyleRepository.uiState.value
+        if (!com.nuvio.app.features.home.components.isCatalogHeroTrailerPlaybackEnabled(heroStyle)) {
+            terminal.value = true
+            mark("error:hero-gate-disabled")
+            return@LaunchedEffect
+        }
+
+        runCatching {
+            com.nuvio.app.features.trailer.TrailerPlaybackResolver.resolveFromYouTubeUrl(youtubeUrl)
+''',
+    "v9.6 smoke real Hero gate",
+)
+main_path.write_text(main, encoding="utf-8")
+
+print("Applied V9.6 Windows Hero capability gate + trailer preference migration")

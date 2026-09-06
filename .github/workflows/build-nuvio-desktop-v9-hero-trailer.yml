@@ -1,6 +1,9 @@
 name: Build Nuvio Desktop V9 Hero Trailer MSI
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -108,14 +111,27 @@ jobs:
           hero=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
           platform=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/features/trailer/TrailerExtractionPlatform.desktop.kt").read_text(encoding="utf-8")
           main=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt").read_text(encoding="utf-8")
+          bridge=(root/"composeApp/src/desktopMain/native/windows/player_bridge.cpp").read_text(encoding="utf-8")
+          policy=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/core/build/AppFeaturePolicy.desktop.kt").read_text(encoding="utf-8")
+          settings=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HoverPreviewSettingsPage.kt").read_text(encoding="utf-8")
+          style=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt").read_text(encoding="utf-8")
           for text,token in [
               (win,"NativePlayerController"),
               (win,"SwingPanel"),
               (win,"latestOnReady.value()"),
               (win,"PlayerResizeMode.Zoom"),
+              (win,"TrailerExtractionPlatform.defaultHeaders"),
+              (win,"decoderPriority = 1"),
+              (bridge,'setMpvOptionStringLocked("user-agent"'),
+              (bridge,'setMpvOptionStringLocked("referrer"'),
               (platform,"windowsHost"),
               (hero,"fillMaxWidth(0.62f)"),
+              (hero,"isCatalogHeroTrailerPlaybackEnabled"),
+              (policy,"actual val heroTrailerPlaybackSupported: Boolean = true"),
+              (settings,"AppFeaturePolicy.heroTrailerPlaybackSupported ||"),
+              (style,"hoverPreviewTrailerConfigured"),
               (main,"HeroTrailerSmokeHarness"),
+              (main,"error:hero-gate-disabled"),
           ]:
               if token not in text:
                   raise SystemExit("Missing V9 contract: "+token)
