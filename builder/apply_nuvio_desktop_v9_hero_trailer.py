@@ -4182,3 +4182,37 @@ bridge = replace_once(
 )
 bridge_path.write_text(bridge, encoding="utf-8")
 print("Applied V9.11 native mpv Hero fade")
+
+
+# V9.12: smooth per-pixel native Hero fade.
+import re
+
+bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+bridge = bridge_path.read_text(encoding="utf-8")
+
+hero_filter_pattern = re.compile(
+    r'''            \} else if \(heroTrailerMode\) \{\n                setMpvOptionStringLocked\(\n                    "vf",\n                    "lavfi=\[".*?                    "\]"\n                \);\n            \}\n''',
+    re.DOTALL,
+)
+hero_filter_replacement = r'''            } else if (heroTrailerMode) {
+                // Continuous per-pixel blend: dark at the left edge, fully visible toward
+                // the right, then smoothly darkened again into the shelf at the bottom.
+                setMpvOptionStringLocked(
+                    "vf",
+                    "lavfi=[format=rgb24,"
+                    "geq="
+                    "r='r(X,Y)*pow(clip(X/(W*0.42),0,1),0.70)*(1-0.92*clip((Y/H-0.78)/0.22,0,1))':"
+                    "g='g(X,Y)*pow(clip(X/(W*0.42),0,1),0.70)*(1-0.92*clip((Y/H-0.78)/0.22,0,1))':"
+                    "b='b(X,Y)*pow(clip(X/(W*0.42),0,1),0.70)*(1-0.92*clip((Y/H-0.78)/0.22,0,1))'"
+                    "]"
+                );
+            }
+'''
+bridge, replacement_count = hero_filter_pattern.subn(hero_filter_replacement, bridge)
+if replacement_count != 1:
+    raise SystemExit(
+        f"v9.12 smooth Hero native filter expected 1 replacement, found {replacement_count}"
+    )
+
+bridge_path.write_text(bridge, encoding="utf-8")
+print("Applied V9.12 smooth per-pixel native Hero fade")
