@@ -4216,3 +4216,304 @@ if replacement_count != 1:
 
 bridge_path.write_text(bridge, encoding="utf-8")
 print("Applied V9.12 smooth per-pixel native Hero fade")
+
+
+# V9.13: full black information bed under left UI while trailer is actually ready.
+hover_trailer_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterHoverTrailer.kt"
+hover_trailer = hover_trailer_path.read_text(encoding="utf-8")
+
+hover_trailer = replace_once(
+    hover_trailer,
+    '''import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+''',
+    '''import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+''',
+    "v9.13 hover trailer disposal callback import",
+)
+hover_trailer = replace_once(
+    hover_trailer,
+    '''    startPositionSeconds: Int,
+    modifier: Modifier = Modifier,
+) {
+''',
+    '''    startPositionSeconds: Int,
+    modifier: Modifier = Modifier,
+    onPlaybackVisibilityChanged: ((Boolean) -> Unit)? = null,
+) {
+''',
+    "v9.13 hover trailer visibility callback",
+)
+hover_trailer = replace_once(
+    hover_trailer,
+    '''    LaunchedEffect(trailerFinished, playbackSource) {
+''',
+    '''    LaunchedEffect(playbackSource?.videoUrl, playbackSource?.audioUrl) {
+        onPlaybackVisibilityChanged?.invoke(false)
+    }
+
+    DisposableEffect(playbackSource?.videoUrl, playbackSource?.audioUrl) {
+        onDispose {
+            onPlaybackVisibilityChanged?.invoke(false)
+        }
+    }
+
+    LaunchedEffect(trailerFinished, playbackSource) {
+''',
+    "v9.13 reset Hero black bed with player lifecycle",
+)
+hover_trailer = replace_once(
+    hover_trailer,
+    '''            onReady = {
+                if (!trailerFinished) {
+                    trailerReady = true
+                }
+            },
+            onEnded = {
+                trailerReady = false
+                trailerFinished = true
+            },
+            onError = {
+                trailerReady = false
+                trailerFinished = true
+            },
+''',
+    '''            onReady = {
+                if (!trailerFinished) {
+                    trailerReady = true
+                    onPlaybackVisibilityChanged?.invoke(true)
+                }
+            },
+            onEnded = {
+                trailerReady = false
+                trailerFinished = true
+                onPlaybackVisibilityChanged?.invoke(false)
+            },
+            onError = {
+                trailerReady = false
+                trailerFinished = true
+                onPlaybackVisibilityChanged?.invoke(false)
+            },
+''',
+    "v9.13 report actual visible playback state",
+)
+hover_trailer_path.write_text(hover_trailer, encoding="utf-8")
+
+hero = hero_path.read_text(encoding="utf-8")
+hero = replace_once(
+    hero,
+    '''import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+''',
+    '''import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+''',
+    "v9.13 Hero z-index import",
+)
+hero = replace_once(
+    hero,
+    '''    var trailerPlaybackSource by remember(selectedItem.type, selectedItem.id) {
+        mutableStateOf<TrailerPlaybackSource?>(null)
+    }
+''',
+    '''    var trailerPlaybackSource by remember(selectedItem.type, selectedItem.id) {
+        mutableStateOf<TrailerPlaybackSource?>(null)
+    }
+    var trailerVisuallyReady by remember(selectedItem.type, selectedItem.id) {
+        mutableStateOf(false)
+    }
+''',
+    "v9.13 Hero ready visual state",
+)
+hero = replace_once(
+    hero,
+    '''        trailerPlaybackSource = null
+        if (!isHoverActive || !trailerPlaybackEnabled) return@LaunchedEffect
+''',
+    '''        trailerPlaybackSource = null
+        trailerVisuallyReady = false
+        if (!isHoverActive || !trailerPlaybackEnabled) return@LaunchedEffect
+''',
+    "v9.13 reset visual state before resolver",
+)
+hero = replace_once(
+    hero,
+    '''                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+''',
+    '''                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(10f),
+                contentScale = ContentScale.Crop,
+''',
+    "v9.13 backdrop z-index",
+)
+hero = replace_once(
+    hero,
+    '''            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxWidth(0.54f)
+                .fillMaxHeight(),
+''',
+    '''            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxWidth(0.54f)
+                .fillMaxHeight()
+                .zIndex(30f),
+''',
+    "v9.13 native video layer z-index contract",
+)
+hero = replace_once(
+    hero,
+    '''                    startPositionSeconds = posterCardStyle.hoverPreviewTrailerStartSeconds,
+                    modifier = Modifier.fillMaxSize(),
+                )
+''',
+    '''                    startPositionSeconds = posterCardStyle.hoverPreviewTrailerStartSeconds,
+                    modifier = Modifier.fillMaxSize(),
+                    onPlaybackVisibilityChanged = { isVisible ->
+                        trailerVisuallyReady = isVisible
+                    },
+                )
+''',
+    "v9.13 wire actual player ready state to Hero",
+)
+
+# Keep the normal backdrop treatment below the UI.
+hero = hero.replace(
+    '''            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+''',
+    '''            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(15f)
+                .background(
+                    Brush.horizontalGradient(
+''',
+    1,
+)
+hero = hero.replace(
+    '''            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+''',
+    '''            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(15f)
+                .background(
+                    Brush.verticalGradient(
+''',
+    1,
+)
+
+hero = replace_once(
+    hero,
+    '''        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+''',
+    '''        CatalogHeroInformationBed(
+            visible = trailerVisuallyReady,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .fillMaxWidth(0.46f)
+                .fillMaxHeight()
+                .zIndex(20f),
+        )
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth(0.46f)
+                .zIndex(50f)
+''',
+    "v9.13 black bed plus constrained top UI",
+)
+hero = replace_once(
+    hero,
+    '''            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 34.dp, end = 28.dp, bottom = 34.dp)
+                .fillMaxWidth(0.43f),
+''',
+    '''            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 34.dp, end = 28.dp, bottom = 34.dp)
+                .fillMaxWidth(0.43f)
+                .zIndex(50f),
+''',
+    "v9.13 information content top layer",
+)
+
+hero += r'''
+
+@Composable
+internal fun CatalogHeroInformationBed(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(tween(220)),
+        exit = fadeOut(tween(180)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Black,
+                            0.72f to Color.Black,
+                            0.90f to Color.Black.copy(alpha = 0.995f),
+                            1f to Color.Black.copy(alpha = 0.985f),
+                        ),
+                    ),
+                ),
+        )
+    }
+}
+'''
+hero_path.write_text(hero, encoding="utf-8")
+
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+            source.value?.let { playbackSource ->
+''',
+    '''        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+            androidx.compose.material3.Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = androidx.compose.ui.graphics.Color(0xFF5B4036),
+            ) {}
+
+            com.nuvio.app.features.home.components.CatalogHeroInformationBed(
+                visible = readyObserved.value,
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.CenterStart)
+                    .fillMaxWidth(0.46f)
+                    .fillMaxHeight(),
+            )
+
+            androidx.compose.material3.Text(
+                text = "HERO INFORMATION",
+                color = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier.align(androidx.compose.ui.Alignment.CenterStart),
+            )
+
+            source.value?.let { playbackSource ->
+''',
+    "v9.13 visual smoke left information bed",
+)
+main_path.write_text(main, encoding="utf-8")
+
+print("Applied V9.13 full black left information bed + explicit Hero layer order")
