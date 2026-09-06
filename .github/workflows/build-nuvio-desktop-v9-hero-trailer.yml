@@ -131,7 +131,7 @@ jobs:
               (bridge,'setMpvOptionStringLocked("referrer"'),
               (bridge,"heroTrailerMode"),
               (bridge,"format=rgb24"),
-              (bridge,"(0.10+0.90*pow(clip(X/(W*0.40),0,1),0.72))"),
+              (bridge,"pow(clip(X/(W*0.45),0,1),0.95)"),
               (bridge,"clip((Y/H-0.78)/0.22,0,1)"),
               (bridgeKt,"hero-player-ui"),
               (bridgeKt,"rgba(13,13,13,0.42) 45%"),
