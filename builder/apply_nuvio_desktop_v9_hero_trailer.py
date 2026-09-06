@@ -2974,23 +2974,18 @@ trailer_platform_path.write_text(trailer_platform, encoding="utf-8")
 print("Applied V9.2 Windows progressive-first Hero trailer source policy")
 
 
-# V9.3: extracted YouTube/googlevideo URLs must be opened by mpv with browser headers.
+# V9.3: extracted YouTube/googlevideo URLs must be opened by mpv with the exact
+# same browser headers used by the extractor/probe. Keep this centralized in the trailer layer.
 windows_hero_player_path = root / "composeApp/src/windowsDesktopMain/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.desktop.kt"
 windows_hero_player = windows_hero_player_path.read_text(encoding="utf-8")
 windows_hero_player = replace_once(
     windows_hero_player,
-    '''private const val HeroTrailerSnapshotIntervalMillis = 120L
+    '''import com.nuvio.app.features.player.desktop.NativePlayerHost
 ''',
-    '''private const val HeroTrailerSnapshotIntervalMillis = 120L
-
-private val HeroTrailerPlaybackHeaders = mapOf(
-    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-    "Referer" to "https://www.youtube.com/",
-    "Origin" to "https://www.youtube.com",
-    "Accept-Language" to "en-US,en;q=0.9",
-)
+    '''import com.nuvio.app.features.player.desktop.NativePlayerHost
+import com.nuvio.app.features.trailer.TrailerExtractionPlatform
 ''',
-    "v9 hero playback headers",
+    "v9 hero trailer playback header import",
 )
 windows_hero_player = replace_once(
     windows_hero_player,
@@ -3000,10 +2995,76 @@ windows_hero_player = replace_once(
 ''',
     '''        controller.attach(
             sourceUrl = sourceUrl,
-            sourceHeaders = HeroTrailerPlaybackHeaders,
+            sourceHeaders = TrailerExtractionPlatform.defaultHeaders,
 ''',
-    "v9 pass YouTube headers to native player",
+    "v9 pass extractor headers to native player",
 )
 windows_hero_player_path.write_text(windows_hero_player, encoding="utf-8")
 
-print("Applied V9.3 YouTube playback headers for Windows native Hero player")
+print("Applied V9.3 exact extractor playback headers for Windows native Hero player")
+
+
+# V9.4: mpv has dedicated network options for User-Agent/referrer. Do not serialize
+# User-Agent into http-header-fields because that leaves mpv's own UA active as well.
+windows_bridge_path = root / "composeApp/src/desktopMain/native/windows/player_bridge.cpp"
+windows_bridge = windows_bridge_path.read_text(encoding="utf-8")
+windows_bridge = replace_once(
+    windows_bridge,
+    '''            if (!headerLines.empty()) {
+                std::string headers;
+                for (size_t index = 0; index < headerLines.size(); index++) {
+                    if (index > 0) headers.push_back(',');
+                    // Escape backslashes and commas in header values
+                    for (char c : headerLines[index]) {
+                        if (c == '\\\\' || c == ',') headers.push_back('\\\\');
+                        headers.push_back(c);
+                    }
+                }
+                setMpvOptionStringLocked("http-header-fields", headers.c_str());
+            }
+''',
+    '''            if (!headerLines.empty()) {
+                std::vector<std::string> genericHeaderLines;
+                genericHeaderLines.reserve(headerLines.size());
+
+                for (const std::string &headerLine : headerLines) {
+                    const size_t separator = headerLine.find(':');
+                    if (separator == std::string::npos || separator == 0) {
+                        genericHeaderLines.push_back(headerLine);
+                        continue;
+                    }
+
+                    const std::string name = lowerCopy(trim(headerLine.substr(0, separator)));
+                    const std::string value = trim(headerLine.substr(separator + 1));
+                    if (value.empty()) {
+                        continue;
+                    }
+
+                    if (name == "user-agent") {
+                        setMpvOptionStringLocked("user-agent", value.c_str());
+                    } else if (name == "referer" || name == "referrer") {
+                        setMpvOptionStringLocked("referrer", value.c_str());
+                    } else {
+                        genericHeaderLines.push_back(headerLine);
+                    }
+                }
+
+                if (!genericHeaderLines.empty()) {
+                    std::string headers;
+                    for (size_t index = 0; index < genericHeaderLines.size(); index++) {
+                        if (index > 0) headers.push_back(',');
+                        // mpv string-list escaping for commas/backslashes.
+                        for (char c : genericHeaderLines[index]) {
+                            if (c == '\\\\' || c == ',') headers.push_back('\\\\');
+                            headers.push_back(c);
+                        }
+                    }
+                    setMpvOptionStringLocked("http-header-fields", headers.c_str());
+                }
+            }
+''',
+    "v9 Windows mpv dedicated HTTP identity options",
+)
+windows_bridge_path.write_text(windows_bridge, encoding="utf-8")
+
+print("Applied V9.4 mpv User-Agent/referrer option mapping on Windows")
