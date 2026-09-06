@@ -2972,3 +2972,38 @@ trailer_platform = replace_once(
 trailer_platform_path.write_text(trailer_platform, encoding="utf-8")
 
 print("Applied V9.2 Windows progressive-first Hero trailer source policy")
+
+
+# V9.3: extracted YouTube/googlevideo URLs must be opened by mpv with browser headers.
+windows_hero_player_path = root / "composeApp/src/windowsDesktopMain/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.desktop.kt"
+windows_hero_player = windows_hero_player_path.read_text(encoding="utf-8")
+windows_hero_player = replace_once(
+    windows_hero_player,
+    '''private const val HeroTrailerSnapshotIntervalMillis = 120L
+''',
+    '''private const val HeroTrailerSnapshotIntervalMillis = 120L
+
+private val HeroTrailerPlaybackHeaders = mapOf(
+    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "Referer" to "https://www.youtube.com/",
+    "Origin" to "https://www.youtube.com",
+    "Accept-Language" to "en-US,en;q=0.9",
+)
+''',
+    "v9 hero playback headers",
+)
+windows_hero_player = replace_once(
+    windows_hero_player,
+    '''        controller.attach(
+            sourceUrl = sourceUrl,
+            sourceHeaders = emptyMap(),
+''',
+    '''        controller.attach(
+            sourceUrl = sourceUrl,
+            sourceHeaders = HeroTrailerPlaybackHeaders,
+''',
+    "v9 pass YouTube headers to native player",
+)
+windows_hero_player_path.write_text(windows_hero_player, encoding="utf-8")
+
+print("Applied V9.3 YouTube playback headers for Windows native Hero player")
