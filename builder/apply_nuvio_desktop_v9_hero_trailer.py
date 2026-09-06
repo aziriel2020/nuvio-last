@@ -3485,3 +3485,189 @@ extractor = replace_once(
 extractor_path.write_text(extractor, encoding="utf-8")
 
 print("Applied V9.7 NuvioTV Innertube fallback + playability diagnostics")
+
+
+# V9.8: match the supplied Hero reference framing/gradient and enable Windows sound by default.
+hero = hero_path.read_text(encoding="utf-8")
+hero = replace_once(
+    hero,
+    '''                .fillMaxWidth(0.62f)
+                .fillMaxHeight(),
+''',
+    '''                .fillMaxWidth(0.68f)
+                .fillMaxHeight(),
+''',
+    "v9.8 reference trailer visual width",
+)
+hero = replace_once(
+    hero,
+    '''                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 0.99f),
+                            0.22f to backgroundColor.copy(alpha = 0.96f),
+                            0.45f to backgroundColor.copy(alpha = 0.76f),
+                            0.70f to backgroundColor.copy(alpha = 0.16f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+''',
+    '''                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 1.00f),
+                            0.28f to backgroundColor.copy(alpha = 0.99f),
+                            0.40f to backgroundColor.copy(alpha = 0.96f),
+                            0.50f to backgroundColor.copy(alpha = 0.82f),
+                            0.60f to backgroundColor.copy(alpha = 0.56f),
+                            0.70f to backgroundColor.copy(alpha = 0.28f),
+                            0.82f to backgroundColor.copy(alpha = 0.07f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+''',
+    "v9.8 reference wide horizontal video blend",
+)
+hero = replace_once(
+    hero,
+    '''                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 0.42f),
+                            0.18f to Color.Transparent,
+                            0.68f to Color.Transparent,
+                            1f to backgroundColor.copy(alpha = 0.96f),
+                        ),
+                    ),
+''',
+    '''                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 0.10f),
+                            0.14f to Color.Transparent,
+                            0.70f to Color.Transparent,
+                            0.86f to backgroundColor.copy(alpha = 0.42f),
+                            1f to backgroundColor.copy(alpha = 0.94f),
+                        ),
+                    ),
+''',
+    "v9.8 reference subtle top and strong shelf blend",
+)
+hero_path.write_text(hero, encoding="utf-8")
+
+style_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt"
+style = style_path.read_text(encoding="utf-8")
+style = replace_once(
+    style,
+    '''    val hoverPreviewTrailerConfigured: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+''',
+    '''    val hoverPreviewTrailerConfigured: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+    val hoverPreviewTrailerSoundConfigured: Boolean = false,
+''',
+    "v9.8 stored trailer sound configured flag",
+)
+style = replace_once(
+    style,
+    '''    val hoverPreviewTrailerEnabled: Boolean = isWindows,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,
+''',
+    '''    val hoverPreviewTrailerEnabled: Boolean = isWindows,
+    val hoverPreviewTrailerSoundEnabled: Boolean = isWindows,
+''',
+    "v9.8 Windows trailer sound default",
+)
+style = replace_once(
+    style,
+    '''    private var hasLoaded = false
+    private var hoverPreviewTrailerConfigured = false
+''',
+    '''    private var hasLoaded = false
+    private var hoverPreviewTrailerConfigured = false
+    private var hoverPreviewTrailerSoundConfigured = false
+''',
+    "v9.8 sound preference migration state",
+)
+style = replace_once(
+    style,
+    '''        hasLoaded = false
+        hoverPreviewTrailerConfigured = false
+        _uiState.value = PosterCardStyleUiState()
+''',
+    '''        hasLoaded = false
+        hoverPreviewTrailerConfigured = false
+        hoverPreviewTrailerSoundConfigured = false
+        _uiState.value = PosterCardStyleUiState()
+''',
+    "v9.8 clear sound preference migration state",
+)
+style = replace_once(
+    style,
+    '''    fun setHoverPreviewTrailerSoundEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.hoverPreviewTrailerSoundEnabled == enabled) return
+        _uiState.value = _uiState.value.copy(hoverPreviewTrailerSoundEnabled = enabled)
+        persist()
+    }
+''',
+    '''    fun setHoverPreviewTrailerSoundEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (
+            _uiState.value.hoverPreviewTrailerSoundEnabled == enabled &&
+            hoverPreviewTrailerSoundConfigured
+        ) return
+        hoverPreviewTrailerSoundConfigured = true
+        _uiState.value = _uiState.value.copy(hoverPreviewTrailerSoundEnabled = enabled)
+        persist()
+    }
+''',
+    "v9.8 mark explicit trailer sound preference",
+)
+style = replace_once(
+    style,
+    '''        hoverPreviewTrailerConfigured = stored?.hoverPreviewTrailerConfigured ?: false
+
+        _uiState.value = if (stored != null) {
+''',
+    '''        hoverPreviewTrailerConfigured = stored?.hoverPreviewTrailerConfigured ?: false
+        hoverPreviewTrailerSoundConfigured =
+            stored?.hoverPreviewTrailerSoundConfigured ?: false
+
+        _uiState.value = if (stored != null) {
+''',
+    "v9.8 load trailer sound configured flag",
+)
+style = replace_once(
+    style,
+    '''                hoverPreviewTrailerSoundEnabled = stored.hoverPreviewTrailerSoundEnabled,
+                hoverPreviewTrailerStartSeconds = normalizeHoverPreviewTrailerStartSeconds(
+''',
+    '''                hoverPreviewTrailerSoundEnabled =
+                    if (isWindows && !hoverPreviewTrailerSoundConfigured) true
+                    else stored.hoverPreviewTrailerSoundEnabled,
+                hoverPreviewTrailerStartSeconds = normalizeHoverPreviewTrailerStartSeconds(
+''',
+    "v9.8 migrate legacy Windows muted trailer default",
+)
+style = replace_once(
+    style,
+    '''                    hoverPreviewTrailerConfigured = hoverPreviewTrailerConfigured,
+                    hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,
+''',
+    '''                    hoverPreviewTrailerConfigured = hoverPreviewTrailerConfigured,
+                    hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,
+                    hoverPreviewTrailerSoundConfigured = hoverPreviewTrailerSoundConfigured,
+''',
+    "v9.8 persist trailer sound configured flag",
+)
+style_path.write_text(style, encoding="utf-8")
+
+main = main_path.read_text(encoding="utf-8")
+main = replace_once(
+    main,
+    '''            muted = true,
+''',
+    '''            muted = false,
+''',
+    "v9.8 unmuted installed Hero smoke",
+)
+main_path.write_text(main, encoding="utf-8")
+
+print("Applied V9.8 reference Hero blend + Windows sound-on migration")

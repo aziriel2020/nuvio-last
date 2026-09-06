@@ -126,15 +126,20 @@ jobs:
               (bridge,'setMpvOptionStringLocked("user-agent"'),
               (bridge,'setMpvOptionStringLocked("referrer"'),
               (platform,"windowsHost"),
-              (hero,"fillMaxWidth(0.62f)"),
+              (hero,"fillMaxWidth(0.68f)"),
+              (hero,"0.60f to backgroundColor.copy(alpha = 0.56f)"),
+              (hero,"0.86f to backgroundColor.copy(alpha = 0.42f)"),
               (hero,"isCatalogHeroTrailerPlaybackEnabled"),
               (policy,"actual val heroTrailerPlaybackSupported: Boolean = true"),
               (settings,"AppFeaturePolicy.heroTrailerPlaybackSupported ||"),
               (style,"hoverPreviewTrailerConfigured"),
+              (style,"hoverPreviewTrailerSoundConfigured"),
+              (style,"hoverPreviewTrailerSoundEnabled: Boolean = isWindows"),
               (extractor,"FALLBACK_INNERTUBE_API_KEY"),
               (extractor,"retrying without visitor data"),
               (main,"HeroTrailerSmokeHarness"),
               (main,"error:hero-gate-disabled"),
+              (main,"muted = false"),
           ]:
               if token not in text:
                   raise SystemExit("Missing V9 contract: "+token)
