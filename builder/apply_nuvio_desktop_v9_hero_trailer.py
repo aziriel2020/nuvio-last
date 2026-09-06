@@ -2497,6 +2497,7 @@ private fun WindowsHeroTrailerSession(
     val platformDensity = LocalNuvioPlatformDensity.current
     val host = remember { NativePlayerHost() }
     val controller = remember(host) { NativePlayerController(host) }
+    val hostFirstPaintComplete = remember { mutableStateOf(false) }
     val hostReady = remember { mutableStateOf(false) }
     val readyReported = remember { mutableStateOf(false) }
     val terminalReported = remember { mutableStateOf(false) }
@@ -2507,13 +2508,20 @@ private fun WindowsHeroTrailerSession(
     DisposableEffect(host, controller) {
         host.setControlsVisible(false)
         host.onDisplayableChanged = { displayable ->
-            if (!displayable) hostReady.value = false
+            if (!displayable) {
+                hostFirstPaintComplete.value = false
+                hostReady.value = false
+            }
+        }
+        host.onFirstPaint = {
+            hostFirstPaintComplete.value = true
         }
         host.onFirstFullSizePaint = {
             hostReady.value = true
         }
         onDispose {
             host.onDisplayableChanged = null
+            host.onFirstPaint = null
             host.onFirstFullSizePaint = null
             controller.dispose()
         }
@@ -2613,7 +2621,7 @@ private fun WindowsHeroTrailerSession(
         ) {
             SwingPanel(
                 factory = { host },
-                modifier = if (hostReady.value) {
+                modifier = if (hostFirstPaintComplete.value) {
                     Modifier.fillMaxSize()
                 } else {
                     Modifier
