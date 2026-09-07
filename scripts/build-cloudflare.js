@@ -6,7 +6,7 @@ const handler = require('../api/index');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
-const DEFAULT_PUBLIC_ORIGIN = 'https://nuvio-last-aziriel2020.pages.dev';
+const DEFAULT_PUBLIC_ORIGIN = 'https://nuvio-last-aziriel2020-1343705637.pages.dev';
 
 function normalizeOrigin(value) {
   const url = new URL(String(value || DEFAULT_PUBLIC_ORIGIN));
