@@ -5,7 +5,9 @@
   "description": "France + USA + Türkiye + Global Anime/VOD + TMDb genres, 2030→2015 periods, cinematic backgrounds.",
   "scripts": {
     "start": "node local-server.js",
-    "test": "node scripts/test-all.js"
+    "test": "node scripts/test-all.js",
+    "build:cloudflare": "node scripts/build-cloudflare.js",
+    "test:cloudflare": "node --test test/cloudflare.test.js"
   },
   "engines": {
     "node": ">=20"
