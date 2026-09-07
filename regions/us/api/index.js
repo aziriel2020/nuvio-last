@@ -1476,10 +1476,10 @@ function calendarCardUrl(origin, meta, catalog, timeZone, layout = 'portrait', s
   url.searchParams.set('title', compactCardText(meta.name, 62));
   url.searchParams.set('provider', compactCardText(meta?._calendarProvider || catalog?.cardProvider || catalog?.name || 'USA', 36));
   url.searchParams.set('append', append);
-  url.searchParams.set('tz', timeZone || DEFAULT_TIMEZONE);
   url.searchParams.set('type', meta.type || catalog?.type || '');
-  if (meta.released) url.searchParams.set('date', meta.released);
-  if (meta?._calendarSource) url.searchParams.set('source', meta._calendarSource);
+  // append already contains the rendered date/time/provider information.
+  // Avoid ignored tz/date/source query parameters so equivalent cards share
+  // the same Vercel CDN cache key instead of creating redundant variants.
   return url.toString();
 }
 
