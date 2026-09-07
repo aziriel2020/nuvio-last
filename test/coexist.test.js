@@ -18,11 +18,25 @@ function call(path, headers = {}) {
   });
 }
 
+function assertCdnCache(response, sMaxAge) {
+  const cacheControl = String(response.headers['cache-control'] || '');
+  assert(cacheControl.includes('public'), cacheControl);
+  assert(cacheControl.includes(`s-maxage=${sMaxAge}`), cacheControl);
+}
+
+
 test('single deployment exposes four distinct addon manifests', async () => {
-  const us = JSON.parse((await call('/us/manifest.json')).text);
-  const fr = JSON.parse((await call('/fr/manifest.json')).text);
-  const globalVod = JSON.parse((await call('/global/manifest.json')).text);
-  const tr = JSON.parse((await call('/tr/manifest.json')).text);
+  const usResponse = await call('/us/manifest.json');
+  const frResponse = await call('/fr/manifest.json');
+  const globalResponse = await call('/global/manifest.json');
+  const trResponse = await call('/tr/manifest.json');
+  for (const response of [usResponse, frResponse, globalResponse, trResponse]) {
+    assertCdnCache(response, 86400);
+  }
+  const us = JSON.parse(usResponse.text);
+  const fr = JSON.parse(frResponse.text);
+  const globalVod = JSON.parse(globalResponse.text);
+  const tr = JSON.parse(trResponse.text);
   assert.equal(us.id, 'com.nuvio.calendar.archives.us.coexist');
   assert.equal(fr.id, 'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(globalVod.id, 'com.nuvio.calendar.archives.global.coexist');
@@ -37,6 +51,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
 test('combined import has 47 unique collections: France, Global, Türkiye, then USA', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
+  assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
   assert.equal(collections.length, 47);
   const ids = collections.map((c) => c.id);
@@ -230,6 +245,35 @@ test('USA and France Paramount+ remain distinct and both expose Series and Films
   assert(fr.folders[0].sources.every((s) => s.catalogId.startsWith('archives-fr-v1-series-paramount-plus-')));
 });
 
+test('dynamic calendar data is CDN cached briefly while historical data stays cached longer', () => {
+  const apis = [
+    handler._internals.frHandler._internals,
+    handler._internals.globalHandler._internals,
+    handler._internals.trHandler._internals,
+    handler._internals.usHandler._internals,
+  ];
+  const window = { today: '2026-09-07', empty: false };
+  for (const api of apis) {
+    assert.equal(
+      api.catalogResponseCacheControl({ period: 'today', archivePeriodKey: 'today' }, window),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=900'
+    );
+    assert.equal(
+      api.catalogResponseCacheControl({ period: 'archive-2026-09' }, window),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=900'
+    );
+    assert.equal(
+      api.catalogResponseCacheControl({ period: 'archive-2025-08' }, window),
+      'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400'
+    );
+    assert.equal(
+      api.catalogResponseCacheControl({ period: 'archive-2030-12' }, { ...window, empty: true }),
+      'public, max-age=300, s-maxage=3600'
+    );
+  }
+});
+
+
 test('health endpoint is green when all regions coexist safely', async () => {
   const response = await call('/health');
   assert.equal(response.statusCode, 200);
@@ -242,6 +286,7 @@ test('health endpoint is green when all regions coexist safely', async () => {
 test('desktop import uses clean raster covers with native folder titles', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
+  assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
   assert.equal(collections.length, 47);
 
