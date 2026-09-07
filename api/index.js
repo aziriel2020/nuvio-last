@@ -56,7 +56,8 @@ function cleanVisualQuery(url, removeKeys) {
 
 function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const value = String(url || '');
-  const type = String(folder?.title || '').toLowerCase().includes('film') ? 'movie' : 'series';
+  const typeContext = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
+  const type = typeContext.includes('film') ? 'movie' : 'series';
 
   if (value.includes('/platform-category-card.svg') || value.includes('/platform-card.jpg')) {
     const next = value
@@ -74,7 +75,11 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
     const colorMatch = value.match(/[?&]color=([^&]+)/);
     const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
     const extra = new URLSearchParams({ type, v: 'desktop10', title: folder?.title || '', label: collectionTitle || '' });
-    if (colorMatch) extra.set('color', colorMatch[1]);
+    if (colorMatch) {
+      let color = colorMatch[1];
+      try { color = decodeURIComponent(color); } catch {}
+      extra.set('color', color);
+    }
     return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
   }
 
