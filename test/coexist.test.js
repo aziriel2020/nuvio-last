@@ -518,18 +518,24 @@ test('desktop text renderer keeps native title fallback and carries accented met
   );
   const url = new URL(decorated.banner);
   assert.equal(url.searchParams.get('title'), 'Maternité éternelle');
-  assert.match(url.searchParams.get('append') || '', /Aujourd/i);
+  assert.match(url.searchParams.get('append') || '', /MARS/i);
+  assert.match(url.searchParams.get('append') || '', /ARTE/i);
   assert.equal(url.searchParams.get('type'), 'movie');
 });
 
 
 test('desktop final renderer produces a real JPEG with accented readable text', async () => {
   const oldFetch = global.fetch;
-  // Valid 1x1 PNG. Sharp will resize it to the 16:9 card before compositing text.
-  const png = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Qzq6WQAAAABJRU5ErkJggg==',
-    'base64'
-  );
+  // Generate a valid source image with the same Sharp version used by the renderer.
+  const sharp = require('sharp');
+  const png = await sharp({
+    create: {
+      width: 2,
+      height: 2,
+      channels: 3,
+      background: { r: 40, g: 80, b: 120 }
+    }
+  }).png().toBuffer();
   global.fetch = async (url) => {
     const value = String(url);
     if (value.startsWith('https://image.tmdb.org/')) {
