@@ -6,6 +6,7 @@ const globalHandler = require('../regions/global/api/index');
 const trHandler = require('../regions/tr/api/index');
 
 const VERSION = '1.4.0';
+const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 
 function originFromRequest(req) {
   const proto = req?.headers?.['x-forwarded-proto'] || 'https';
@@ -55,7 +56,8 @@ function cleanVisualQuery(url, removeKeys) {
 
 function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const value = String(url || '');
-  const type = String(folder?.title || '').toLowerCase().includes('film') ? 'movie' : 'series';
+  const typeContext = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
+  const type = typeContext.includes('film') ? 'movie' : 'series';
 
   if (value.includes('/platform-category-card.svg') || value.includes('/platform-card.jpg')) {
     const next = value
@@ -73,7 +75,11 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
     const colorMatch = value.match(/[?&]color=([^&]+)/);
     const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
     const extra = new URLSearchParams({ type, v: 'desktop10', title: folder?.title || '', label: collectionTitle || '' });
-    if (colorMatch) extra.set('color', colorMatch[1]);
+    if (colorMatch) {
+      let color = colorMatch[1];
+      try { color = decodeURIComponent(color); } catch {}
+      extra.set('color', color);
+    }
     return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
   }
 
@@ -185,10 +191,10 @@ module.exports = async function handler(req, res) {
   }
   if (path === '/coexistence-check.json') return sendJson(res, 200, coexistenceReport(req), 'no-store');
   if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
-    return sendJson(res, 200, combinedCollections(req), 'no-store');
+    return sendJson(res, 200, combinedCollections(req), LARGE_JSON_CACHE);
   }
   if (path === '/nuvio-collections-desktop.json') {
-    return sendJson(res, 200, combinedDesktopCollections(req), 'no-store');
+    return sendJson(res, 200, combinedDesktopCollections(req), LARGE_JSON_CACHE);
   }
   if (path === '/nuvio-collections-global.json') {
     const origin = originFromRequest(req);
@@ -200,7 +206,7 @@ module.exports = async function handler(req, res) {
         globalHandler._internals.requestTimeZone(req),
         `${origin}/global`
       ),
-      'no-store'
+      LARGE_JSON_CACHE
     );
   }
   if (path === '/nuvio-collections-tr.json' || path === '/nuvio-collections-turkiye.json') {
@@ -213,7 +219,7 @@ module.exports = async function handler(req, res) {
         trHandler._internals.requestTimeZone(req),
         `${origin}/tr`
       ),
-      'no-store'
+      LARGE_JSON_CACHE
     );
   }
   if (path === '/install.json') {

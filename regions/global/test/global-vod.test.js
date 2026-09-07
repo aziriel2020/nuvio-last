@@ -270,7 +270,7 @@ test('global anime movie discovery queries Japan and Korea separately for the se
 });
 
 
-test('desktop gets the exact cinematic 16:9 card through banner', () => {
+test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG background', () => {
   const meta = {
     id: 'tt1234567',
     type: 'movie',
@@ -291,6 +291,6 @@ test('desktop gets the exact cinematic 16:9 card through banner', () => {
   );
   assert.equal(decorated.posterShape, 'landscape');
   assert.match(decorated.background, /calendar-card\.svg/);
-  assert.match(decorated.banner, /calendar-card\.svg/);
-  assert.equal(decorated.banner, decorated.background);
+  assert.match(decorated.banner, /desktop-content-card\.jpg/);
+  assert.notEqual(decorated.banner, decorated.background);
 });
