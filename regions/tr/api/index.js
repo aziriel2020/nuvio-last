@@ -1401,9 +1401,16 @@ function serveGenrePosterPng(res, params = {}) {
 }
 
 function requestOrigin(req) {
+  const prefix = String(req.headers['x-nuvio-base-path'] || '').replace(/\/$/, '');
+  const explicitOrigin = String(req.headers['x-nuvio-public-origin'] || '').trim();
+  if (explicitOrigin) {
+    try {
+      const url = new URL(explicitOrigin);
+      if (/^https?:$/.test(url.protocol)) return `${url.origin}${prefix}`;
+    } catch (_) {}
+  }
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const prefix = String(req.headers['x-nuvio-base-path'] || '').replace(/\/$/, '');
   return `${proto}://${host}${prefix}`;
 }
 
