@@ -49,6 +49,10 @@ const PROVIDERS_TTL_MS = 6 * 60 * 60 * 1000;
 const TVMAZE_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const ANILIST_SCHEDULE_TTL_MS = 10 * 60 * 1000;
 const MAPPING_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
+const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
+const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
+const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
 const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield';
 const VISUAL_REV = 'coex-tr140-cinematic';
 
@@ -3749,6 +3753,13 @@ async function buildCatalog(options) {
   return buildStreamingCatalog(options);
 }
 
+function catalogResponseCacheControl(catalog, window) {
+  if (window.empty) return EMPTY_CATALOG_CACHE;
+  const currentMonth = catalog.period === `archive-${window.today.slice(0, 7)}`;
+  const dynamicPeriod = Boolean(catalog.archivePeriodKey);
+  return dynamicPeriod || currentMonth ? DYNAMIC_CATALOG_CACHE : ARCHIVE_CATALOG_CACHE;
+}
+
 async function handleCatalog(req, res, type, catalogId, extras = {}, url = null) {
   const startedAt = Date.now();
   const timeZone = requestTimeZone(req);
@@ -3763,7 +3774,6 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
     ? !archiveYearIsVisible(catalog.archiveYear, now, timeZone)
     : false;
   if (window.empty || outsideRollingTwoYears) {
-    res.setHeader('Vary', 'x-vercel-ip-timezone');
     res.setHeader('X-Nuvio-Calendar-Date', window.today);
     res.setHeader('X-Nuvio-Calendar-Period', period);
     res.setHeader('X-Nuvio-Calendar-Filter', 'all');
@@ -3782,7 +3792,6 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
     // Nuvio's Collection folder should never be taken down by one provider API
     // failure. Return a valid empty Stremio catalog so Shield stays navigable.
     console.error(`[catalog-soft-fail] ${catalogId}`, error);
-    res.setHeader('Vary', 'x-vercel-ip-timezone');
     res.setHeader('X-Nuvio-Calendar-Date', window.today);
     res.setHeader('X-Nuvio-Calendar-Period', period);
     res.setHeader('X-Nuvio-Calendar-Filter', filter?.value || 'all');
@@ -3799,7 +3808,6 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   const pagedMetas = allMetas.slice(skip, skip + pageSize);
   const origin = requestOrigin(req);
   const decoratedMetas = decorateCatalogMetas(origin, pagedMetas, catalog, timeZone);
-  res.setHeader('Vary', 'x-vercel-ip-timezone');
   res.setHeader('X-Nuvio-Calendar-Date', result.stats.today);
   res.setHeader('X-Nuvio-Calendar-Period', period);
   res.setHeader('X-Nuvio-Calendar-Filter', filter?.value || 'all');
@@ -3807,13 +3815,7 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   res.setHeader('X-Nuvio-Calendar-Total', String(allMetas.length));
   res.setHeader('X-Nuvio-Calendar-Source-Errors', String(Number(result.stats?.sourceErrors || 0)));
   res.setHeader('Server-Timing', `calendar;dur=${Date.now() - startedAt}`);
-  const currentMonth = period === `archive-${window.today.slice(0, 7)}`;
-  const dynamicPeriod = Boolean(catalog.archivePeriodKey);
-  const cacheControl = window.empty
-    ? 'public, max-age=300, s-maxage=3600'
-    : (dynamicPeriod || currentMonth
-      ? 'private, max-age=60'
-      : 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400');
+  const cacheControl = catalogResponseCacheControl(catalog, window);
   return json(res, 200, { metas: decoratedMetas }, cacheControl);
 }
 
@@ -4096,7 +4098,7 @@ module.exports = async function handler(req, res) {
 
   try {
     if (path === '/' || path === '/index.html') return html(res, landing(origin, requestTimeZone(req)));
-    if (path === '/manifest.json') { const tz = requestTimeZone(req); return json(res, 200, buildManifest(origin, runtimeNow(), tz), 'public, max-age=300, s-maxage=900'); }
+    if (path === '/manifest.json') { const tz = requestTimeZone(req); return json(res, 200, buildManifest(origin, runtimeNow(), tz), LARGE_JSON_CACHE); }
     if (path === '/logo.svg') return svg(res, LOGO);
     if (path === '/background.svg') return svg(res, BG);
     if (path === '/calendar-transparent-logo.svg') return svg(res, '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="16" viewBox="0 0 64 16"><rect width="64" height="16" fill="none"/></svg>', 'public, max-age=31536000, immutable');
@@ -4116,8 +4118,8 @@ module.exports = async function handler(req, res) {
     if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/fr-genres-backdrop.jpg`);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
-    if (path === '/nuvio-collections.json' || path === '/collections.json') return json(res, 200, buildNuvioCollectionsImport(runtimeNow(), requestTimeZone(req), origin), 'no-store');
-    if (path === '/archive-blueprint.json') return json(res, 200, buildArchiveBlueprint(runtimeNow(), requestTimeZone(req), origin), 'no-store');
+    if (path === '/nuvio-collections.json' || path === '/collections.json') return json(res, 200, buildNuvioCollectionsImport(runtimeNow(), requestTimeZone(req), origin), LARGE_JSON_CACHE);
+    if (path === '/archive-blueprint.json') return json(res, 200, buildArchiveBlueprint(runtimeNow(), requestTimeZone(req), origin), LARGE_JSON_CACHE);
 
     if (path === '/debug/time') return await handleDebugTime(req, res);
     const debugCatalogMatch = path.match(/^\/debug\/catalog\/(movie|series)\/(month|past7|today|tomorrow|yesterday|lastweek|nextweek|week)$/);
@@ -4276,6 +4278,7 @@ module.exports._internals = {
   buildCombinedCatalog,
   releaseClockMinutes,
   buildCatalog,
+  catalogResponseCacheControl,
   mapLimitSettled,
   tmdbFetch,
   tvmazeFetch,
