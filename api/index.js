@@ -8,7 +8,20 @@ const trHandler = require('../regions/tr/api/index');
 const VERSION = '1.4.0';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 
+function publicOriginFromRequest(req) {
+  const raw = String(req?.headers?.['x-nuvio-public-origin'] || '').trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    return /^https?:$/.test(url.protocol) ? url.origin : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function originFromRequest(req) {
+  const publicOrigin = publicOriginFromRequest(req);
+  if (publicOrigin) return publicOrigin;
   const proto = req?.headers?.['x-forwarded-proto'] || 'https';
   const host = req?.headers?.['x-forwarded-host'] || req?.headers?.host || 'localhost';
   return `${proto}://${host}`;
@@ -247,6 +260,7 @@ module.exports = async function handler(req, res) {
 module.exports._internals = {
   VERSION,
   originFromRequest,
+  publicOriginFromRequest,
   combinedCollections,
   combinedDesktopCollections,
   desktopizeCollectionArt,

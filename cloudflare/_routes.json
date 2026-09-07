@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "include": [
+    "/*"
+  ],
+  "exclude": [
+    "/",
+    "/index.html",
+    "/install.json",
+    "/coexistence-check.json",
+    "/nuvio-collections-fr-global-tr-usa.json",
+    "/nuvio-collections-fr-global-usa.json",
+    "/nuvio-collections-usa-fr.json",
+    "/collections.json",
+    "/nuvio-collections-desktop.json",
+    "/nuvio-collections-global.json",
+    "/nuvio-collections-tr.json",
+    "/nuvio-collections-turkiye.json",
+    "/fr/manifest.json",
+    "/fr/nuvio-collections.json",
+    "/fr/collections.json",
+    "/fr/archive-blueprint.json",
+    "/global/manifest.json",
+    "/global/nuvio-collections.json",
+    "/global/collections.json",
+    "/global/archive-blueprint.json",
+    "/tr/manifest.json",
+    "/tr/nuvio-collections.json",
+    "/tr/collections.json",
+    "/tr/archive-blueprint.json",
+    "/us/manifest.json",
+    "/us/nuvio-collections.json",
+    "/us/collections.json",
+    "/us/archive-blueprint.json",
+    "/static/*",
+    "/edge-build.json"
+  ]
+}
