@@ -1,0 +1,147 @@
+name: Deploy Cloudflare Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "api/**"
+      - "regions/**"
+      - "assets/**"
+      - "cloudflare/**"
+      - "scripts/build-cloudflare.js"
+      - "package.json"
+      - ".github/workflows/deploy-cloudflare.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_PROJECT_NAME: nuvio-last-aziriel2020-1343705637
+      PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Cloudflare credentials
+        id: credentials
+        shell: bash
+        run: |
+          if [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Cloudflare deployment is prepared but not started. Add repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, then re-run this workflow."
+          fi
+
+      - name: Set up Node.js
+        if: steps.credentials.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        if: steps.credentials.outputs.ready == 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Run regression tests
+        if: steps.credentials.outputs.ready == 'true'
+        run: |
+          npm test
+          npm run test:cloudflare
+
+      - name: Build Cloudflare Pages output
+        if: steps.credentials.outputs.ready == 'true'
+        run: npm run build:cloudflare
+
+      - name: Create Pages project when needed
+        if: steps.credentials.outputs.ready == 'true'
+        shell: bash
+        run: |
+          npx --yes wrangler@latest pages project list --json > "$RUNNER_TEMP/cloudflare-pages-projects.json"
+          if node - "$RUNNER_TEMP/cloudflare-pages-projects.json" "$CLOUDFLARE_PROJECT_NAME" <<'NODE'
+          const fs = require('fs');
+          const [file, name] = process.argv.slice(2);
+          const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const projects = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload.result)
+              ? payload.result
+              : Array.isArray(payload.projects)
+                ? payload.projects
+                : [];
+          process.exit(projects.some((project) => project && project.name === name) ? 0 : 1);
+          NODE
+          then
+            echo "Cloudflare Pages project already exists."
+          else
+            npx --yes wrangler@latest pages project create "$CLOUDFLARE_PROJECT_NAME" --production-branch=main
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.credentials.outputs.ready == 'true'
+        id: deploy
+        shell: bash
+        run: |
+          npx --yes wrangler@latest pages deploy dist             --project-name="$CLOUDFLARE_PROJECT_NAME"             --branch=main             --commit-hash="$GITHUB_SHA"
+
+      - name: Verify production deployment
+        if: steps.credentials.outputs.ready == 'true'
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const origin = process.env.PUBLIC_ORIGIN;
+          const checks = [
+            '/',
+            '/edge-build.json',
+            '/nuvio-collections-fr-global-tr-usa.json',
+            '/fr/manifest.json',
+            '/global/manifest.json',
+            '/tr/manifest.json',
+            '/us/manifest.json',
+            '/health'
+          ];
+          async function main() {
+            for (const path of checks) {
+              let response = null;
+              for (let attempt = 1; attempt <= 6; attempt++) {
+                response = await fetch(origin + path, { redirect: 'follow' });
+                if (response.ok) break;
+                await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+              }
+              if (!response || !response.ok) {
+                throw new Error(`${path} failed with HTTP ${response?.status ?? 'no response'}`);
+              }
+              if (path === '/nuvio-collections-fr-global-tr-usa.json') {
+                const data = await response.json();
+                if (!Array.isArray(data) || data.length !== 47) {
+                  throw new Error(`${path} returned an unexpected collection count`);
+                }
+              } else if (path.endsWith('/manifest.json')) {
+                const manifest = await response.json();
+                if (!manifest?.id || !Array.isArray(manifest.catalogs) || manifest.catalogs.length === 0) {
+                  throw new Error(`${path} returned an invalid manifest`);
+                }
+              } else {
+                await response.arrayBuffer();
+              }
+              console.log(`OK ${path}`);
+            }
+          }
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
