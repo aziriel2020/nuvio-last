@@ -18,10 +18,16 @@ function call(path, headers = {}) {
   });
 }
 
+const VERCEL_CDN_MAX_CACHEABLE_BYTES = 10 * 1024 * 1024;
+
 function assertCdnCache(response, sMaxAge) {
   const cacheControl = String(response.headers['cache-control'] || '');
   assert(cacheControl.includes('public'), cacheControl);
   assert(cacheControl.includes(`s-maxage=${sMaxAge}`), cacheControl);
+  assert(
+    response.body.length < VERCEL_CDN_MAX_CACHEABLE_BYTES,
+    `response is ${response.body.length} bytes and exceeds Vercel's 10 MB CDN cacheable-response limit`
+  );
 }
 
 
@@ -283,7 +289,7 @@ test('health endpoint is green when all regions coexist safely', async () => {
 });
 
 
-test('desktop import uses clean raster covers with native folder titles', async () => {
+test('desktop import uses dedicated cinematic raster covers with native folder titles', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
@@ -300,17 +306,25 @@ test('desktop import uses clean raster covers with native folder titles', async 
       assert.equal(folder.hideTitle, false);
       assert.equal(folder.focusGifEnabled, false);
       assert.equal(folder.focusGifUrl, null);
-      assert.match(folder.coverImageUrl, /\/platform-card\.jpg\?provider=/);
+      const coverUrl = new URL(folder.coverImageUrl);
+      assert.equal(coverUrl.pathname.endsWith('/desktop-folder-card.jpg'), true);
+      assert(coverUrl.searchParams.get('provider'));
       assert.doesNotMatch(folder.coverImageUrl, /platform-category-card\.svg/);
     }
   }
 
-  assert.match(frNetflix.folders[0].coverImageUrl, /\/fr\/platform-card\.jpg\?provider=netflix$/);
-  assert.match(globalVod.folders[0].coverImageUrl, /\/global\/platform-card\.jpg\?provider=vod-global$/);
-  assert.match(usNetflix.folders[0].coverImageUrl, /\/us\/platform-card\.jpg\?provider=netflix$/);
+  const frCover = new URL(frNetflix.folders[0].coverImageUrl);
+  const globalCover = new URL(globalVod.folders[0].coverImageUrl);
+  const usCover = new URL(usNetflix.folders[0].coverImageUrl);
+  assert.equal(frCover.pathname, '/fr/desktop-folder-card.jpg');
+  assert.equal(frCover.searchParams.get('provider'), 'netflix');
+  assert.equal(globalCover.pathname, '/global/desktop-folder-card.jpg');
+  assert.equal(globalCover.searchParams.get('provider'), 'vod-global');
+  assert.equal(usCover.pathname, '/us/desktop-folder-card.jpg');
+  assert.equal(usCover.searchParams.get('provider'), 'netflix');
 });
 
-test('desktop banner prefers original landscape artwork while Shield keeps cinematic background', () => {
+test('desktop banner keeps the original landscape artwork as its cinematic source while Shield keeps SVG background', () => {
   const apis = [
     [handler._internals.frHandler._internals, 'https://coexist.example/fr', 'Europe/Paris'],
     [handler._internals.usHandler._internals, 'https://coexist.example/us', 'America/New_York'],
@@ -335,7 +349,9 @@ test('desktop banner prefers original landscape artwork while Shield keeps cinem
       { type: 'movie', period: 'today', cardProvider: 'Netflix', name: 'Aujourd’hui' },
       tz
     );
-    assert.equal(decorated.banner, meta.landscapePoster);
+    const bannerUrl = new URL(decorated.banner);
+    assert.equal(bannerUrl.pathname.endsWith('/desktop-content-card.jpg'), true);
+    assert.equal(bannerUrl.searchParams.get('src'), 'https://image.tmdb.org/t/p/w780/demo-landscape.jpg');
     assert.match(decorated.background, /calendar-card\.svg\?/);
     assert.match(decorated.landscapePoster, /calendar-card\.svg\?/);
   }
@@ -541,7 +557,7 @@ test('desktop final renderer produces a real JPEG with accented readable text', 
 });
 
 
-test('desktop8 import uses adaptive cinematic routes with labels', async () => {
+test('desktop10 import uses adaptive cinematic routes with labels', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
   const collections = JSON.parse(response.text);
@@ -551,12 +567,12 @@ test('desktop8 import uses adaptive cinematic routes with labels', async () => {
   assert(folder);
   const url = new URL(folder.coverImageUrl);
   assert.equal(url.pathname, '/fr/desktop-folder-card.jpg');
-  assert.equal(url.searchParams.get('v'), 'desktop8');
+  assert.equal(url.searchParams.get('v'), 'desktop10');
   assert.equal(url.searchParams.get('title'), 'Séries');
   assert.match(url.searchParams.get('label') || '', /Netflix/);
 });
 
-test('desktop8 content banner carries adaptive title and subtitle metadata', () => {
+test('desktop10 content banner carries adaptive title and subtitle metadata', () => {
   const api = handler._internals.frHandler._internals;
   const meta = {
     id: 'ttadaptive',
@@ -578,7 +594,7 @@ test('desktop8 content banner carries adaptive title and subtitle metadata', () 
   );
   const url = new URL(decorated.banner);
   assert.equal(url.pathname, '/fr/desktop-content-card.jpg');
-  assert.match(url.searchParams.get('v') || '', /desktop8$/);
+  assert.match(url.searchParams.get('v') || '', /desktop10$/);
   assert.equal(url.searchParams.get('title'), meta.name);
   assert(url.searchParams.get('append'));
   assert.match(url.searchParams.get('label') || '', /Disney/i);
