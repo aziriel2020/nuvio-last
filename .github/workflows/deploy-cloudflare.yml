@@ -160,6 +160,33 @@ jobs:
             const payload = await response.json();
             if (!Array.isArray(payload?.metas)) throw new Error(`${path} did not return metas`);
             console.log(`DYNAMIC OK ${path} (${payload.metas.length} metas)`);
+            return payload;
+          }
+
+          async function checkDesktopContentOverlay(payload) {
+            const meta = payload?.metas?.find((entry) => String(entry?.banner || '').includes('/desktop-content-card.jpg'));
+            if (!meta) throw new Error('France Today catalog has no desktop content card to verify');
+
+            const banner = new URL(meta.banner);
+            if (!/desktop11$/.test(banner.searchParams.get('v') || '')) {
+              throw new Error(`Desktop content card did not receive the desktop11 cache revision: ${banner}`);
+            }
+            if (!banner.searchParams.get('title') || !banner.searchParams.get('append') || !banner.searchParams.get('label')) {
+              throw new Error('Desktop content card URL is missing title/append/provider metadata');
+            }
+
+            const response = await retry(banner.pathname + banner.search, 6);
+            if (!String(response.headers.get('content-type') || '').includes('image/svg+xml')) {
+              throw new Error(`Desktop content card is not the metadata SVG renderer: ${response.headers.get('content-type')}`);
+            }
+            if (response.headers.get('x-nuvio-card-renderer') !== 'calendar-overlay-v2') {
+              throw new Error('Desktop content card did not use calendar-overlay-v2');
+            }
+            const svg = await response.text();
+            if (!svg.includes('<svg') || !svg.includes('desktop-content-card') && svg.length < 1000) {
+              throw new Error('Desktop content card SVG looks incomplete');
+            }
+            console.log(`DESKTOP OVERLAY OK ${banner.pathname} (${banner.searchParams.get('title')})`);
           }
 
           async function main() {
@@ -181,7 +208,9 @@ jobs:
               throw new Error('Desktop folder card is not an image');
             }
 
-            for (const region of ['fr', 'global', 'tr', 'us']) {
+            const frPayload = await checkDynamicRegion('fr');
+            await checkDesktopContentOverlay(frPayload);
+            for (const region of ['global', 'tr', 'us']) {
               await checkDynamicRegion(region);
             }
           }
