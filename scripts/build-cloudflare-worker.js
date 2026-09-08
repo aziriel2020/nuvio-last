@@ -21,9 +21,6 @@ function aliasPlugin() {
       build.onResolve({ filter: /^(sharp|opentype\.js|fs|node:fs|path|node:path)$/ }, (args) => ({
         path: aliases.get(args.path)
       }));
-      build.onResolve({ filter: /cloudflare-secret-migration$/ }, () => ({
-        path: path.join(ROOT, 'cloudflare/stubs/cloudflare-secret-migration.cjs')
-      }));
     }
   };
 }
