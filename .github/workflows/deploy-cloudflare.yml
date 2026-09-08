@@ -69,28 +69,22 @@ jobs:
       - name: Build Cloudflare Pages output
         run: npm run build:cloudflare
 
-      - name: Create Pages project when needed
+      - name: Verify Cloudflare Pages project
         shell: bash
         run: |
-          npx --yes wrangler@latest pages project list --json > "$RUNNER_TEMP/cloudflare-pages-projects.json"
-          if node - "$RUNNER_TEMP/cloudflare-pages-projects.json" "$CLOUDFLARE_PROJECT_NAME" <<'NODE'
+          curl -fsS \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Accept: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME" \
+            -o "$RUNNER_TEMP/cloudflare-existing-project.json"
+          node - "$RUNNER_TEMP/cloudflare-existing-project.json" <<'NODE'
           const fs = require('fs');
-          const [file, name] = process.argv.slice(2);
-          const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
-          const projects = Array.isArray(payload)
-            ? payload
-            : Array.isArray(payload.result)
-              ? payload.result
-              : Array.isArray(payload.projects)
-                ? payload.projects
-                : [];
-          process.exit(projects.some((project) => project && project.name === name) ? 0 : 1);
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!payload?.success || payload?.result?.name !== process.env.CLOUDFLARE_PROJECT_NAME) {
+            throw new Error('Expected Cloudflare Pages project was not found.');
+          }
+          console.log('Cloudflare Pages project exists.');
           NODE
-          then
-            echo "Cloudflare Pages project already exists."
-          else
-            npx --yes wrangler@latest pages project create "$CLOUDFLARE_PROJECT_NAME" --production-branch=main
-          fi
 
       - name: Check Cloudflare application credentials
         id: app_credentials
