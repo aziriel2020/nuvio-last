@@ -112,14 +112,39 @@ jobs:
 
           async function retry(path, attempts = 8) {
             let response = null;
+            let lastError = null;
             for (let attempt = 1; attempt <= attempts; attempt++) {
               try {
                 response = await fetch(origin + path, { redirect: 'follow' });
+                lastError = null;
                 if (response.ok) return response;
-              } catch {}
-              await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+              } catch (error) {
+                lastError = error;
+              }
+              if (attempt < attempts) {
+                await new Promise((resolve) => setTimeout(resolve, Math.min(attempt * 1500, 7500)));
+              }
             }
-            throw new Error(`${path} failed with HTTP ${response?.status ?? 'no response'}`);
+
+            if (response) {
+              let body = '';
+              try { body = (await response.clone().text()).replace(/\s+/g, ' ').slice(0, 600); } catch {}
+              const ray = response.headers.get('cf-ray') || 'n/a';
+              const server = response.headers.get('server') || 'n/a';
+              throw new Error(`${path} failed with HTTP ${response.status}; cf-ray=${ray}; server=${server}; body=${body || '<empty>'}`);
+            }
+            throw new Error(`${path} failed without response: ${lastError?.message || 'unknown network error'}`);
+          }
+
+          async function runCheck(label, fn, failures) {
+            try {
+              return await fn();
+            } catch (error) {
+              const message = `${label}: ${error?.message || error}`;
+              failures.push(message);
+              console.error(`CHECK FAILED ${message}`);
+              return null;
+            }
           }
 
           async function checkStatic() {
@@ -203,6 +228,11 @@ jobs:
             if (!seriesFolder || !movieFolder) throw new Error('Global anime collection is missing Series/Films folders');
             if (!seriesFolder.sources?.length || !movieFolder.sources?.length) throw new Error('Global anime collection has empty source lists');
 
+            const metaResource = (manifest.resources || []).find((entry) => entry?.name === 'meta');
+            if (!manifest.idPrefixes?.includes('anilist:') || !metaResource?.idPrefixes?.includes('anilist:')) {
+              throw new Error('Global manifest does not expose anilist: in both idPrefixes locations');
+            }
+
             const catalogKeys = new Set((manifest.catalogs || []).map((entry) => `${entry.type}:${entry.id}`));
             for (const source of [...seriesFolder.sources.slice(0, 5), ...movieFolder.sources.slice(0, 5)]) {
               if (!catalogKeys.has(`${source.type}:${source.catalogId}`)) {
@@ -210,14 +240,77 @@ jobs:
               }
             }
 
-            const lastWeekPath = '/global/catalog/series/archives-global-v1-series-anime-asia-lastweek.json';
-            const lastWeekResponse = await retry(lastWeekPath, 8);
-            const lastWeek = await lastWeekResponse.json();
-            if (!Array.isArray(lastWeek?.metas) || lastWeek.metas.length === 0) {
-              throw new Error('Global JP/KR anime last-week catalog is unexpectedly empty');
+            async function loadSource(source, label, requireNonEmpty = false) {
+              if (!source) throw new Error(`Missing Global Anime source for ${label}`);
+              const path = `/global/catalog/${source.type}/${source.catalogId}.json`;
+              const response = await retry(path, 8);
+              if (response.headers.get('x-nuvio-origin') !== 'cloudflare-only') {
+                throw new Error(`${path} is not Cloudflare-native`);
+              }
+              const payload = await response.json();
+              if (!Array.isArray(payload?.metas)) throw new Error(`${path} did not return metas`);
+              if (requireNonEmpty && payload.metas.length === 0) throw new Error(`${path} is unexpectedly empty`);
+              console.log(`GLOBAL ANIME ${label} OK ${path} (${payload.metas.length} metas)`);
+              return payload;
             }
-            const fallbackCount = lastWeek.metas.filter((meta) => String(meta?.id || '').startsWith('anilist:')).length;
-            console.log(`GLOBAL ANIME OK: ${lastWeek.metas.length} metas, ${fallbackCount} AniList-native fallbacks`);
+
+            const sourceBySuffix = (folder, suffix) =>
+              folder.sources.find((source) => String(source.catalogId || '').endsWith(suffix));
+
+            const now = new Date();
+            const previousMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+            const previousMonth = `${previousMonthDate.getUTCFullYear()}-${String(previousMonthDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+            const seriesChecks = [
+              ['TODAY', sourceBySuffix(seriesFolder, '-today'), true],
+              ['TOMORROW', sourceBySuffix(seriesFolder, '-tomorrow'), false],
+              ['YESTERDAY', sourceBySuffix(seriesFolder, '-yesterday'), false],
+              ['NEXTWEEK', sourceBySuffix(seriesFolder, '-nextweek'), false],
+              ['LASTWEEK', sourceBySuffix(seriesFolder, '-lastweek'), true],
+              [`HISTORY ${previousMonth}`, sourceBySuffix(seriesFolder, `-${previousMonth}`), true]
+            ];
+
+            const payloads = [];
+            for (const [label, source, requireNonEmpty] of seriesChecks) {
+              payloads.push(await loadSource(source, label, requireNonEmpty));
+            }
+
+            await loadSource(sourceBySuffix(movieFolder, '-today'), 'MOVIE TODAY', false);
+
+            const fallbackMeta = payloads
+              .flatMap((payload) => payload.metas || [])
+              .find((meta) => String(meta?.id || '').startsWith('anilist:'));
+
+            if (fallbackMeta) {
+              if (!fallbackMeta.poster || !fallbackMeta.background || !fallbackMeta.landscapePoster || !fallbackMeta.name) {
+                throw new Error(`AniList fallback ${fallbackMeta.id} is missing artwork/title metadata`);
+              }
+              if (!/Épisode\s+\d+/i.test(String(fallbackMeta.releaseInfo || ''))) {
+                throw new Error(`AniList fallback ${fallbackMeta.id} is missing episode releaseInfo`);
+              }
+              if (!fallbackMeta.description || !fallbackMeta.country || !Array.isArray(fallbackMeta.genres) || !fallbackMeta.runtime || !fallbackMeta.imdbRating) {
+                throw new Error(`AniList fallback ${fallbackMeta.id} is missing descriptive metadata`);
+              }
+            }
+
+            const metaId = fallbackMeta?.id || 'anilist:1';
+            const metaResponse = await retry(`/global/meta/series/${metaId}.json`, 8);
+            const metaPayload = await metaResponse.json();
+            if (metaPayload?.meta?.id !== metaId) throw new Error(`AniList meta route did not resolve ${metaId}`);
+
+            const fallbackCount = payloads
+              .flatMap((payload) => payload.metas || [])
+              .filter((meta) => String(meta?.id || '').startsWith('anilist:')).length;
+            console.log(`GLOBAL ANIME OK: ${fallbackCount} AniList-native fallbacks across validated series periods; meta ${metaId} OK`);
+          }
+
+          async function checkGlobalVod() {
+            const path = '/global/catalog/movie/archives-global-v1-movie-vod-global-today.json';
+            const response = await retry(path, 8);
+            if (response.headers.get('x-nuvio-origin') !== 'cloudflare-only') throw new Error(`${path} is not Cloudflare-native`);
+            const payload = await response.json();
+            if (!Array.isArray(payload?.metas)) throw new Error(`${path} did not return metas`);
+            console.log(`GLOBAL VOD OK ${path} (${payload.metas.length} metas)`);
           }
 
           async function checkTransferredPlatformAssets() {
@@ -247,26 +340,41 @@ jobs:
 
           async function main() {
             await checkStatic();
-            const health = await retry('/health');
-            if (health.headers.get('x-nuvio-origin') !== 'cloudflare-only') throw new Error('/health is not Cloudflare-native');
-            await health.arrayBuffer();
+            const failures = [];
 
-            const shieldCard = await fetch(origin + '/fr/calendar-card.svg?title=Cloudflare&type=movie');
-            if (![200, 400].includes(shieldCard.status) || !String(shieldCard.headers.get('content-type') || '').includes('image/svg+xml')) {
-              throw new Error(`Shield calendar card is not SVG (HTTP ${shieldCard.status})`);
-            }
-            if (shieldCard.headers.get('x-nuvio-origin') !== 'cloudflare-only') {
-              throw new Error('Shield calendar card is not Cloudflare-native');
-            }
+            await runCheck('health', async () => {
+              const health = await retry('/health', 8);
+              if (health.headers.get('x-nuvio-origin') !== 'cloudflare-only') throw new Error('/health is not Cloudflare-native');
+              await health.arrayBuffer();
+              console.log('HEALTH OK /health');
+            }, failures);
 
-            await checkTransferredPlatformAssets();
+            await runCheck('shield calendar card', async () => {
+              const shieldCard = await retry('/fr/calendar-card.svg?title=Cloudflare&type=movie', 6);
+              if (![200, 400].includes(shieldCard.status) || !String(shieldCard.headers.get('content-type') || '').includes('image/svg+xml')) {
+                throw new Error(`Shield calendar card is not SVG (HTTP ${shieldCard.status})`);
+              }
+              if (shieldCard.headers.get('x-nuvio-origin') !== 'cloudflare-only') {
+                throw new Error('Shield calendar card is not Cloudflare-native');
+              }
+              console.log('SHIELD CARD OK');
+            }, failures);
 
-            const frPayload = await checkDynamicRegion('fr');
-            await checkDesktopContentOverlay(frPayload);
-            await checkDynamicRegion('global');
-            await checkGlobalAnimeCollection();
+            await runCheck('transferred platform assets', checkTransferredPlatformAssets, failures);
+
+            const frPayload = await runCheck('FR dynamic', () => checkDynamicRegion('fr'), failures);
+            if (frPayload) await runCheck('Desktop content overlay', () => checkDesktopContentOverlay(frPayload), failures);
+
+            await runCheck('GLOBAL dynamic', () => checkDynamicRegion('global'), failures);
+            await runCheck('GLOBAL Anime JP/KR', checkGlobalAnimeCollection, failures);
+            await runCheck('GLOBAL VOD', checkGlobalVod, failures);
+
             for (const region of ['tr', 'us']) {
-              await checkDynamicRegion(region);
+              await runCheck(`${region.toUpperCase()} dynamic`, () => checkDynamicRegion(region), failures);
+            }
+
+            if (failures.length) {
+              throw new Error(`Production smoke failed:\n- ${failures.join('\n- ')}`);
             }
           }
 
