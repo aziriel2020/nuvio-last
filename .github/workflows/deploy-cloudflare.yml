@@ -189,6 +189,37 @@ jobs:
             console.log(`DESKTOP OVERLAY OK ${banner.pathname} (${banner.searchParams.get('title')})`);
           }
 
+          async function checkGlobalAnimeCollection() {
+            const [collectionsResponse, manifestResponse] = await Promise.all([
+              retry('/global/nuvio-collections.json'),
+              retry('/global/manifest.json')
+            ]);
+            const collections = await collectionsResponse.json();
+            const manifest = await manifestResponse.json();
+            const anime = collections.find((entry) => entry?.id === 'calendar-archives-global-anime');
+            if (!anime) throw new Error('Global Anime Japon + Corée collection is missing');
+            const seriesFolder = anime.folders?.find((entry) => entry?.title === 'Séries');
+            const movieFolder = anime.folders?.find((entry) => entry?.title === 'Films');
+            if (!seriesFolder || !movieFolder) throw new Error('Global anime collection is missing Series/Films folders');
+            if (!seriesFolder.sources?.length || !movieFolder.sources?.length) throw new Error('Global anime collection has empty source lists');
+
+            const catalogKeys = new Set((manifest.catalogs || []).map((entry) => `${entry.type}:${entry.id}`));
+            for (const source of [...seriesFolder.sources.slice(0, 5), ...movieFolder.sources.slice(0, 5)]) {
+              if (!catalogKeys.has(`${source.type}:${source.catalogId}`)) {
+                throw new Error(`Global anime collection source is unresolved: ${source.type}:${source.catalogId}`);
+              }
+            }
+
+            const lastWeekPath = '/global/catalog/series/archives-global-v1-series-anime-asia-lastweek.json';
+            const lastWeekResponse = await retry(lastWeekPath, 8);
+            const lastWeek = await lastWeekResponse.json();
+            if (!Array.isArray(lastWeek?.metas) || lastWeek.metas.length === 0) {
+              throw new Error('Global JP/KR anime last-week catalog is unexpectedly empty');
+            }
+            const fallbackCount = lastWeek.metas.filter((meta) => String(meta?.id || '').startsWith('anilist:')).length;
+            console.log(`GLOBAL ANIME OK: ${lastWeek.metas.length} metas, ${fallbackCount} AniList-native fallbacks`);
+          }
+
           async function checkTransferredPlatformAssets() {
             const checks = [
               '/tr/platform-category-card.svg?provider=tod&category=series&asset=2',
@@ -232,7 +263,9 @@ jobs:
 
             const frPayload = await checkDynamicRegion('fr');
             await checkDesktopContentOverlay(frPayload);
-            for (const region of ['global', 'tr', 'us']) {
+            await checkDynamicRegion('global');
+            await checkGlobalAnimeCollection();
+            for (const region of ['tr', 'us']) {
               await checkDynamicRegion(region);
             }
           }

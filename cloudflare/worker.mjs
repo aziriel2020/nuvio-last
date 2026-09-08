@@ -5,6 +5,7 @@ const HISTORICAL_CATALOG_TTL = 21600;
 const META_TTL = 21600;
 const GENERATED_ART_TTL = 604800;
 const DEFAULT_TTL = 60;
+const EDGE_CACHE_REV = 'anime-jpkr-v2';
 
 const POSTER_HOSTS = new Set([
   'image.tmdb.org',
@@ -451,6 +452,9 @@ function copyStringBindingsToProcessEnv(env) {
 
 function cacheKeyFor(request, timeZone) {
   const url = new URL(request.url);
+  // Internal-only cache revision: keeps public URLs/IDs unchanged while
+  // invalidating stale empty anime responses after runtime fixes.
+  url.searchParams.set('__nuvio_edge_rev', EDGE_CACHE_REV);
   if (
     timeZone &&
     (url.pathname.startsWith('/us/catalog/') || url.pathname.startsWith('/global/catalog/'))

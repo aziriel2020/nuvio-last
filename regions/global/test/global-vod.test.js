@@ -294,3 +294,133 @@ test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG backgro
   assert.match(decorated.banner, /desktop-content-card\.jpg/);
   assert.notEqual(decorated.banner, decorated.background);
 });
+
+
+test('JP/KR anime keeps AniList rows when TMDb mapping is unavailable', async () => {
+  const oldFetch = global.fetch;
+  const oldKey = process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY = 'test-key';
+
+  const schedule = {
+    id: 9001,
+    airingAt: Math.floor(new Date('2026-08-24T11:30:00Z').getTime() / 1000),
+    episode: 7,
+    mediaId: 777,
+    media: {
+      id: 777,
+      idMal: 12345,
+      title: { english: 'Fallback Anime', romaji: 'Fallback Anime JP', native: 'フォールバック' },
+      seasonYear: 2026,
+      countryOfOrigin: 'JP',
+      format: 'TV',
+      status: 'RELEASING',
+      isAdult: false,
+      duration: 24,
+      popularity: 9876,
+      averageScore: 82,
+      genres: ['Action', 'Fantasy'],
+      description: 'AniList description',
+      coverImage: { extraLarge: 'https://s1.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg' },
+      bannerImage: 'https://s1.anilist.co/file/anilistcdn/media/anime/banner/test.jpg'
+    }
+  };
+
+  global.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === 'https://graphql.anilist.co') {
+      const body = JSON.parse(options.body || '{}');
+      assert.match(body.query || '', /airingSchedules/);
+      return new Response(JSON.stringify({
+        data: {
+          Page: {
+            pageInfo: { currentPage: 1, hasNextPage: false },
+            airingSchedules: [schedule]
+          }
+        }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    const u = new URL(value);
+    if (u.pathname.endsWith('/search/tv')) {
+      return new Response(JSON.stringify({ page: 1, total_pages: 1, results: [] }), {
+        status: 200, headers: { 'content-type': 'application/json' }
+      });
+    }
+    throw new Error(`unexpected ${value}`);
+  };
+
+  try {
+    api._internals.catalogCache.clear?.();
+    api._internals.anilistCache.clear?.();
+    api._internals.mappingCache.clear?.();
+    const catalog = api._internals.resolveArchiveCatalog(
+      'archives-global-v1-series-anime-asia-today',
+      'series',
+      fixedNow,
+      tz
+    );
+    const result = await api._internals.buildAnimeAsiaSeriesCatalog({
+      catalog,
+      timeZone: tz,
+      now: fixedNow,
+      useCache: false
+    });
+    assert.equal(result.metas.length, 1);
+    assert.equal(result.metas[0].id, 'anilist:777');
+    assert.equal(result.metas[0].name, 'Fallback Anime');
+    assert.match(result.metas[0].releaseInfo, /Épisode 7/);
+    assert.equal(result.stats.anilistFallbacks, 1);
+  } finally {
+    global.fetch = oldFetch;
+    api._internals.catalogCache.clear?.();
+    api._internals.anilistCache.clear?.();
+    api._internals.mappingCache.clear?.();
+    if (oldKey === undefined) delete process.env.TMDB_API_KEY;
+    else process.env.TMDB_API_KEY = oldKey;
+  }
+});
+
+test('global manifest and meta route support AniList fallback IDs', async () => {
+  const manifest = api._internals.buildManifest('https://global.example', fixedNow, tz);
+  assert(manifest.idPrefixes.includes('anilist:'));
+  const metaResource = manifest.resources.find((resource) => resource.name === 'meta');
+  assert(metaResource.idPrefixes.includes('anilist:'));
+
+  const oldFetch = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    assert.equal(String(url), 'https://graphql.anilist.co');
+    const body = JSON.parse(options.body || '{}');
+    assert.match(body.query || '', /Media\(id: \$id/);
+    return new Response(JSON.stringify({
+      data: {
+        Media: {
+          id: 777,
+          idMal: 12345,
+          title: { english: 'Fallback Anime', romaji: 'Fallback Anime JP', native: 'フォールバック' },
+          seasonYear: 2026,
+          countryOfOrigin: 'JP',
+          format: 'TV',
+          status: 'RELEASING',
+          isAdult: false,
+          duration: 24,
+          popularity: 9876,
+          averageScore: 82,
+          genres: ['Action', 'Fantasy'],
+          description: 'AniList detail description',
+          coverImage: { extraLarge: 'https://s1.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg' },
+          bannerImage: 'https://s1.anilist.co/file/anilistcdn/media/anime/banner/test.jpg'
+        }
+      }
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    const response = await call('/meta/series/anilist:777.json');
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.text);
+    assert.equal(payload.meta.id, 'anilist:777');
+    assert.equal(payload.meta.name, 'Fallback Anime');
+    assert.equal(payload.meta.type, 'series');
+  } finally {
+    global.fetch = oldFetch;
+  }
+});
