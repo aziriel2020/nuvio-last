@@ -189,6 +189,31 @@ jobs:
             console.log(`DESKTOP OVERLAY OK ${banner.pathname} (${banner.searchParams.get('title')})`);
           }
 
+          async function checkTransferredPlatformAssets() {
+            const checks = [
+              '/tr/platform-category-card.svg?provider=tod&category=series&asset=2',
+              '/tr/platform-backdrop.svg?provider=tod&type=series&asset=2',
+              '/tr/desktop-folder-card.jpg?provider=tod&type=series&title=S%C3%A9ries&label=%F0%9F%87%B9%F0%9F%87%B7%20TOD&asset=2&v=desktop10'
+            ];
+            for (const path of checks) {
+              const response = await retry(path, 6);
+              if (!String(response.headers.get('content-type') || '').includes('image/svg+xml')) {
+                throw new Error(`${path} is not rendered as an SVG visual`);
+              }
+              if (response.headers.get('x-nuvio-asset-background') !== 'embedded') {
+                throw new Error(`${path} did not embed the transferred platform JPG asset`);
+              }
+              if (response.headers.get('x-nuvio-visual-renderer') !== 'platform-assets-v2') {
+                throw new Error(`${path} did not use platform-assets-v2`);
+              }
+              const svg = await response.text();
+              if (!svg.includes('data:image/jpeg;base64,') && !svg.includes('data:image/jpg;base64,')) {
+                throw new Error(`${path} SVG does not contain the platform artwork`);
+              }
+              console.log(`PLATFORM ASSET OK ${path}`);
+            }
+          }
+
           async function main() {
             await checkStatic();
             const health = await retry('/health');
@@ -203,10 +228,7 @@ jobs:
               throw new Error('Shield calendar card is not Cloudflare-native');
             }
 
-            const desktopCard = await retry('/fr/desktop-folder-card.jpg?provider=netflix&type=series');
-            if (!String(desktopCard.headers.get('content-type') || '').startsWith('image/')) {
-              throw new Error('Desktop folder card is not an image');
-            }
+            await checkTransferredPlatformAssets();
 
             const frPayload = await checkDynamicRegion('fr');
             await checkDesktopContentOverlay(frPayload);
