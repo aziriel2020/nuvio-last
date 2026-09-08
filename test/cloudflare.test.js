@@ -130,8 +130,16 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
     '/static/assets/collection-art/fr-genres-backdrop.jpg'
   );
   assert.equal(
-    worker.localAssetPath('https://edge.example/fr/desktop-folder-card.jpg?provider=netflix&type=series'),
+    worker.platformStaticAssetPath('https://edge.example/fr/desktop-folder-card.jpg?provider=netflix&type=series'),
     '/static/assets/platform-art/fr/netflix-card.jpg'
+  );
+  assert.equal(
+    worker.platformStaticAssetPath('https://edge.example/tr/platform-category-card.svg?provider=tod&category=series'),
+    '/static/assets/platform-art/tr/tod-card.jpg'
+  );
+  assert.equal(
+    worker.platformStaticAssetPath('https://edge.example/tr/platform-backdrop.svg?provider=tod&type=series'),
+    '/static/assets/platform-art/tr/tod-backdrop.jpg'
   );
   assert.equal(
     worker.localAssetPath('https://edge.example/us/desktop-genre-card.jpg?genre=action&type=movie'),
@@ -142,6 +150,20 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
     '/static/assets/genre-posters/action.png'
   );
   assert.equal(worker.localAssetPath('https://edge.example/fr/platform-card.jpg?provider=../bad'), null);
+
+  const trHandler = require('../api/index')._internals.trHandler._internals;
+  const trCollections = trHandler.buildNuvioCollectionsImport(
+    trHandler.runtimeNow(),
+    'Europe/Istanbul',
+    'https://edge.example/tr'
+  );
+  const tod = trCollections.find((collection) => /TOD/i.test(collection.title));
+  assert(tod);
+  assert.match(tod.backdropImageUrl, /[?&]asset=2(?:&|$)/);
+  for (const folder of tod.folders) {
+    assert.match(folder.coverImageUrl, /[?&]asset=2(?:&|$)/);
+    assert.match(folder.heroBackdropUrl, /[?&]asset=2(?:&|$)/);
+  }
 
   const cardSvg = worker.desktopContentCardSvg(
     'https://edge.example/fr/desktop-content-card.jpg?title=WWE%20Raw&append=S33E12%20%E2%80%A2%20LUN%2008%20SEPT%20%E2%80%A2%20NETFLIX&label=Netflix&provider=netflix&type=series'
