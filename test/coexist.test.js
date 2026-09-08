@@ -563,7 +563,7 @@ test('desktop final renderer produces a real JPEG with accented readable text', 
 });
 
 
-test('desktop10 import uses adaptive cinematic routes with labels', async () => {
+test('desktop11 import uses adaptive cinematic routes with labels', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
   const collections = JSON.parse(response.text);
@@ -573,12 +573,12 @@ test('desktop10 import uses adaptive cinematic routes with labels', async () => 
   assert(folder);
   const url = new URL(folder.coverImageUrl);
   assert.equal(url.pathname, '/fr/desktop-folder-card.jpg');
-  assert.equal(url.searchParams.get('v'), 'desktop10');
+  assert.equal(url.searchParams.get('v'), 'desktop11');
   assert.equal(url.searchParams.get('title'), 'Séries');
   assert.match(url.searchParams.get('label') || '', /Netflix/);
 });
 
-test('desktop10 content banner carries adaptive title and subtitle metadata', () => {
+test('desktop11 content banner carries adaptive title and subtitle metadata', () => {
   const api = handler._internals.frHandler._internals;
   const meta = {
     id: 'ttadaptive',
@@ -600,7 +600,7 @@ test('desktop10 content banner carries adaptive title and subtitle metadata', ()
   );
   const url = new URL(decorated.banner);
   assert.equal(url.pathname, '/fr/desktop-content-card.jpg');
-  assert.match(url.searchParams.get('v') || '', /desktop10$/);
+  assert.match(url.searchParams.get('v') || '', /desktop11$/);
   assert.equal(url.searchParams.get('title'), meta.name);
   assert(url.searchParams.get('append'));
   assert.match(url.searchParams.get('label') || '', /Disney/i);
