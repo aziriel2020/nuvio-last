@@ -27,6 +27,6 @@ The Cloudflare Pages runtime needs one TMDb credential:
 - `TMDB_READ_TOKEN` (preferred), or
 - `TMDB_API_KEY`.
 
-The first Cloudflare-only cutover includes a one-time, GitHub-OIDC-authenticated server-to-server migration from the existing Vercel production environment. The secret value is never printed or returned to GitHub. After the migration succeeds, the temporary migration route is removed.
+The TMDb credential is stored directly in the Cloudflare Pages production/preview environment and is verified before every deployment.
 
 Cloudflare API deployment uses the GitHub repository secret `CLOUDFLARE_API_TOKEN`.
