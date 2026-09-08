@@ -91,13 +91,6 @@ export function localAssetPath(input) {
     return `/static/assets/collection-art/${file}`;
   }
 
-  match = path.match(/^\/(fr|global|tr|us)\/desktop-folder-card\.jpg$/);
-  if (match) {
-    const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
-    if (!validSlug(provider)) return null;
-    return `/static/assets/platform-art/${match[1]}/${provider}-card.jpg`;
-  }
-
   match = path.match(/^\/(fr|tr|us)\/desktop-genre-card\.jpg$/);
   if (match) {
     const genre = String(url.searchParams.get('genre') || '').trim().toLowerCase();
@@ -170,6 +163,98 @@ function bytesToBase64(bytes) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
   return btoa(binary);
+}
+
+async function staticAssetDataUri(request, env, assetPath) {
+  const assetUrl = new URL(assetPath, request.url);
+  const response = await env.ASSETS.fetch(new Request(assetUrl.toString()));
+  if (!response.ok) return null;
+
+  const contentType = String(response.headers.get('content-type') || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (!/^image\/(jpeg|jpg|png|webp)$/.test(contentType)) return null;
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.byteLength) return null;
+  return `data:${contentType};base64,${bytesToBase64(bytes)}`;
+}
+
+function platformAssetInfo(url) {
+  const match = url.pathname.match(/^\/(fr|global|tr|us)\/(?:platform-category-card\.svg|platform-backdrop\.svg|desktop-folder-card\.jpg)$/);
+  if (!match) return null;
+  const region = match[1];
+  const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  if (!validSlug(provider)) return null;
+  const desktop = url.pathname.endsWith('/desktop-folder-card.jpg');
+  const backdrop = url.pathname.endsWith('/platform-backdrop.svg');
+  const category = desktop
+    ? (String(url.searchParams.get('type') || 'series').toLowerCase() === 'movie' ? 'films' : 'series')
+    : (String(url.searchParams.get('category') || 'series').toLowerCase() === 'films' ? 'films' : 'series');
+  const type = backdrop
+    ? (String(url.searchParams.get('type') || 'movie').toLowerCase() === 'series' ? 'series' : 'movie')
+    : (category === 'films' ? 'movie' : 'series');
+  return { region, provider, category, type, desktop, backdrop };
+}
+
+export function platformStaticAssetPath(urlLike) {
+  const url = normalizedUrl(urlLike);
+  const info = platformAssetInfo(url);
+  if (!info) return null;
+  const variant = info.backdrop ? 'backdrop' : 'card';
+  return `/static/assets/platform-art/${info.region}/${info.provider}-${variant}.jpg`;
+}
+
+async function servePlatformVisual(request, env, url) {
+  const info = platformAssetInfo(url);
+  if (!info) return new Response('Not found', { status: 404 });
+
+  const internals = regionCalendarInternals(url);
+  const assetPath = platformStaticAssetPath(url);
+  const photoDataUri = assetPath ? await staticAssetDataUri(request, env, assetPath) : null;
+
+  let logoDataUri = null;
+  if (typeof internals?.platformLogoAsset === 'function') {
+    try {
+      const logo = await internals.platformLogoAsset(info.provider, info.type);
+      logoDataUri = logo?.dataUri || null;
+    } catch {
+      logoDataUri = null;
+    }
+  }
+
+  let svg;
+  if (info.backdrop && typeof internals?.platformBackdropSvg === 'function') {
+    svg = internals.platformBackdropSvg(info.provider, info.type, logoDataUri, photoDataUri);
+  } else if (typeof internals?.platformCategoryCardSvg === 'function') {
+    svg = internals.platformCategoryCardSvg(info.provider, info.category, logoDataUri, photoDataUri);
+  } else {
+    const label = escapeXml(url.searchParams.get('label') || info.provider.replace(/-/g, ' '));
+    const category = info.category === 'films' ? 'FILMS' : 'SÉRIES';
+    const width = info.backdrop ? 1920 : 1600;
+    const height = info.backdrop ? 1080 : 900;
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      ${photoDataUri ? `<image href="${escapeXml(photoDataUri)}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice"/>` : `<rect width="${width}" height="${height}" fill="#07111f"/>`}
+      <rect width="${width}" height="${height}" fill="#02040a" fill-opacity=".58"/>
+      <text x="90" y="${height - 190}" fill="#fff" font-family="Arial,sans-serif" font-size="120" font-weight="900">${category}</text>
+      <text x="94" y="${height - 90}" fill="#38bdf8" font-family="Arial,sans-serif" font-size="54" font-weight="900">${label.toUpperCase()}</text>
+    </svg>`;
+  }
+
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': `public, max-age=86400, s-maxage=${GENERATED_ART_TTL}, stale-while-revalidate=2592000`,
+      'X-Nuvio-Edge': 'cloudflare-native',
+      'X-Nuvio-Origin': 'cloudflare-only',
+      'X-Nuvio-Asset-Background': photoDataUri ? 'embedded' : 'missing',
+      'X-Nuvio-Visual-Renderer': 'platform-assets-v2'
+    }
+  });
 }
 
 async function embeddedPosterDataUri(src) {
@@ -454,7 +539,9 @@ async function dynamicResponse(request, env, ctx) {
   }
 
   let response;
-  if (/^\/(fr|global|tr|us)\/desktop-content-card\.jpg$/.test(url.pathname)) {
+  if (/^\/(fr|global|tr|us)\/(?:platform-category-card\.svg|platform-backdrop\.svg|desktop-folder-card\.jpg)$/.test(url.pathname)) {
+    response = await servePlatformVisual(request, env, url);
+  } else if (/^\/(fr|global|tr|us)\/desktop-content-card\.jpg$/.test(url.pathname)) {
     response = await serveDesktopContentCard(request, env, url);
   } else if (/^\/(fr|tr|us)\/genre-folder-art\.svg$/.test(url.pathname)) {
     response = await serveGenreFolderArt(request, env, url);
