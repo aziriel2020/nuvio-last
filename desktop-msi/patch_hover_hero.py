@@ -593,4 +593,263 @@ class DesktopHoverHeroTest {
 """,
 )
 
-print("Desktop hover Hero patch applied successfully.")
+
+# ---------------------------------------------------------------------------
+# Collection Desktop standalone Hero: independent from Home heroEnabled/items.
+# It lives in FolderDetailScreen (the imported Desktop collection folders).
+# ---------------------------------------------------------------------------
+
+# Let the shared Desktop hover frame render a static default item without
+# starting a trailer until an actual mouse hover is active.
+replace_once(
+    hero,
+    """private fun DesktopHoveredHomeHeroFrame(
+    item: MetaPreview,
+    layout: HomeHeroLayout,
+    contentHorizontalPadding: Dp,
+    onItemClick: ((MetaPreview) -> Unit)?,
+) {
+""",
+    """private fun DesktopHoveredHomeHeroFrame(
+    item: MetaPreview,
+    layout: HomeHeroLayout,
+    contentHorizontalPadding: Dp,
+    onItemClick: ((MetaPreview) -> Unit)?,
+    allowTrailer: Boolean = true,
+) {
+""",
+)
+
+replace_once(
+    hero,
+    """    val trailerPlaybackEnabled =
+        AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP &&
+            posterCardStyle.hoverPreviewEnabled &&
+            posterCardStyle.hoverPreviewTrailerEnabled
+""",
+    """    val trailerPlaybackEnabled =
+        allowTrailer &&
+            AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP &&
+            posterCardStyle.hoverPreviewEnabled &&
+            posterCardStyle.hoverPreviewTrailerEnabled
+""",
+)
+
+collection_hero_wrapper = r'''
+@Composable
+fun DesktopCollectionStandaloneHero(
+    item: MetaPreview,
+    isHoverActive: Boolean,
+    modifier: Modifier = Modifier,
+    viewportHeight: Dp? = null,
+    onItemClick: ((MetaPreview) -> Unit)? = null,
+) {
+    if (!isDesktop) return
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        val layout = homeHeroLayout(
+            maxWidthDp = maxWidth.value,
+            viewportHeightDp = viewportHeight?.value,
+            mobileBelowSectionHeightHintDp = null,
+            preferDesktopLayout = true,
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(layout.heroHeight),
+        ) {
+            DesktopHoveredHomeHeroFrame(
+                item = item,
+                layout = layout,
+                contentHorizontalPadding = layout.contentHorizontalPadding,
+                onItemClick = onItemClick,
+                allowTrailer = isHoverActive,
+            )
+        }
+    }
+}
+
+'''
+hero_text = read(hero)
+collection_marker = "internal fun mergeDesktopHoverHeroMeta(\n"
+if hero_text.count(collection_marker) != 1:
+    raise SystemExit(f"{hero}: collection wrapper marker mismatch")
+write(hero, hero_text.replace(collection_marker, collection_hero_wrapper + collection_marker, 1))
+
+folder_screen = "composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt"
+
+replace_once(
+    folder_screen,
+    """import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+""",
+    """import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+""",
+)
+
+replace_once(
+    folder_screen,
+    """import com.nuvio.app.features.home.components.HomePosterHoverPreview
+""",
+    """import com.nuvio.app.features.home.components.HomePosterHoverPreview
+import com.nuvio.app.features.home.components.DesktopCollectionStandaloneHero
+""",
+)
+
+replace_once(
+    folder_screen,
+    """    val useNativeNavigation = LocalUseNativeNavigation.current
+    val coverImageUrl = folder?.coverImageUrl?.takeIf { it.isNotBlank() }
+
+    if (!isDesktop) {
+""",
+    """    val useNativeNavigation = LocalUseNativeNavigation.current
+    val coverImageUrl = folder?.coverImageUrl?.takeIf { it.isNotBlank() }
+    var hoveredCollectionHeroItem by remember(folder?.id) { mutableStateOf<MetaPreview?>(null) }
+
+    if (!isDesktop) {
+""",
+)
+
+replace_once(
+    folder_screen,
+    """        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val desktopPagePadding = desktopPageHorizontalPaddingForWidth(maxWidth.value)
+            Column(modifier = Modifier.fillMaxSize()) {
+""",
+    """        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val desktopPagePadding = desktopPageHorizontalPaddingForWidth(maxWidth.value)
+            val defaultCollectionHeroItem = uiState.tabs
+                .asSequence()
+                .flatMap { tab -> tab.items.asSequence() }
+                .firstOrNull()
+            val collectionHeroItem = hoveredCollectionHeroItem ?: defaultCollectionHeroItem
+
+            Column(modifier = Modifier.fillMaxSize()) {
+""",
+)
+
+replace_once(
+    folder_screen,
+    """                if (folder == null && !uiState.isLoading) {
+""",
+    """                if (collectionHeroItem != null) {
+                    DesktopCollectionStandaloneHero(
+                        item = collectionHeroItem,
+                        isHoverActive = hoveredCollectionHeroItem != null,
+                        modifier = Modifier.fillMaxWidth(),
+                        viewportHeight = maxHeight,
+                        onItemClick = onPosterClick,
+                    )
+                }
+
+                if (folder == null && !uiState.isLoading) {
+""",
+)
+
+# Desktop FolderDetail routes hover events from both row and grid modes.
+replace_once(
+    folder_screen,
+    """                        onTabSelected = { FolderDetailRepository.selectTab(it) },
+                        onPosterClick = onPosterClick,
+                    )
+""",
+    """                        onTabSelected = { FolderDetailRepository.selectTab(it) },
+                        onPosterClick = onPosterClick,
+                        onPosterHoverChange = { item, isHovered ->
+                            if (isHovered) {
+                                hoveredCollectionHeroItem = item
+                            } else if (hoveredCollectionHeroItem?.stableKey() == item.stableKey()) {
+                                hoveredCollectionHeroItem = null
+                            }
+                        },
+                    )
+""",
+)
+
+# There are two desktop RowsContent branches (ROWS and FOLLOW_LAYOUT).
+folder_text = read(folder_screen)
+old_rows = """                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                    )
+"""
+new_rows = """                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                        onPosterHoverChange = { item, isHovered ->
+                            if (isHovered) {
+                                hoveredCollectionHeroItem = item
+                            } else if (hoveredCollectionHeroItem?.stableKey() == item.stableKey()) {
+                                hoveredCollectionHeroItem = null
+                            }
+                        },
+                    )
+"""
+row_count = folder_text.count(old_rows)
+if row_count < 2:
+    raise SystemExit(f"{folder_screen}: expected at least 2 desktop RowsContent matches, found {row_count}")
+folder_text = folder_text.replace(old_rows, new_rows, 2)
+write(folder_screen, folder_text)
+
+# Expose hover callbacks through FolderDetail's tabbed grid.
+replace_once(
+    folder_screen,
+    """    onTabSelected: (Int) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+) {
+""",
+    """    onTabSelected: (Int) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+    onPosterHoverChange: ((MetaPreview, Boolean) -> Unit)? = null,
+) {
+""",
+)
+
+replace_once(
+    folder_screen,
+    """                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+""",
+    """                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                        onHoverChange = onPosterHoverChange,
+                                    )
+""",
+)
+
+# Expose hover callbacks through FolderDetail's rows.
+replace_once(
+    folder_screen,
+    """    modifier: Modifier = Modifier,
+    onCatalogClick: (HomeCatalogSection) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+) {
+""",
+    """    modifier: Modifier = Modifier,
+    onCatalogClick: (HomeCatalogSection) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+    onPosterHoverChange: ((MetaPreview, Boolean) -> Unit)? = null,
+) {
+""",
+)
+
+replace_once(
+    folder_screen,
+    """                    watchedKeys = watchedKeys,
+                    onPosterClick = { onPosterClick(it) },
+                )
+""",
+    """                    watchedKeys = watchedKeys,
+                    onPosterClick = { onPosterClick(it) },
+                    onPosterHoverChange = onPosterHoverChange,
+                )
+""",
+)
+
+print("Desktop Collection standalone Hero patch applied successfully.")
+
