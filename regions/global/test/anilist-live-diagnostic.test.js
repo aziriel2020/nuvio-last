@@ -3,47 +3,28 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const ANILIST_URL = 'https://graphql.anilist.co';
-const QUERY = `
-query ($page: Int, $start: Int, $end: Int) {
-  Page(page: $page, perPage: 50) {
-    pageInfo { currentPage hasNextPage }
-    airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME_DESC) {
-      id airingAt episode mediaId
-      media { id countryOfOrigin format isAdult title { romaji english native } }
-    }
-  }
-}`;
-
-async function textFetch(url, options = {}) {
-  const response = await fetch(url, options);
+async function getJson(url) {
+  const response = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'NuvioCalendar/diagnostic' } });
   const text = await response.text();
-  console.log('FETCH', url, 'HTTP', response.status, response.headers.get('content-type'));
-  console.log('BODY', text.replace(/\s+/g, ' ').slice(0, 6500));
-  return { response, text, payload: JSON.parse(text) };
+  assert.equal(response.ok, true, `${url} HTTP ${response.status}: ${text.slice(0, 500)}`);
+  return JSON.parse(text);
 }
 
-test('live upstream availability and cached AniList-derived metadata for 2026-09-09', async () => {
-  const start = Math.floor(new Date('2026-09-08T15:00:00.000Z').getTime() / 1000) - 1;
-  const end = Math.floor(new Date('2026-09-09T15:00:00.000Z').getTime() / 1000);
-  const direct = await textFetch(ANILIST_URL, {
-    method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'NuvioCalendar/diagnostic' },
-    body: JSON.stringify({ query: QUERY, variables: { page: 1, start, end } })
-  });
-  console.log('ANILIST DIRECT OK', direct.response.ok, 'ERRORS', JSON.stringify(direct.payload?.errors || []));
+test('cached AniList-derived bulk endpoints expose full JP/KR metadata', async () => {
+  const schedule = await getJson('https://tsuzuki.top/api/v1/schedule?start=2026-09-09&days=1&airType=raw');
+  console.log('SCHEDULE COUNT', schedule?.episodes?.length || 0);
 
-  const schedule = await textFetch('https://tsuzuki.top/api/v1/schedule?start=2026-09-09&days=1&airType=raw', {
-    headers: { Accept: 'application/json', 'User-Agent': 'NuvioCalendar/diagnostic' }
-  });
-  assert.equal(schedule.response.ok, true);
-  assert.ok(Array.isArray(schedule.payload?.episodes) && schedule.payload.episodes.length > 0);
-
-  for (const id of [135865, 184356, 199409]) {
-    const full = await textFetch(`https://tsuzuki.top/api/v1/anime/${id}?full=1`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'NuvioCalendar/diagnostic' }
-    });
-    assert.equal(full.response.ok, true, `full metadata missing for ${id}`);
-    console.log('FULL KEYS', id, JSON.stringify(Object.keys(full.payload || {})));
+  const season = await getJson('https://tsuzuki.top/api/v1/seasons/summer/2026?full=1');
+  console.log('SEASON KEYS', JSON.stringify(Object.keys(season || {})));
+  for (const [key, value] of Object.entries(season || {})) {
+    if (Array.isArray(value)) console.log('SEASON ARRAY', key, value.length, JSON.stringify(value[0] || null).slice(0, 1000));
   }
+
+  const airing = await getJson('https://tsuzuki.top/api/v1/airing?full=1');
+  console.log('AIRING KEYS', JSON.stringify(Object.keys(airing || {})));
+  for (const [key, value] of Object.entries(airing || {})) {
+    if (Array.isArray(value)) console.log('AIRING ARRAY', key, value.length, JSON.stringify(value[0] || null).slice(0, 1000));
+  }
+
+  assert.ok(Array.isArray(schedule?.episodes) && schedule.episodes.length > 0);
 });
