@@ -20,7 +20,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: cloudflare-pages-production
@@ -35,7 +34,6 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 7b21859ab1740325151b97717cedc0e7
       CLOUDFLARE_PROJECT_NAME: nuvio-last-aziriel2020-1343705637
       PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
-      VERCEL_MIGRATION_ORIGIN: https://nuvio-last.vercel.app
 
     steps:
       - name: Checkout
@@ -86,52 +84,6 @@ jobs:
           console.log('Cloudflare Pages project exists.');
           NODE
 
-      - name: Check Cloudflare application credentials
-        id: app_credentials
-        shell: bash
-        run: |
-          curl -fsS             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             -H "Accept: application/json"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME"             -o "$RUNNER_TEMP/cloudflare-project.json"
-          node - "$RUNNER_TEMP/cloudflare-project.json" "$GITHUB_OUTPUT" <<'NODE'
-          const fs = require('fs');
-          const [file, output] = process.argv.slice(2);
-          const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
-          const vars = payload?.result?.deployment_configs?.production?.env_vars || {};
-          const ready = Boolean(vars.TMDB_READ_TOKEN || vars.TMDB_API_KEY);
-          fs.appendFileSync(output, `ready=${ready}\n`);
-          console.log(ready ? 'TMDB credential already exists on Cloudflare.' : 'TMDB credential needs one-time migration.');
-          NODE
-
-      - name: Securely migrate TMDB credential from Vercel
-        if: steps.app_credentials.outputs.ready != 'true'
-        shell: bash
-        run: |
-          OIDC_JSON="$(curl -fsS             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN"             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nuvio-cloudflare-secret-migration")"
-          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>process.stdout.write(JSON.parse(d).value||''))")"
-          if [[ -z "$OIDC_TOKEN" ]]; then
-            echo "::error::Unable to obtain the GitHub OIDC token."
-            exit 1
-          fi
-
-          migrated=false
-          for attempt in $(seq 1 30); do
-            status="$(curl -sS               -o "$RUNNER_TEMP/migration-response.json"               -w '%{http_code}'               -X POST               -H "Authorization: Bearer $OIDC_TOKEN"               -H "X-Cloudflare-Token: $CLOUDFLARE_API_TOKEN"               -H "Content-Type: application/json"               "$VERCEL_MIGRATION_ORIGIN/internal/cloudflare-secret-migration" || true)"
-
-            if [[ "$status" == "200" ]] && node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.exit(p&&p.ok?0:1)" "$RUNNER_TEMP/migration-response.json"; then
-              echo "TMDB credential migrated server-to-server without exposing its value."
-              migrated=true
-              break
-            fi
-
-            echo "Waiting for the one-time Vercel migration endpoint (HTTP $status, attempt $attempt/30)..."
-            sleep 10
-          done
-
-          if [[ "$migrated" != "true" ]]; then
-            echo "::error::The secure TMDB migration did not complete."
-            node -e "const fs=require('fs');try{const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));console.error(JSON.stringify(p))}catch{}" "$RUNNER_TEMP/migration-response.json" || true
-            exit 1
-          fi
-
       - name: Verify Cloudflare application credentials
         shell: bash
         run: |
@@ -141,7 +93,7 @@ jobs:
           const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
           const vars = payload?.result?.deployment_configs?.production?.env_vars || {};
           if (!vars.TMDB_READ_TOKEN && !vars.TMDB_API_KEY) {
-            throw new Error('Cloudflare still has no TMDB credential.');
+            throw new Error('Cloudflare has no TMDB credential.');
           }
           console.log('Cloudflare TMDB credential is configured.');
           NODE
