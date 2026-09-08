@@ -142,6 +142,14 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
     '/static/assets/genre-posters/action.png'
   );
   assert.equal(worker.localAssetPath('https://edge.example/fr/platform-card.jpg?provider=../bad'), null);
+
+  const cardSvg = worker.desktopContentCardSvg(
+    'https://edge.example/fr/desktop-content-card.jpg?title=WWE%20Raw&append=S33E12%20%E2%80%A2%20LUN%2008%20SEPT%20%E2%80%A2%20NETFLIX&label=Netflix&provider=netflix&type=series'
+  );
+  assert.match(cardSvg, /WWE Raw/);
+  assert.match(cardSvg, /S33E12/);
+  assert.match(cardSvg, /NETFLIX/);
+  assert.match(cardSvg, /<svg/);
 });
 
 test('Cloudflare native adapter preserves public origin and viewer timezone for the shared engine', () => {
@@ -165,4 +173,38 @@ test('Cloudflare native adapter preserves public origin and viewer timezone for 
   };
   assert.equal(us.requestTimeZone(tzReq), 'Asia/Tokyo');
   assert.equal(globalApi.requestTimeZone(tzReq), 'Asia/Tokyo');
+});
+
+test('desktop catalog cards always keep the metadata renderer, even without usable artwork', () => {
+  const handler = require('../api/index');
+  const fr = handler._internals.frHandler._internals;
+  const [meta] = fr.decorateCatalogMetas(
+    'https://edge.example/fr',
+    [{
+      id: 'tmdb:series:123',
+      type: 'series',
+      name: 'The Chosen',
+      poster: null,
+      background: null,
+      landscapePoster: null,
+      releaseInfo: 'S05E08',
+      released: '2026-09-08',
+      _calendarProvider: 'Netflix'
+    }],
+    {
+      type: 'series',
+      period: 'today',
+      providerSlug: 'netflix',
+      archiveProvider: 'netflix',
+      cardProvider: 'Netflix',
+      name: 'Netflix'
+    },
+    'Europe/Paris'
+  );
+
+  assert.match(meta.banner, /\/fr\/desktop-content-card\.jpg\?/);
+  assert.match(meta.banner, /desktop11/);
+  assert.match(meta.banner, /title=The(?:\+|%20)Chosen/);
+  assert.match(meta.banner, /append=/);
+  assert.match(meta.banner, /label=Netflix/);
 });
