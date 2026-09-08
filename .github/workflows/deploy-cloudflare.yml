@@ -110,14 +110,14 @@ jobs:
           node - <<'NODE'
           const origin = process.env.PUBLIC_ORIGIN;
 
-          async function retry(path, attempts = 8) {
+          async function retry(path, attempts = 8, acceptedStatuses = []) {
             let response = null;
             let lastError = null;
             for (let attempt = 1; attempt <= attempts; attempt++) {
               try {
                 response = await fetch(origin + path, { redirect: 'follow' });
                 lastError = null;
-                if (response.ok) return response;
+                if (response.ok || acceptedStatuses.includes(response.status)) return response;
               } catch (error) {
                 lastError = error;
               }
@@ -350,7 +350,7 @@ jobs:
             }, failures);
 
             await runCheck('shield calendar card', async () => {
-              const shieldCard = await retry('/fr/calendar-card.svg?title=Cloudflare&type=movie', 6);
+              const shieldCard = await retry('/fr/calendar-card.svg?title=Cloudflare&type=movie', 6, [400]);
               if (![200, 400].includes(shieldCard.status) || !String(shieldCard.headers.get('content-type') || '').includes('image/svg+xml')) {
                 throw new Error(`Shield calendar card is not SVG (HTTP ${shieldCard.status})`);
               }
