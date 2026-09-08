@@ -1,33 +1,32 @@
-# Free Cloudflare edge
+# Cloudflare-only Nuvio
 
-This directory contains the Cloudflare Pages layer used to keep the public Nuvio endpoint on the free tier.
+Nuvio is hosted on Cloudflare at:
+
+`https://nuvio-last-aziriel2020-1343705637.pages.dev`
+
+The public filenames, addon IDs, collection IDs, catalog IDs and regional paths stay unchanged.
 
 ## Architecture
 
-Cloudflare Pages serves the large, stable JSON files and repository artwork directly from its static asset network. Only genuinely dynamic catalog and generated-card routes invoke the Pages Worker. Those requests are cached at Cloudflare and use the existing Vercel deployment only as a compatibility origin while the Node/Sharp runtime is still required.
+- Large collection JSON files, manifests, blueprints and repository artwork are generated as static Cloudflare Pages assets.
+- Static asset requests do not invoke Pages Functions.
+- Catalog, metadata and dynamic SVG routes run directly in the Cloudflare Workers runtime through Pages advanced mode.
+- Today/Tomorrow/current-month catalogs use short edge caching; historical catalogs use longer caching.
+- Shield calendar cards stay self-contained SVG.
+- Desktop folder/genre cards are served from repository artwork, and dynamic desktop content cards are proxied directly from the approved artwork source.
+- There is no Vercel fallback in the Cloudflare runtime.
 
-This keeps the current Nuvio behavior intact while removing the repeated large JSON transfers that caused the Vercel Fast Origin Transfer spikes.
+## Automatic updates
 
-## Direct Upload deployment
+`.github/workflows/deploy-cloudflare.yml` deploys on changes to `main`, can be run manually, and also runs every six hours. The large JSON files are regenerated on each deployment while rolling period IDs stay stable, so users do not need to re-import Collections when Today/Tomorrow changes.
 
-The repository includes `.github/workflows/deploy-cloudflare.yml`. It does not require Cloudflare's GitHub integration. GitHub Actions builds `dist`, creates the Pages project if it does not exist, uploads the site with Wrangler, then checks the public endpoint.
+## Secrets
 
-Cloudflare credentials required by GitHub Actions:
+The Cloudflare Pages runtime needs one TMDb credential:
 
-- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID.
-- `CLOUDFLARE_API_TOKEN`: a scoped API token with Cloudflare Pages edit/write permission for that account.
+- `TMDB_READ_TOKEN` (preferred), or
+- `TMDB_API_KEY`.
 
-Add both as GitHub repository Actions secrets. The workflow intentionally skips deployment without them instead of breaking normal CI.
+The first Cloudflare-only cutover includes a one-time, GitHub-OIDC-authenticated server-to-server migration from the existing Vercel production environment. The secret value is never printed or returned to GitHub. After the migration succeeds, the temporary migration route is removed.
 
-## Cloudflare Pages settings
-
-- Project name: `nuvio-last-aziriel2020-1343705637`
-- Production branch: `main`
-- Public endpoint: `https://nuvio-last-aziriel2020-1343705637.pages.dev`
-- Build command used by CI: `npm run build:cloudflare`
-- Build output directory: `dist`
-- Build environment: `PUBLIC_ORIGIN=https://nuvio-last-aziriel2020-1343705637.pages.dev`
-
-The worker defaults to `https://nuvio-last.vercel.app` as the compatibility origin, so no Cloudflare-side variable is required for the first deployment.
-
-Do not remove the Vercel project until the Cloudflare endpoint has been exercised with Nuvio on Shield and desktop. The intended end state is that large static traffic is served for free by Cloudflare while Vercel receives only low-volume compatibility traffic.
+Cloudflare API deployment uses the GitHub repository secret `CLOUDFLARE_API_TOKEN`.

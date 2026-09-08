@@ -4,6 +4,7 @@ const usHandler = require('../regions/us/api/index');
 const frHandler = require('../regions/fr/api/index');
 const globalHandler = require('../regions/global/api/index');
 const trHandler = require('../regions/tr/api/index');
+const cloudflareSecretMigration = require('./cloudflare-secret-migration');
 
 const VERSION = '1.4.0';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
@@ -190,7 +191,7 @@ function coexistenceReport(req) {
 
 function landing(req) {
   const origin = originFromRequest(req);
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio France + Türkiye + Cinéma Total + Anime/VOD + USA</title><style>body{margin:0;background:#05080f;color:#eef4ff;font-family:system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}.card{max-width:960px;margin:24px;padding:32px;border:1px solid #243247;border-radius:24px;background:#0b111b}h1{margin-top:0}code{display:block;padding:12px;margin:8px 0;background:#02050a;border-radius:10px;overflow-wrap:anywhere}.ok{color:#77e1a6}a{color:#72c7ff}</style></head><body><main class="card"><h1>🇫🇷 France · 🌍 Anime + VOD · 🇹🇷 Türkiye · 🇺🇸 USA</h1><p>Un seul déploiement Vercel avec <b>quatre addons isolés</b>. Les VOD régionales sont conservées et la VOD Mondiale est ajoutée en plus.</p><p>1. France :</p><code>${origin}/fr/manifest.json</code><p>2. VOD Mondiale :</p><code>${origin}/global/manifest.json</code><p>3. Türkiye :</p><code>${origin}/tr/manifest.json</code><p>4. USA :</p><code>${origin}/us/manifest.json</code><p>5. Collections combinées :</p><code>${origin}/nuvio-collections-fr-global-tr-usa.json</code><p><a href="${origin}/coexistence-check.json">Vérification automatique des collisions</a></p><p class="ok">Ordre Modern Shield : 🇫🇷 France, puis 🌍 Global, puis 🇹🇷 Türkiye, puis 🇺🇸 USA.</p></main></body></html>`;
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio France + Türkiye + Cinéma Total + Anime/VOD + USA</title><style>body{margin:0;background:#05080f;color:#eef4ff;font-family:system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}.card{max-width:960px;margin:24px;padding:32px;border:1px solid #243247;border-radius:24px;background:#0b111b}h1{margin-top:0}code{display:block;padding:12px;margin:8px 0;background:#02050a;border-radius:10px;overflow-wrap:anywhere}.ok{color:#77e1a6}a{color:#72c7ff}</style></head><body><main class="card"><h1>🇫🇷 France · 🌍 Anime + VOD · 🇹🇷 Türkiye · 🇺🇸 USA</h1><p>Un seul déploiement Cloudflare avec <b>quatre addons isolés</b>. Les VOD régionales sont conservées et la VOD Mondiale est ajoutée en plus.</p><p>1. France :</p><code>${origin}/fr/manifest.json</code><p>2. VOD Mondiale :</p><code>${origin}/global/manifest.json</code><p>3. Türkiye :</p><code>${origin}/tr/manifest.json</code><p>4. USA :</p><code>${origin}/us/manifest.json</code><p>5. Collections combinées :</p><code>${origin}/nuvio-collections-fr-global-tr-usa.json</code><p><a href="${origin}/coexistence-check.json">Vérification automatique des collisions</a></p><p class="ok">Ordre Modern Shield : 🇫🇷 France, puis 🌍 Global, puis 🇹🇷 Türkiye, puis 🇺🇸 USA.</p></main></body></html>`;
 }
 
 module.exports = async function handler(req, res) {
@@ -198,6 +199,7 @@ module.exports = async function handler(req, res) {
   const path = url.pathname;
 
   if (path === '/' || path === '/index.html') return sendHtml(res, landing(req));
+  if (path === '/internal/cloudflare-secret-migration') return cloudflareSecretMigration(req, res);
   if (path === '/health') {
     const report = coexistenceReport(req);
     return sendJson(res, report.safe ? 200 : 500, { ok: report.safe, ...report }, 'no-store');

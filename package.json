@@ -7,7 +7,8 @@
     "start": "node local-server.js",
     "test": "node scripts/test-all.js",
     "build:cloudflare": "node scripts/build-cloudflare.js",
-    "test:cloudflare": "node --test test/cloudflare.test.js"
+    "test:cloudflare": "node --test test/cloudflare.test.js",
+    "build:cloudflare-worker": "node scripts/build-cloudflare-worker.js"
   },
   "engines": {
     "node": ">=20"
@@ -16,5 +17,8 @@
     "sharp": "^0.34.3",
     "opentype.js": "^1.3.4",
     "dejavu-fonts-ttf": "^2.37.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.10"
   }
 }

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const handler = require('../api/index');
+const { buildWorker } = require('./build-cloudflare-worker');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
@@ -104,20 +105,21 @@ async function main() {
   for (const route of staticRoutes) emitted.push(await emit(route));
 
   copyIfPresent(path.join(ROOT, 'assets'), path.join(DIST, 'static', 'assets'));
-  fs.copyFileSync(path.join(ROOT, 'cloudflare', 'worker.mjs'), path.join(DIST, '_worker.js'));
   fs.copyFileSync(path.join(ROOT, 'cloudflare', '_routes.json'), path.join(DIST, '_routes.json'));
   fs.copyFileSync(path.join(ROOT, 'cloudflare', '_headers'), path.join(DIST, '_headers'));
+  await buildWorker({ dist: DIST });
 
   const manifest = {
     generatedAt: new Date().toISOString(),
     publicOrigin,
     staticRoutes: emitted.map(({ route, bytes }) => ({ route, bytes })),
-    fallbackOrigin: 'https://nuvio-last.vercel.app'
+    runtime: 'cloudflare-native',
+    usesVercel: false
   };
   fs.writeFileSync(path.join(DIST, 'edge-build.json'), JSON.stringify(manifest, null, 2));
 
   const totalBytes = emitted.reduce((sum, item) => sum + item.bytes, 0);
-  console.log(`Cloudflare Pages build ready: ${emitted.length} static routes, ${totalBytes} bytes, origin ${publicOrigin}`);
+  console.log(`Cloudflare native build ready: ${emitted.length} static routes, ${totalBytes} bytes, origin ${publicOrigin}`);
 }
 
 main().catch((error) => {

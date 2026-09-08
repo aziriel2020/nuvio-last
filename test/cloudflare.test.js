@@ -78,6 +78,14 @@ test('Cloudflare build emits the stable Nuvio surface as static assets', () => {
   assert.match(combinedText, /nuvio-edge-test\.example\/tr\//);
   assert.match(combinedText, /nuvio-edge-test\.example\/us\//);
 
+  const edgeBuild = readJson('edge-build.json');
+  assert.equal(edgeBuild.runtime, 'cloudflare-native');
+  assert.equal(edgeBuild.usesVercel, false);
+
+  const workerBundle = fs.readFileSync(path.join(DIST, '_worker.js'), 'utf8');
+  assert.doesNotMatch(workerBundle, /nuvio-last\.vercel\.app/i);
+  assert.match(workerBundle, /cloudflare-native/);
+
   assert(fs.existsSync(path.join(DIST, '_worker.js')));
   assert(fs.existsSync(path.join(DIST, '_routes.json')));
   assert(fs.existsSync(path.join(DIST, '_headers')));
@@ -121,14 +129,26 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
     worker.localAssetPath('https://edge.example/tr/genre-collection-art.jpg'),
     '/static/assets/collection-art/fr-genres-backdrop.jpg'
   );
+  assert.equal(
+    worker.localAssetPath('https://edge.example/fr/desktop-folder-card.jpg?provider=netflix&type=series'),
+    '/static/assets/platform-art/fr/netflix-card.jpg'
+  );
+  assert.equal(
+    worker.localAssetPath('https://edge.example/us/desktop-genre-card.jpg?genre=action&type=movie'),
+    '/static/assets/genre-art/shared/action-card.jpg'
+  );
+  assert.equal(
+    worker.localAssetPath('https://edge.example/fr/genre-poster.png?type=series&genre=action-adventure'),
+    '/static/assets/genre-posters/action.png'
+  );
   assert.equal(worker.localAssetPath('https://edge.example/fr/platform-card.jpg?provider=../bad'), null);
 });
 
-test('Vercel compatibility origin honors Cloudflare public origin and viewer timezone', () => {
+test('Cloudflare native adapter preserves public origin and viewer timezone for the shared engine', () => {
   const handler = require('../api/index');
   const req = {
     headers: {
-      host: 'nuvio-last.vercel.app',
+      host: 'internal-origin.invalid',
       'x-forwarded-proto': 'https',
       'x-nuvio-public-origin': PUBLIC_ORIGIN
     }
