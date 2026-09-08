@@ -4,7 +4,6 @@ const usHandler = require('../regions/us/api/index');
 const frHandler = require('../regions/fr/api/index');
 const globalHandler = require('../regions/global/api/index');
 const trHandler = require('../regions/tr/api/index');
-const cloudflareSecretMigration = require('./cloudflare-secret-migration');
 
 const VERSION = '1.4.0';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
@@ -199,7 +198,6 @@ module.exports = async function handler(req, res) {
   const path = url.pathname;
 
   if (path === '/' || path === '/index.html') return sendHtml(res, landing(req));
-  if (path === '/internal/cloudflare-secret-migration') return cloudflareSecretMigration(req, res);
   if (path === '/health') {
     const report = coexistenceReport(req);
     return sendJson(res, report.safe ? 200 : 500, { ok: report.safe, ...report }, 'no-store');
