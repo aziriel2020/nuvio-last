@@ -2,6 +2,8 @@ name: Deploy Cloudflare Pages
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
   push:
     branches:
       - main
@@ -11,11 +13,14 @@ on:
       - "assets/**"
       - "cloudflare/**"
       - "scripts/build-cloudflare.js"
+      - "scripts/build-cloudflare-worker.js"
       - "package.json"
+      - "wrangler.jsonc"
       - ".github/workflows/deploy-cloudflare.yml"
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: cloudflare-pages-production
@@ -24,12 +29,13 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 7b21859ab1740325151b97717cedc0e7
       CLOUDFLARE_PROJECT_NAME: nuvio-last-aziriel2020-1343705637
       PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
+      VERCEL_MIGRATION_ORIGIN: https://nuvio-last.vercel.app
 
     steps:
       - name: Checkout
@@ -43,31 +49,27 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Cloudflare deployment is prepared but not started. Add repository secret CLOUDFLARE_API_TOKEN, then re-run this workflow."
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is missing."
+            exit 1
           fi
 
       - name: Set up Node.js
-        if: steps.credentials.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install dependencies
-        if: steps.credentials.outputs.ready == 'true'
         run: npm install --no-audit --no-fund
 
       - name: Run regression tests
-        if: steps.credentials.outputs.ready == 'true'
         run: |
           npm test
           npm run test:cloudflare
 
       - name: Build Cloudflare Pages output
-        if: steps.credentials.outputs.ready == 'true'
         run: npm run build:cloudflare
 
       - name: Create Pages project when needed
-        if: steps.credentials.outputs.ready == 'true'
         shell: bash
         run: |
           npx --yes wrangler@latest pages project list --json > "$RUNNER_TEMP/cloudflare-pages-projects.json"
@@ -90,56 +92,162 @@ jobs:
             npx --yes wrangler@latest pages project create "$CLOUDFLARE_PROJECT_NAME" --production-branch=main
           fi
 
-      - name: Deploy to Cloudflare Pages
-        if: steps.credentials.outputs.ready == 'true'
+      - name: Check Cloudflare application credentials
+        id: app_credentials
+        shell: bash
+        run: |
+          curl -fsS             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             -H "Accept: application/json"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME"             -o "$RUNNER_TEMP/cloudflare-project.json"
+          node - "$RUNNER_TEMP/cloudflare-project.json" "$GITHUB_OUTPUT" <<'NODE'
+          const fs = require('fs');
+          const [file, output] = process.argv.slice(2);
+          const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const vars = payload?.result?.deployment_configs?.production?.env_vars || {};
+          const ready = Boolean(vars.TMDB_READ_TOKEN || vars.TMDB_API_KEY);
+          fs.appendFileSync(output, `ready=${ready}\n`);
+          console.log(ready ? 'TMDB credential already exists on Cloudflare.' : 'TMDB credential needs one-time migration.');
+          NODE
+
+      - name: Securely migrate TMDB credential from Vercel
+        if: steps.app_credentials.outputs.ready != 'true'
+        shell: bash
+        run: |
+          OIDC_JSON="$(curl -fsS             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN"             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nuvio-cloudflare-secret-migration")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>process.stdout.write(JSON.parse(d).value||''))")"
+          if [[ -z "$OIDC_TOKEN" ]]; then
+            echo "::error::Unable to obtain the GitHub OIDC token."
+            exit 1
+          fi
+
+          migrated=false
+          for attempt in $(seq 1 30); do
+            status="$(curl -sS               -o "$RUNNER_TEMP/migration-response.json"               -w '%{http_code}'               -X POST               -H "Authorization: Bearer $OIDC_TOKEN"               -H "X-Cloudflare-Token: $CLOUDFLARE_API_TOKEN"               -H "Content-Type: application/json"               "$VERCEL_MIGRATION_ORIGIN/internal/cloudflare-secret-migration" || true)"
+
+            if [[ "$status" == "200" ]]; then
+              node - "$RUNNER_TEMP/migration-response.json" <<'NODE'
+              const fs = require('fs');
+              const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+              if (!payload?.ok) process.exit(1);
+              console.log('TMDB credential migrated server-to-server without exposing its value.');
+              NODE
+              migrated=true
+              break
+            fi
+
+            echo "Waiting for the one-time Vercel migration endpoint (HTTP $status, attempt $attempt/30)..."
+            sleep 10
+          done
+
+          if [[ "$migrated" != "true" ]]; then
+            echo "::error::The secure TMDB migration did not complete."
+            node - "$RUNNER_TEMP/migration-response.json" <<'NODE' || true
+            const fs = require('fs');
+            try {
+              const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+              console.error(JSON.stringify(payload));
+            } catch {}
+            NODE
+            exit 1
+          fi
+
+      - name: Verify Cloudflare application credentials
+        shell: bash
+        run: |
+          curl -fsS             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             -H "Accept: application/json"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME"             -o "$RUNNER_TEMP/cloudflare-project-after.json"
+          node - "$RUNNER_TEMP/cloudflare-project-after.json" <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const vars = payload?.result?.deployment_configs?.production?.env_vars || {};
+          if (!vars.TMDB_READ_TOKEN && !vars.TMDB_API_KEY) {
+            throw new Error('Cloudflare still has no TMDB credential.');
+          }
+          console.log('Cloudflare TMDB credential is configured.');
+          NODE
+
+      - name: Deploy Cloudflare-native Nuvio
         id: deploy
         shell: bash
         run: |
           npx --yes wrangler@latest pages deploy dist             --project-name="$CLOUDFLARE_PROJECT_NAME"             --branch=main             --commit-hash="$GITHUB_SHA"
 
-      - name: Verify production deployment
-        if: steps.credentials.outputs.ready == 'true'
+      - name: Verify Cloudflare-only production
         shell: bash
         run: |
           node - <<'NODE'
           const origin = process.env.PUBLIC_ORIGIN;
-          const checks = [
-            '/',
-            '/edge-build.json',
-            '/nuvio-collections-fr-global-tr-usa.json',
-            '/fr/manifest.json',
-            '/global/manifest.json',
-            '/tr/manifest.json',
-            '/us/manifest.json',
-            '/health'
-          ];
-          async function main() {
-            for (const path of checks) {
-              let response = null;
-              for (let attempt = 1; attempt <= 6; attempt++) {
+
+          async function retry(path, attempts = 8) {
+            let response = null;
+            for (let attempt = 1; attempt <= attempts; attempt++) {
+              try {
                 response = await fetch(origin + path, { redirect: 'follow' });
-                if (response.ok) break;
-                await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
-              }
-              if (!response || !response.ok) {
-                throw new Error(`${path} failed with HTTP ${response?.status ?? 'no response'}`);
-              }
+                if (response.ok) return response;
+              } catch {}
+              await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+            }
+            throw new Error(`${path} failed with HTTP ${response?.status ?? 'no response'}`);
+          }
+
+          async function checkStatic() {
+            const checks = [
+              '/',
+              '/edge-build.json',
+              '/nuvio-collections-fr-global-tr-usa.json',
+              '/nuvio-collections-desktop.json',
+              '/fr/manifest.json',
+              '/global/manifest.json',
+              '/tr/manifest.json',
+              '/us/manifest.json'
+            ];
+            for (const path of checks) {
+              const response = await retry(path);
               if (path === '/nuvio-collections-fr-global-tr-usa.json') {
                 const data = await response.json();
-                if (!Array.isArray(data) || data.length !== 47) {
-                  throw new Error(`${path} returned an unexpected collection count`);
-                }
-              } else if (path.endsWith('/manifest.json')) {
-                const manifest = await response.json();
-                if (!manifest?.id || !Array.isArray(manifest.catalogs) || manifest.catalogs.length === 0) {
-                  throw new Error(`${path} returned an invalid manifest`);
-                }
+                if (!Array.isArray(data) || data.length !== 47) throw new Error('Unexpected collection count');
+                const text = JSON.stringify(data);
+                if (/vercel\.app/i.test(text)) throw new Error('Collections still reference Vercel');
               } else {
                 await response.arrayBuffer();
               }
-              console.log(`OK ${path}`);
+              console.log(`STATIC OK ${path}`);
             }
           }
+
+          async function checkDynamicRegion(region) {
+            const manifest = await (await retry(`/${region}/manifest.json`)).json();
+            const catalog = manifest.catalogs.find((entry) => /today/i.test(entry.id));
+            if (!catalog) throw new Error(`No Today catalog found for ${region}`);
+            const path = `/${region}/catalog/${catalog.type}/${catalog.id}.json`;
+            const response = await retry(path, 6);
+            const edge = response.headers.get('x-nuvio-origin');
+            if (edge !== 'cloudflare-only') {
+              throw new Error(`${path} is not served by the Cloudflare-native runtime: ${edge}`);
+            }
+            const payload = await response.json();
+            if (!Array.isArray(payload?.metas)) throw new Error(`${path} did not return metas`);
+            console.log(`DYNAMIC OK ${path} (${payload.metas.length} metas)`);
+          }
+
+          async function main() {
+            await checkStatic();
+            const health = await retry('/health');
+            if (health.headers.get('x-nuvio-origin') !== 'cloudflare-only') throw new Error('/health is not Cloudflare-native');
+            await health.arrayBuffer();
+
+            const shieldCard = await retry('/fr/calendar-card.svg?title=Cloudflare&type=movie');
+            if (!String(shieldCard.headers.get('content-type') || '').includes('image/svg+xml')) {
+              throw new Error('Shield calendar card is not SVG');
+            }
+
+            const desktopCard = await retry('/fr/desktop-folder-card.jpg?provider=netflix&type=series');
+            if (!String(desktopCard.headers.get('content-type') || '').startsWith('image/')) {
+              throw new Error('Desktop folder card is not an image');
+            }
+
+            for (const region of ['fr', 'global', 'tr', 'us']) {
+              await checkDynamicRegion(region);
+            }
+          }
+
           main().catch((error) => {
             console.error(error);
             process.exit(1);
