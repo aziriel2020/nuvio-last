@@ -2732,6 +2732,27 @@ query ($id: Int) {
   }
 }`;
 
+const ANILIST_MEDIA_BY_ID_QUERY = `
+query ($id: Int) {
+  Media(id: $id, type: ANIME) {
+    id
+    idMal
+    title { romaji english native }
+    seasonYear
+    countryOfOrigin
+    format
+    status
+    isAdult
+    duration
+    popularity
+    averageScore
+    genres
+    description(asHtml: false)
+    coverImage { extraLarge large }
+    bannerImage
+  }
+}`;
+
 async function anilistFetch(query, variables = {}) {
   return sourceFetchJson('anilist', ANILIST_URL, {
     method: 'POST',
@@ -2888,7 +2909,52 @@ async function resolveAnimeToTmdb(media) {
   return tmdbId || null;
 }
 
-function animeScheduleToMeta(schedule, details, timeZone, window) {
+function animeCountryLabel(code) {
+  return String(code || '').toUpperCase() === 'KR' ? 'Corée du Sud' : 'Japon';
+}
+
+function animeLanguageCode(code) {
+  return String(code || '').toUpperCase() === 'KR' ? 'ko' : 'ja';
+}
+
+function anilistMediaMeta(media, id = null) {
+  if (!media || media.isAdult) return null;
+  const mediaId = Number(media.id);
+  if (!Number.isFinite(mediaId)) return null;
+  const title = media?.title?.english || media?.title?.romaji || media?.title?.native || 'Anime';
+  const poster = media?.coverImage?.extraLarge || media?.coverImage?.large || null;
+  const background = media?.bannerImage || poster;
+  const country = String(media?.countryOfOrigin || '').toUpperCase();
+  return {
+    id: id || `anilist:${mediaId}`,
+    type: 'series',
+    name: title,
+    poster,
+    posterShape: 'poster',
+    background,
+    landscapePoster: background,
+    description: stripHtml(media?.description) || null,
+    releaseInfo: Number.isFinite(Number(media?.seasonYear)) ? String(media.seasonYear) : null,
+    released: null,
+    status: media?.status || null,
+    imdbRating: Number.isFinite(Number(media?.averageScore)) ? (Number(media.averageScore) / 10).toFixed(1) : null,
+    imdb_id: null,
+    genres: Array.isArray(media?.genres) ? media.genres.filter(Boolean) : [],
+    runtime: Number.isFinite(Number(media?.duration)) ? `${Number(media.duration)} min` : null,
+    country: animeCountryLabel(country),
+    language: animeLanguageCode(country),
+    behaviorHints: { hasScheduledVideos: true },
+    _tmdbId: null,
+    _popularity: Number(media?.popularity || 0),
+    _voteCount: Number(media?.averageScore || 0),
+    _dedupeKey: `anilist:${mediaId}`,
+    _eventInstantMs: null,
+    _eventHasTime: false,
+    _eventMode: null
+  };
+}
+
+function anilistScheduleNativeMeta(schedule, timeZone, window) {
   if (!schedule?.airingAt || !schedule?.episode || schedule?.media?.isAdult) return { meta: null, reason: 'date-unknown' };
   const eventResult = buildInstantEvent({
     eventMode: EVENT_MODES.ANIME_ORIGINAL_AIRING,
@@ -2901,26 +2967,52 @@ function animeScheduleToMeta(schedule, details, timeZone, window) {
   const event = eventResult.event;
   const episodeLabel = `Épisode ${schedule.episode}`;
   const info = `${episodeLabel} • ${humanDate(event.viewerDate, timeZone, window.today)} • ${event.viewerTime}`;
-  const meta = baseMeta(details, 'series', event.viewerDate, info);
-  const anilistTitle = schedule?.media?.title?.english || schedule?.media?.title?.romaji || null;
-  if (anilistTitle) meta.name = anilistTitle;
-  if (schedule?.media?.coverImage?.extraLarge) meta.poster = schedule.media.coverImage.extraLarge;
-  if (schedule?.media?.bannerImage) {
-    meta.background = schedule.media.bannerImage;
-    meta.landscapePoster = schedule.media.bannerImage;
-  }
+  const meta = anilistMediaMeta(schedule.media, `anilist:${Number(schedule.mediaId || schedule.media?.id)}`);
+  if (!meta) return { meta: null, reason: 'mapping' };
+
+  meta.releaseInfo = info;
+  meta.released = event.viewerDate;
   meta.description = [
     `${episodeLabel} • Diffusion originale`,
     `Heure locale : ${humanCalendarDate(event.viewerDate)} • ${event.viewerTime}`,
-    'Cette heure est l’airing original AniList ; elle n’est pas présentée comme une heure de mise en ligne Crunchyroll/Netflix.',
-    schedule?.media?.description || meta.description
+    'Source AniList Japon/Corée. TMDb est utilisé uniquement quand une correspondance fiable existe.',
+    meta.description
   ].filter(Boolean).join('\n\n');
   meta._eventInstantMs = event.eventInstantMs;
   meta._eventHasTime = true;
   meta._eventMode = event.eventMode;
-  meta._dedupeKey = `anime:${schedule.mediaId}:${schedule.episode}`;
-  meta._popularity = Number(schedule?.media?.popularity || meta._popularity || 0);
-  meta._voteCount = Number(schedule?.media?.averageScore || 0);
+  meta._dedupeKey = `anime:${schedule.mediaId || schedule.media?.id}:${schedule.episode}`;
+  return { meta, reason: null, event };
+}
+
+function animeScheduleToMeta(schedule, details, timeZone, window) {
+  const nativeResult = anilistScheduleNativeMeta(schedule, timeZone, window);
+  if (!nativeResult?.meta || !details) return nativeResult;
+
+  const event = nativeResult.event;
+  const nativeMeta = nativeResult.meta;
+  const enriched = baseMeta(details, 'series', nativeMeta.released, nativeMeta.releaseInfo);
+  const meta = {
+    ...enriched,
+    name: nativeMeta.name || enriched.name,
+    poster: nativeMeta.poster || enriched.poster,
+    background: nativeMeta.background || enriched.background,
+    landscapePoster: nativeMeta.landscapePoster || enriched.landscapePoster,
+    description: [
+      String(nativeMeta.description || '').split('\n\n').slice(0, 3).join('\n\n'),
+      enriched.description
+    ].filter(Boolean).join('\n\n'),
+    genres: nativeMeta.genres?.length ? nativeMeta.genres : enriched.genres,
+    runtime: nativeMeta.runtime || enriched.runtime,
+    country: nativeMeta.country || enriched.country,
+    language: nativeMeta.language || enriched.language,
+    _eventInstantMs: event.eventInstantMs,
+    _eventHasTime: true,
+    _eventMode: event.eventMode,
+    _dedupeKey: `anime:${schedule.mediaId || schedule.media?.id}:${schedule.episode}`,
+    _popularity: Number(schedule?.media?.popularity || enriched._popularity || 0),
+    _voteCount: Number(schedule?.media?.averageScore || enriched._voteCount || 0)
+  };
   return { meta, reason: null, event };
 }
 
