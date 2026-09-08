@@ -10,14 +10,19 @@ function aliasPlugin() {
     ['sharp', path.join(ROOT, 'cloudflare/stubs/sharp.cjs')],
     ['opentype.js', path.join(ROOT, 'cloudflare/stubs/opentype.cjs')],
     ['fs', path.join(ROOT, 'cloudflare/stubs/fs.cjs')],
-    ['node:fs', path.join(ROOT, 'cloudflare/stubs/fs.cjs')]
+    ['node:fs', path.join(ROOT, 'cloudflare/stubs/fs.cjs')],
+    ['path', path.join(ROOT, 'cloudflare/stubs/path.cjs')],
+    ['node:path', path.join(ROOT, 'cloudflare/stubs/path.cjs')]
   ]);
 
   return {
     name: 'nuvio-cloudflare-runtime-aliases',
     setup(build) {
-      build.onResolve({ filter: /^(sharp|opentype\.js|fs|node:fs)$/ }, (args) => ({
+      build.onResolve({ filter: /^(sharp|opentype\.js|fs|node:fs|path|node:path)$/ }, (args) => ({
         path: aliases.get(args.path)
+      }));
+      build.onResolve({ filter: /cloudflare-secret-migration$/ }, () => ({
+        path: path.join(ROOT, 'cloudflare/stubs/cloudflare-secret-migration.cjs')
       }));
     }
   };
