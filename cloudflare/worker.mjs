@@ -5,7 +5,7 @@ const HISTORICAL_CATALOG_TTL = 21600;
 const META_TTL = 21600;
 const GENERATED_ART_TTL = 604800;
 const DEFAULT_TTL = 60;
-const EDGE_CACHE_REV = 'anime-jpkr-v3-tmdb-fallback';
+const EDGE_CACHE_REV = 'anime-jpkr-v4-anilist-authoritative';
 
 const POSTER_HOSTS = new Set([
   'image.tmdb.org',
