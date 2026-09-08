@@ -424,3 +424,122 @@ test('global manifest and meta route support AniList fallback IDs', async () => 
     global.fetch = oldFetch;
   }
 });
+
+
+test('JP/KR anime falls back to TMDb episode dates when AniList is unavailable', async () => {
+  const oldFetch = global.fetch;
+  const oldKey = process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY = 'test-key';
+  let anilistCalls = 0;
+  const discoverCalls = [];
+
+  global.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === 'https://graphql.anilist.co') {
+      anilistCalls += 1;
+      return new Response(JSON.stringify({ error: 'temporary unavailable' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+
+    const u = new URL(value);
+    if (u.pathname.endsWith('/discover/tv')) {
+      discoverCalls.push({
+        region: u.searchParams.get('with_origin_country'),
+        language: u.searchParams.get('with_original_language'),
+        genre: u.searchParams.get('with_genres'),
+        gte: u.searchParams.get('air_date.gte'),
+        lte: u.searchParams.get('air_date.lte')
+      });
+      const isJapan = u.searchParams.get('with_origin_country') === 'JP';
+      return new Response(JSON.stringify({
+        page: 1,
+        total_pages: 1,
+        results: isJapan
+          ? [{ id: 888, name: 'TMDb Anime Fallback', original_language: 'ja', popularity: 100 }]
+          : []
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+
+    if (u.pathname.endsWith('/tv/888')) {
+      return new Response(JSON.stringify({
+        id: 888,
+        name: 'TMDb Anime Fallback',
+        original_name: 'TMDb Anime Fallback',
+        overview: 'Fallback details',
+        poster_path: '/anime-poster.jpg',
+        backdrop_path: '/anime-bg.jpg',
+        original_language: 'ja',
+        origin_country: ['JP'],
+        genres: [{ id: 16, name: 'Animation' }],
+        seasons: [{ season_number: 1, air_date: '2026-07-01' }],
+        last_episode_to_air: {
+          id: 8807,
+          season_number: 1,
+          episode_number: 7,
+          air_date: '2026-08-24',
+          name: 'Episode Seven'
+        },
+        next_episode_to_air: null,
+        external_ids: { imdb_id: 'tt8888888' },
+        vote_average: 8.4,
+        vote_count: 200,
+        popularity: 100
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+
+    if (u.pathname.endsWith('/tv/888/season/1')) {
+      return new Response(JSON.stringify({
+        id: 881,
+        season_number: 1,
+        episodes: [{
+          id: 8807,
+          season_number: 1,
+          episode_number: 7,
+          air_date: '2026-08-24',
+          name: 'Episode Seven',
+          overview: 'Exact episode date'
+        }]
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+
+    throw new Error(`unexpected ${value}`);
+  };
+
+  try {
+    api._internals.catalogCache.clear?.();
+    api._internals.anilistCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog = api._internals.resolveArchiveCatalog(
+      'archives-global-v1-series-anime-asia-today',
+      'series',
+      fixedNow,
+      tz
+    );
+    const result = await api._internals.buildAnimeAsiaSeriesCatalog({
+      catalog,
+      timeZone: tz,
+      now: fixedNow,
+      useCache: false
+    });
+
+    assert(anilistCalls >= 1);
+    assert(discoverCalls.some((call) => call.region === 'JP' && call.language === 'ja' && call.genre === '16'));
+    assert(discoverCalls.some((call) => call.region === 'KR' && call.language === 'ko' && call.genre === '16'));
+    assert(discoverCalls.every((call) => call.gte === '2026-08-24' && call.lte === '2026-08-24'));
+    assert.equal(result.metas.length, 1);
+    assert.equal(result.metas[0].id, 'tt8888888');
+    assert.equal(result.metas[0].name, 'TMDb Anime Fallback');
+    assert.match(result.metas[0].releaseInfo, /S01E07/);
+    assert.equal(result.stats.anilistErrors, 1);
+    assert.equal(result.stats.tmdbFallbackMetas, 1);
+  } finally {
+    global.fetch = oldFetch;
+    api._internals.catalogCache.clear?.();
+    api._internals.anilistCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    if (oldKey === undefined) delete process.env.TMDB_API_KEY;
+    else process.env.TMDB_API_KEY = oldKey;
+  }
+});
