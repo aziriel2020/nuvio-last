@@ -78,8 +78,8 @@ test('collections route is platform parents -> Series/Films -> five periods -> m
     assert.equal(p[0].pinToTop,true);
     assert.equal(p[0].folders[0].hideTitle,true);
     assert.equal(p[0].folders[1].hideTitle,true);
-    assert.equal(p[0].folders[0].coverImageUrl,'https://archives.example/platform-category-card.svg?provider=netflix&category=series&v=coex-us131-cinematic');
-    assert.equal(p[0].folders[1].titleLogoUrl,'https://archives.example/platform-logo?provider=netflix&type=movie&v=coex-us131-cinematic');
+    assert.equal(p[0].folders[0].coverImageUrl,'https://archives.example/platform-category-card.svg?provider=netflix&category=series&v=coex-us131-cinematic&asset=2');
+    assert.equal(p[0].folders[1].titleLogoUrl,'https://archives.example/platform-logo?provider=netflix&type=movie&v=coex-us131-cinematic&asset=2');
   }finally{delete process.env.NUVIO_NOW_OVERRIDE}
 });
 
