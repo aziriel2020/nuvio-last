@@ -216,9 +216,12 @@ jobs:
             if (health.headers.get('x-nuvio-origin') !== 'cloudflare-only') throw new Error('/health is not Cloudflare-native');
             await health.arrayBuffer();
 
-            const shieldCard = await retry('/fr/calendar-card.svg?title=Cloudflare&type=movie');
-            if (!String(shieldCard.headers.get('content-type') || '').includes('image/svg+xml')) {
-              throw new Error('Shield calendar card is not SVG');
+            const shieldCard = await fetch(origin + '/fr/calendar-card.svg?title=Cloudflare&type=movie');
+            if (![200, 400].includes(shieldCard.status) || !String(shieldCard.headers.get('content-type') || '').includes('image/svg+xml')) {
+              throw new Error(`Shield calendar card is not SVG (HTTP ${shieldCard.status})`);
+            }
+            if (shieldCard.headers.get('x-nuvio-origin') !== 'cloudflare-only') {
+              throw new Error('Shield calendar card is not Cloudflare-native');
             }
 
             const desktopCard = await retry('/fr/desktop-folder-card.jpg?provider=netflix&type=series');
