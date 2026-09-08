@@ -646,8 +646,8 @@ function platformImageUrls(origin, providerSlug, categoryType = 'movie') {
   if (!origin) return { backdrop: null, logo: null };
   const type = categoryType === 'series' ? 'series' : 'movie';
   return {
-    backdrop: `${origin}/platform-backdrop.svg?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}`,
-    logo: `${origin}/platform-logo?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}`
+    backdrop: `${origin}/platform-backdrop.svg?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`,
+    logo: `${origin}/platform-logo?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`
   };
 }
 
@@ -671,7 +671,7 @@ function buildPlatformCollection(definition, entries, origin = null) {
     return {
       id: `archives-${provider.slug}-${category.key}`,
       title: category.title,
-      coverImageUrl: origin ? `${origin}/platform-category-card.svg?provider=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${VISUAL_REV}` : null,
+      coverImageUrl: origin ? `${origin}/platform-category-card.svg?provider=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${VISUAL_REV}&asset=2` : null,
       focusGifEnabled: false,
       coverEmoji: category.type === 'movie' ? '🎬' : '📺',
       tileShape: 'LANDSCAPE',
