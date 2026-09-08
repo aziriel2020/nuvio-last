@@ -438,269 +438,49 @@ async function buildAnimeAsiaMovieCatalog({ catalog, timeZone, now = new Date(),
   return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
 }
 
-function animeAsiaMarketFromDetails(details) {
-  const countries = new Set((details?.origin_country || []).map((value) => String(value || '').toUpperCase()));
-  const language = String(details?.original_language || '').toLowerCase();
-  if (countries.has('KR') || language === 'ko') return { region: 'KR', language: 'ko', label: 'Corée' };
-  if (countries.has('JP') || language === 'ja') return { region: 'JP', language: 'ja', label: 'Japon' };
-  return null;
-}
-
-function animeAsiaDetailsAreEligible(details) {
-  if (!animeAsiaMarketFromDetails(details)) return false;
-  const genreIds = new Set((details?.genres || []).map((entry) => Number(entry?.id)).filter(Number.isFinite));
-  // TMDb genre 16 = Animation. Some older records omit genres from sparse
-  // responses, so a JP/KR title is still accepted if genres are unavailable.
-  return !genreIds.size || genreIds.has(16);
-}
-
-function animeSeriesDiscoverParams(window, market, page, broad = false) {
-  const params = {
-    language: getConfig().language,
-    page,
-    include_adult: false,
-    sort_by: 'popularity.desc',
-    with_genres: '16',
-    with_origin_country: market.region,
-    with_original_language: market.language
-  };
-  if (!broad) {
-    params['air_date.gte'] = window.start;
-    params['air_date.lte'] = window.end;
-  }
-  return params;
-}
-
-async function discoverAnimeAsiaSeriesCandidates(window) {
-  const maxCandidates = Math.max(80, getConfig().maxCandidates);
-  const markets = [
-    { region: 'JP', language: 'ja' },
-    { region: 'KR', language: 'ko' }
-  ];
-
-  async function collect(broad = false) {
-    const byId = new Map();
-    for (const market of markets) {
-      for (let page = 1; page <= (broad ? 3 : 5) && byId.size < maxCandidates; page += 1) {
-        const payload = await tmdbFetch('/discover/tv', animeSeriesDiscoverParams(window, market, page, broad));
-        for (const item of payload?.results || []) {
-          const id = Number(item?.id);
-          if (!Number.isFinite(id)) continue;
-          if (!byId.has(id)) byId.set(id, { ...item, _animeMarket: market });
-        }
-        if (page >= Number(payload?.total_pages || 1)) break;
-      }
-    }
-    return [...byId.values()];
-  }
-
-  let candidates = await collect(false);
-  // Some TMDb deployments interpret discover/tv air_date filters narrowly.
-  // If that yields nothing, inspect the most popular JP/KR animation shows and
-  // validate exact episode dates from season data below.
-  if (!candidates.length) candidates = await collect(true);
-  return candidates.slice(0, maxCandidates);
-}
-
-function animeSeasonNumbersForWindow(details, window) {
-  const numbers = new Set();
-  const directEpisodes = [details?.last_episode_to_air, details?.next_episode_to_air].filter(Boolean);
-  for (const episode of directEpisodes) {
-    const date = normalizeIsoDate(episode?.air_date);
-    const season = Number(episode?.season_number);
-    if (Number.isFinite(season) && season > 0 && date && date >= window.start && date <= window.end) numbers.add(season);
-  }
-
-  const seasons = (details?.seasons || [])
-    .filter((season) => Number(season?.season_number) > 0)
-    .map((season) => ({
-      number: Number(season.season_number),
-      start: normalizeIsoDate(season?.air_date)
-    }))
-    .filter((season) => season.start)
-    .sort((a, b) => a.start.localeCompare(b.start) || a.number - b.number);
-
-  // Treat a season as active until the next season begins. This catches
-  // long-running anime whose season start may be months/years before the
-  // requested week (the common case that first_air_date filtering misses).
-  for (let index = 0; index < seasons.length; index += 1) {
-    const season = seasons[index];
-    const nextStart = seasons[index + 1]?.start || null;
-    if (season.start <= window.end && (!nextStart || nextStart > window.start)) numbers.add(season.number);
-  }
-
-  if (!numbers.size) {
-    for (const season of seasons.filter((entry) => entry.start <= window.end).slice(-2)) numbers.add(season.number);
-  }
-  return [...numbers].slice(0, 3);
-}
-
-function animeTmdbEpisodeToMeta(details, episode, window) {
-  const date = normalizeIsoDate(episode?.air_date);
-  if (!date || date < window.start || date > window.end) return null;
-  const market = animeAsiaMarketFromDetails(details);
-  if (!market) return null;
-
-  const code = episodeCode(episode);
-  const meta = baseMeta(
-    details,
-    'series',
-    date,
-    `${code} • ${humanDate(date, ANIME_TIMEZONE, window.today)}`
-  );
-  meta.description = [
-    `Anime ${market.label} • épisode diffusé`,
-    episode?.name ? `${code} — ${episode.name}` : code,
-    stripHtml(episode?.overview),
-    meta.description
-  ].filter(Boolean).join('\n\n');
-  meta.country = market.region === 'KR' ? 'Corée du Sud' : 'Japon';
-  meta.language = market.language;
-  meta._calendarProvider = 'Anime Japon + Corée';
-  meta._calendarSource = 'tmdb-anime-jpkr-fallback';
-  meta._eventMode = EVENT_MODES.STREAMING_DATE;
-  meta._dedupeKey = `anime-tmdb:${details.id}:${episode?.season_number || 0}:${episode?.episode_number || episode?.id || date}`;
-  return meta;
-}
-
-async function buildTmdbAnimeAsiaSeriesFallback(window, stats) {
-  const candidates = await discoverAnimeAsiaSeriesCandidates(window);
-  stats.tmdbFallbackCandidates = candidates.length;
-
-  const settled = await mapLimitSettled(
-    candidates.slice(0, Math.min(getConfig().maxCandidates, 80)),
-    5,
-    async (candidate) => {
-      const details = await fetchDetails('series', candidate.id);
-      if (!animeAsiaDetailsAreEligible(details)) return { metas: [], reason: 'wrong-origin' };
-
-      const seasonNumbers = animeSeasonNumbersForWindow(details, window);
-      const seasonResults = await mapLimitSettled(
-        seasonNumbers,
-        2,
-        (seasonNumber) => fetchSeasonDetails(details.id, seasonNumber)
-      );
-
-      const metas = [];
-      for (const seasonResult of seasonResults) {
-        if (seasonResult?.error) continue;
-        for (const episode of seasonResult?.episodes || []) {
-          const meta = animeTmdbEpisodeToMeta(details, episode, window);
-          if (meta) metas.push(meta);
-        }
-      }
-
-      // If TMDb season data is incomplete, last/next episode fields can still
-      // prove an exact episode date in the requested period.
-      if (!metas.length) {
-        for (const episode of [details?.last_episode_to_air, details?.next_episode_to_air].filter(Boolean)) {
-          const meta = animeTmdbEpisodeToMeta(details, episode, window);
-          if (meta) metas.push(meta);
-        }
-      }
-      return { metas };
-    }
-  );
-
-  const metas = [];
-  for (const result of settled) {
-    if (result?.error) {
-      stats.enrichmentErrors += 1;
-      continue;
-    }
-    metas.push(...(result?.metas || []));
-  }
-  return sortAndDedupeMetas(metas).slice(0, getConfig().maxItems);
-}
-
 async function buildAnimeAsiaSeriesCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
   const window = dateWindow(period, now, ANIME_TIMEZONE);
-  const key = catalogCacheKey({
-    providerSlug: 'anime-asia-series',
-    type: 'series',
-    period,
-    timeZone: ANIME_TIMEZONE,
-    today: window.today,
-    sourceVersion: `${SOURCE_VERSION}-anime-series-v3-anilist+tmdb-fallback`
-  });
+  const key = catalogCacheKey({ providerSlug: 'anime-asia-series', type: 'series', period, timeZone: ANIME_TIMEZONE, today: window.today, sourceVersion: `${SOURCE_VERSION}-anime-series-v2-anilist-authoritative` });
   if (useCache) {
     const cached = catalogCache.get(key);
     if (cached) return cached;
   }
-
-  const stats = emptyStats(
-    { label: 'Anime Japon + Corée', ids: [] },
-    { ...catalog, period },
-    window,
-    ANIME_TIMEZONE
-  );
+  const stats = emptyStats({ label: 'Anime Japon + Corée', ids: [] }, { ...catalog, period }, window, ANIME_TIMEZONE);
   stats.anilistFallbacks = 0;
-  stats.anilistErrors = 0;
-  stats.tmdbFallbackCandidates = 0;
-  stats.tmdbFallbackMetas = 0;
-
   if (window.empty) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
 
-  const metas = [];
-  let filtered = [];
-  try {
-    const schedules = await anilistSchedules(window, ANIME_TIMEZONE);
-    filtered = schedules.filter((schedule) =>
-      !schedule?.media?.isAdult &&
-      ANIME_COUNTRY_ORIGINS.has(String(schedule?.media?.countryOfOrigin || '').toUpperCase()) &&
-      schedule?.media?.format !== 'MOVIE'
-    );
-  } catch (error) {
-    stats.anilistErrors += 1;
-  }
+  // AniList is authoritative for original JP/KR airing times.
+  // TMDb is enrichment only. A failed mapping must never delete a valid anime.
+  const schedules = await anilistSchedules(window, ANIME_TIMEZONE);
+  const filtered = schedules.filter((schedule) =>
+    !schedule?.media?.isAdult &&
+    ANIME_COUNTRY_ORIGINS.has(String(schedule?.media?.countryOfOrigin || '').toUpperCase()) &&
+    schedule?.media?.format !== 'MOVIE'
+  );
   stats.candidates = filtered.length;
 
-  if (filtered.length) {
-    const settled = await mapLimitSettled(
-      filtered.slice(0, getConfig().maxCandidates),
-      5,
-      async (schedule) => {
-        let details = null;
-        try {
-          const tmdbId = await resolveAnimeToTmdb(schedule.media);
-          if (tmdbId) details = await fetchDetails('series', tmdbId);
-        } catch (_) {
-          details = null;
-        }
-        const converted = animeScheduleToMeta(schedule, details, ANIME_TIMEZONE, window);
-        if (converted?.meta && !details) converted.anilistFallback = true;
-        return converted;
-      }
-    );
-
-    for (const result of settled) {
-      if (result?.error) {
-        stats.enrichmentErrors += 1;
-        continue;
-      }
-      if (!result?.meta) {
-        countReason(stats, result?.reason);
-        continue;
-      }
-      if (result.anilistFallback) stats.anilistFallbacks += 1;
-      metas.push(result.meta);
-    }
-  }
-
-  // Cloudflare can occasionally receive an empty/blocked AniList schedule.
-  // Never let that blank the whole Nuvio collection: use TMDb's JP/KR
-  // animation discovery + exact season episode dates as an independent source.
-  if (!metas.length) {
+  const settled = await mapLimitSettled(filtered.slice(0, getConfig().maxCandidates), 5, async (schedule) => {
+    let details = null;
     try {
-      const fallback = await buildTmdbAnimeAsiaSeriesFallback(window, stats);
-      stats.tmdbFallbackMetas = fallback.length;
-      metas.push(...fallback);
-    } catch (error) {
-      stats.enrichmentErrors += 1;
+      const tmdbId = await resolveAnimeToTmdb(schedule.media);
+      if (tmdbId) details = await fetchDetails('series', tmdbId);
+    } catch (_) {
+      details = null;
     }
+    const converted = animeScheduleToMeta(schedule, details, ANIME_TIMEZONE, window);
+    if (converted?.meta && !details) converted.anilistFallback = true;
+    return converted;
+  });
+
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) { countReason(stats, result?.reason); continue; }
+    if (result.anilistFallback) stats.anilistFallbacks += 1;
+    metas.push(result.meta);
   }
 
   const sorted = sortAndDedupeMetas(metas).slice(0, getConfig().maxItems);
@@ -709,6 +489,7 @@ async function buildAnimeAsiaSeriesCatalog({ catalog, timeZone, now = new Date()
   const result = { metas: sorted.map(cleanCatalogMeta), stats };
   return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
 }
+
 function archiveNowParts(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
   const today = localIsoDate(now, timeZone);
   const [year, month] = today.split('-').map(Number);
@@ -3057,7 +2838,7 @@ function candidateMatchesAnime(candidate, media, relaxedYear = false) {
 }
 
 async function resolveAnimeToTmdb(media) {
-  const key = `anime-map-v3:${media?.id}`;
+  const key = `anime-map-v4:${media?.id}`;
   const cached = mappingCache.get(key);
   if (cached !== null && cached !== undefined) return cached || null;
   const titles = animeTitles(media).slice(0, 3);
@@ -3144,6 +2925,7 @@ function anilistMediaMeta(media, id = null) {
   const poster = media?.coverImage?.extraLarge || media?.coverImage?.large || null;
   const background = media?.bannerImage || poster;
   const country = String(media?.countryOfOrigin || '').toUpperCase();
+  if (!ANIME_COUNTRY_ORIGINS.has(country) || String(media?.format || '').toUpperCase() === 'MOVIE') return null;
   return {
     id: id || `anilist:${mediaId}`,
     type: 'series',
@@ -3217,14 +2999,14 @@ function animeScheduleToMeta(schedule, details, timeZone, window) {
     poster: nativeMeta.poster || enriched.poster,
     background: nativeMeta.background || enriched.background,
     landscapePoster: nativeMeta.landscapePoster || enriched.landscapePoster,
-    description: [
-      String(nativeMeta.description || '').split('\n\n').slice(0, 3).join('\n\n'),
-      enriched.description
-    ].filter(Boolean).join('\n\n'),
+    description: [nativeMeta.description, enriched.description].filter(Boolean).join('\n\n'),
+    imdbRating: nativeMeta.imdbRating || enriched.imdbRating,
     genres: nativeMeta.genres?.length ? nativeMeta.genres : enriched.genres,
     runtime: nativeMeta.runtime || enriched.runtime,
     country: nativeMeta.country || enriched.country,
     language: nativeMeta.language || enriched.language,
+    status: nativeMeta.status || enriched.status,
+    behaviorHints: { ...(enriched.behaviorHints || {}), ...(nativeMeta.behaviorHints || {}) },
     _eventInstantMs: event.eventInstantMs,
     _eventHasTime: true,
     _eventMode: event.eventMode,
@@ -4089,10 +3871,6 @@ module.exports._internals = {
   platformImageUrls,
   buildNuvioCollectionsImport,
   buildAnimeAsiaSeriesCatalog,
-  buildTmdbAnimeAsiaSeriesFallback,
-  discoverAnimeAsiaSeriesCandidates,
-  animeSeasonNumbersForWindow,
-  animeTmdbEpisodeToMeta,
   buildAnimeAsiaMovieCatalog,
   animeTitleSimilarity,
   candidateMatchesAnime,
