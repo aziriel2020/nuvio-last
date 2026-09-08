@@ -28,7 +28,7 @@ function aliasPlugin() {
 async function buildWorker(options = {}) {
   const dist = options.dist || path.join(ROOT, 'dist');
   await esbuild.build({
-    entryPoints: [path.join(ROOT, 'cloudflare/worker.mjs')],
+    entryPoints: [path.join(ROOT, 'cloudflare/worker-entry.mjs')],
     outfile: path.join(dist, '_worker.js'),
     bundle: true,
     format: 'esm',
