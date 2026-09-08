@@ -157,33 +157,29 @@ function isAllowedPosterSource(value) {
   }
 }
 
-async function contentImageFallback(request, env, url) {
-  const regionMatch = url.pathname.match(/^\/(fr|global|tr|us)\//);
-  const region = regionMatch?.[1] || 'us';
-  const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
-  if (validSlug(provider)) {
-    const candidate = `/static/assets/platform-art/${region}/${provider}-card.jpg`;
-    const response = await serveLocalAsset(request, env, candidate);
-    if (response.ok) return response;
-  }
-  return new Response('Not found', {
-    status: 404,
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'public, max-age=60',
-      'X-Nuvio-Edge': 'cloudflare-native',
-      'X-Nuvio-Origin': 'cloudflare-only'
-    }
-  });
+function regionCalendarInternals(url) {
+  const region = url.pathname.match(/^\/(fr|global|tr|us)\//)?.[1] || 'us';
+  const handler = nodeHandler?._internals?.[`${region}Handler`];
+  return handler?._internals || nodeHandler?._internals?.usHandler?._internals || null;
 }
 
-async function serveDesktopContentCard(request, env, url) {
-  const src = String(url.searchParams.get('src') || '').trim();
-  if (!isAllowedPosterSource(src)) return contentImageFallback(request, env, url);
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
 
+async function embeddedPosterDataUri(src) {
+  if (!isAllowedPosterSource(src)) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6500);
   try {
     const upstream = await fetch(src, {
+      signal: controller.signal,
       headers: {
         Accept: 'image/jpeg,image/png,image/webp,*/*;q=0.8',
         'User-Agent': 'NuvioCalendar/1.4.0 Cloudflare'
@@ -194,16 +190,90 @@ async function serveDesktopContentCard(request, env, url) {
       }
     });
 
-    if (!upstream.ok || !String(upstream.headers.get('content-type') || '').toLowerCase().startsWith('image/')) {
-      return contentImageFallback(request, env, url);
-    }
+    if (!upstream.ok) return null;
+    const contentType = String(upstream.headers.get('content-type') || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (!/^image\/(jpeg|jpg|png|webp)$/.test(contentType)) return null;
 
-    return withHeaders(upstream, {
-      'Cache-Control': `public, max-age=86400, s-maxage=${GENERATED_ART_TTL}, stale-while-revalidate=2592000`
-    });
+    const declaredLength = Number(upstream.headers.get('content-length') || 0);
+    if (declaredLength > 3.5 * 1024 * 1024) return null;
+
+    const bytes = new Uint8Array(await upstream.arrayBuffer());
+    if (bytes.byteLength > 3.5 * 1024 * 1024) return null;
+    return `data:${contentType};base64,${bytesToBase64(bytes)}`;
   } catch {
-    return contentImageFallback(request, env, url);
+    return null;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+export function desktopContentCardSvg(urlLike, imageDataUri = null) {
+  const url = normalizedUrl(urlLike);
+  const internals = regionCalendarInternals(url);
+  const title = String(url.searchParams.get('title') || '').trim();
+  const provider = String(
+    url.searchParams.get('label') ||
+    url.searchParams.get('provider') ||
+    'NUVIO'
+  ).trim();
+  const append = String(url.searchParams.get('append') || '').trim();
+  const type = String(url.searchParams.get('type') || 'series').toLowerCase() === 'movie'
+    ? 'movie'
+    : 'series';
+
+  if (typeof internals?.calendarCardSvg === 'function') {
+    return internals.calendarCardSvg({
+      imageDataUri,
+      title,
+      provider,
+      append,
+      type,
+      layout: 'landscape'
+    });
+  }
+
+  const accent = /^#[0-9a-f]{6}$/i.test(String(url.searchParams.get('color') || ''))
+    ? String(url.searchParams.get('color'))
+    : '#38bdf8';
+  const safeTitle = escapeXml(title || (type === 'movie' ? 'Film' : 'Série'));
+  const safeAppend = escapeXml(append || (type === 'movie' ? 'SORTIE' : 'NOUVEL ÉPISODE'));
+  const safeProvider = escapeXml(provider.toUpperCase());
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+    <defs>
+      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#020617" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#061c42" stop-opacity=".98"/>
+      </linearGradient>
+    </defs>
+    ${imageDataUri ? `<image href="${escapeXml(imageDataUri)}" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>` : '<rect width="1600" height="900" fill="#07111f"/>'}
+    <rect y="330" width="1600" height="570" fill="url(#bottom)"/>
+    <rect x="58" y="585" width="14" height="220" rx="7" fill="${accent}"/>
+    <text x="100" y="690" fill="#fff" font-family="sans-serif" font-size="94" font-weight="900">${safeTitle}</text>
+    <text x="102" y="774" fill="#eef5ff" font-family="sans-serif" font-size="46" font-weight="800">${safeAppend}</text>
+    <text x="102" y="842" fill="${accent}" font-family="sans-serif" font-size="42" font-weight="900">${safeProvider}</text>
+  </svg>`;
+}
+
+async function serveDesktopContentCard(request, env, url) {
+  const src = String(url.searchParams.get('src') || '').trim();
+  const imageDataUri = await embeddedPosterDataUri(src);
+  const svg = desktopContentCardSvg(url, imageDataUri);
+
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': `public, max-age=86400, s-maxage=${GENERATED_ART_TTL}, stale-while-revalidate=2592000`,
+      'X-Nuvio-Edge': 'cloudflare-native',
+      'X-Nuvio-Origin': 'cloudflare-only',
+      'X-Nuvio-Card-Renderer': 'calendar-overlay-v2'
+    }
+  });
 }
 
 function escapeXml(value) {
