@@ -1495,11 +1495,12 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
     sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster,
     'landscape'
   );
-  if (!source || !isAllowedPosterSource(source)) return sourceOverride || meta?.landscapePoster || meta?.background || meta?.poster || null;
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop10`);
-  url.searchParams.set('src', source);
+  // desktop11 forces a fresh cache key after the Cloudflare-native renderer
+  // switched from raw artwork passthrough to the full Calendar overlay.
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop11`);
+  if (source && isAllowedPosterSource(source)) url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
   url.searchParams.set('type', meta?.type || catalog?.type || 'series');
