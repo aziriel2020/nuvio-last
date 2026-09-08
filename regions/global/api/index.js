@@ -3505,6 +3505,14 @@ async function resolveTmdbId(id, type) {
 }
 
 async function handleMeta(res, type, id) {
+  const anilistMatch = type === 'series' ? String(id || '').match(/^anilist:(\d+)$/) : null;
+  if (anilistMatch) {
+    const media = await anilistMediaById(Number(anilistMatch[1]));
+    const native = anilistMediaMeta(media, id);
+    if (!native) return json(res, 404, { meta: null });
+    return json(res, 200, { meta: cleanCatalogMeta(native) }, 'public, max-age=300, s-maxage=1800, stale-while-revalidate=3600');
+  }
+
   const tmdbId = await resolveTmdbId(id, type);
   if (!tmdbId) return json(res, 404, { meta: null });
   const details = await fetchDetails(type, tmdbId);
@@ -3699,6 +3707,12 @@ async function anilistScheduleById(id) {
   const payload = await anilistFetch(ANILIST_AIRING_BY_ID_QUERY, { id: Number(id) });
   if (payload?.errors?.length) throw new SourceHttpError('anilist', 502, '/graphql', payload.errors[0]?.message || 'GraphQL error');
   return payload?.data?.AiringSchedule || null;
+}
+
+async function anilistMediaById(id) {
+  const payload = await anilistFetch(ANILIST_MEDIA_BY_ID_QUERY, { id: Number(id) });
+  if (payload?.errors?.length) throw new SourceHttpError('anilist', 502, '/graphql', payload.errors[0]?.message || 'GraphQL error');
+  return payload?.data?.Media || null;
 }
 
 async function handleDebugAiring(req, res, debugId) {
@@ -3956,9 +3970,10 @@ module.exports._internals = {
   anilistFetch,
   anilistSchedules,
   anilistScheduleById,
+  anilistMediaById,
+  anilistMediaMeta,
+  anilistScheduleNativeMeta,
   animeScheduleToMeta,
-  candidateMatchesAnime,
-  resolveAnimeToTmdb,
   SourceHttpError,
   TmdbHttpError,
   catalogCache,
