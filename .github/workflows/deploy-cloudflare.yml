@@ -116,13 +116,8 @@ jobs:
           for attempt in $(seq 1 30); do
             status="$(curl -sS               -o "$RUNNER_TEMP/migration-response.json"               -w '%{http_code}'               -X POST               -H "Authorization: Bearer $OIDC_TOKEN"               -H "X-Cloudflare-Token: $CLOUDFLARE_API_TOKEN"               -H "Content-Type: application/json"               "$VERCEL_MIGRATION_ORIGIN/internal/cloudflare-secret-migration" || true)"
 
-            if [[ "$status" == "200" ]]; then
-              node - "$RUNNER_TEMP/migration-response.json" <<'NODE'
-              const fs = require('fs');
-              const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-              if (!payload?.ok) process.exit(1);
-              console.log('TMDB credential migrated server-to-server without exposing its value.');
-              NODE
+            if [[ "$status" == "200" ]] && node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.exit(p&&p.ok?0:1)" "$RUNNER_TEMP/migration-response.json"; then
+              echo "TMDB credential migrated server-to-server without exposing its value."
               migrated=true
               break
             fi
@@ -133,13 +128,7 @@ jobs:
 
           if [[ "$migrated" != "true" ]]; then
             echo "::error::The secure TMDB migration did not complete."
-            node - "$RUNNER_TEMP/migration-response.json" <<'NODE' || true
-            const fs = require('fs');
-            try {
-              const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-              console.error(JSON.stringify(payload));
-            } catch {}
-            NODE
+            node -e "const fs=require('fs');try{const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));console.error(JSON.stringify(p))}catch{}" "$RUNNER_TEMP/migration-response.json" || true
             exit 1
           fi
 
