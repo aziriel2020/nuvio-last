@@ -440,31 +440,49 @@ async function buildAnimeAsiaMovieCatalog({ catalog, timeZone, now = new Date(),
 
 async function buildAnimeAsiaSeriesCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
   const window = dateWindow(period, now, ANIME_TIMEZONE);
-  const key = catalogCacheKey({ providerSlug: 'anime-asia-series', type: 'series', period, timeZone: ANIME_TIMEZONE, today: window.today, sourceVersion: `${SOURCE_VERSION}-anime-series` });
+  const key = catalogCacheKey({ providerSlug: 'anime-asia-series', type: 'series', period, timeZone: ANIME_TIMEZONE, today: window.today, sourceVersion: `${SOURCE_VERSION}-anime-series-v2-anilist-authoritative` });
   if (useCache) {
     const cached = catalogCache.get(key);
     if (cached) return cached;
   }
   const stats = emptyStats({ label: 'Anime Japon + Corée', ids: [] }, { ...catalog, period }, window, ANIME_TIMEZONE);
+  stats.anilistFallbacks = 0;
   if (window.empty) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
+
+  // AniList is authoritative for original JP/KR airing times.
+  // TMDb is enrichment only. A failed mapping must never delete a valid anime.
   const schedules = await anilistSchedules(window, ANIME_TIMEZONE);
-  const filtered = schedules.filter((schedule) => !schedule?.media?.isAdult && ANIME_COUNTRY_ORIGINS.has(String(schedule?.media?.countryOfOrigin || '').toUpperCase()) && schedule?.media?.format !== 'MOVIE');
+  const filtered = schedules.filter((schedule) =>
+    !schedule?.media?.isAdult &&
+    ANIME_COUNTRY_ORIGINS.has(String(schedule?.media?.countryOfOrigin || '').toUpperCase()) &&
+    schedule?.media?.format !== 'MOVIE'
+  );
   stats.candidates = filtered.length;
+
   const settled = await mapLimitSettled(filtered.slice(0, getConfig().maxCandidates), 5, async (schedule) => {
-    const tmdbId = await resolveAnimeToTmdb(schedule.media);
-    if (!tmdbId) return { meta: null, reason: 'mapping' };
-    const details = await fetchDetails('series', tmdbId);
-    return animeScheduleToMeta(schedule, details, ANIME_TIMEZONE, window);
+    let details = null;
+    try {
+      const tmdbId = await resolveAnimeToTmdb(schedule.media);
+      if (tmdbId) details = await fetchDetails('series', tmdbId);
+    } catch (_) {
+      details = null;
+    }
+    const converted = animeScheduleToMeta(schedule, details, ANIME_TIMEZONE, window);
+    if (converted?.meta && !details) converted.anilistFallback = true;
+    return converted;
   });
+
   const metas = [];
   for (const result of settled) {
     if (result?.error) { stats.enrichmentErrors += 1; continue; }
     if (!result?.meta) { countReason(stats, result?.reason); continue; }
+    if (result.anilistFallback) stats.anilistFallbacks += 1;
     metas.push(result.meta);
   }
+
   const sorted = sortAndDedupeMetas(metas).slice(0, getConfig().maxItems);
   stats.duplicatesRemoved = Math.max(0, metas.length - sorted.length);
   stats.final = sorted.length;
@@ -1478,10 +1496,10 @@ function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) 
     background: `${origin}/background.svg`,
     resources: [
       { name: 'catalog', types: ['movie', 'series'] },
-      { name: 'meta', types: ['movie', 'series'], idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:'] }
+      { name: 'meta', types: ['movie', 'series'], idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:', 'anilist:'] }
     ],
     types: ['movie', 'series'],
-    idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:'],
+    idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:', 'anilist:'],
     catalogs,
     behaviorHints: { configurable: false, configurationRequired: false, newEpisodeNotifications: false },
     language: 'fr'
@@ -2842,6 +2860,15 @@ async function resolveAnimeToTmdb(media) {
       if (Number.isFinite(expectedYear) && Number.isFinite(candidateYear) && Math.abs(candidateYear - expectedYear) > 2) return false;
       return animeTitleSimilarity(candidate, media) >= 0.24;
     });
+  }
+
+  // Long-running shows and sequel seasons often keep an old TMDb first-air
+  // date. A strong same-language title match is safer than dropping the anime.
+  if (!matches.length) {
+    matches = unique.filter((candidate) =>
+      String(candidate?.original_language || '').toLowerCase() === expectedLanguage &&
+      animeTitleSimilarity(candidate, media) >= 0.72
+    );
   }
 
   matches.sort((a, b) => {
