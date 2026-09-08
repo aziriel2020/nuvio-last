@@ -160,9 +160,9 @@ test('normal streaming parent contains Modern Series and Films cards',()=>{
   for(const f of netflix.folders){
     assert.equal(f.tileShape,'LANDSCAPE');
     assert.equal(f.hideTitle,true);
-    assert.match(f.coverImageUrl,/platform-category-card\.svg\?provider=netflix&category=(series|films)&v=coex-us131-cinematic$/);
-    assert.match(f.heroBackdropUrl,/platform-backdrop\.svg\?provider=netflix&type=(series|movie)&v=coex-us131-cinematic$/);
-    assert.match(f.titleLogoUrl,/platform-logo\?provider=netflix&type=(series|movie)&v=coex-us131-cinematic$/);
+    assert.match(f.coverImageUrl,/platform-category-card\\.svg\\?provider=netflix&category=(series|films)&v=coex-us131-cinematic&asset=2$/);
+    assert.match(f.heroBackdropUrl,/platform-backdrop\\.svg\\?provider=netflix&type=(series|movie)&v=coex-us131-cinematic&asset=2$/);
+    assert.match(f.titleLogoUrl,/platform-logo\\?provider=netflix&type=(series|movie)&v=coex-us131-cinematic&asset=2$/);
   }
 });
 
