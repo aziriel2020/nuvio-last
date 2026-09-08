@@ -424,3 +424,130 @@ test('global manifest and meta route support AniList fallback IDs', async () => 
     global.fetch = oldFetch;
   }
 });
+
+
+test('JP/KR anime series survives a missing TMDb mapping by using AniList metadata', async () => {
+  const oldFetch = global.fetch;
+  const oldKey = process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY = 'test-key';
+
+  const airingAt = Math.floor(new Date('2026-08-24T11:00:00Z').getTime() / 1000);
+  global.fetch = async (url, options = {}) => {
+    const u = new URL(String(url));
+    if (u.hostname === 'graphql.anilist.co') {
+      const body = JSON.parse(options.body || '{}');
+      const query = String(body.query || '');
+      if (query.includes('airingSchedules')) {
+        return new Response(JSON.stringify({
+          data: {
+            Page: {
+              pageInfo: { currentPage: 1, hasNextPage: false },
+              airingSchedules: [{
+                id: 9001,
+                airingAt,
+                episode: 7,
+                mediaId: 777,
+                media: {
+                  id: 777,
+                  title: { english: 'AniList Only Hero', romaji: 'AniList Only Hero', native: 'アニリストヒーロー' },
+                  seasonYear: 2026,
+                  countryOfOrigin: 'JP',
+                  format: 'TV',
+                  status: 'RELEASING',
+                  isAdult: false,
+                  duration: 24,
+                  popularity: 12345,
+                  averageScore: 82,
+                  genres: ['Action'],
+                  description: 'AniList description',
+                  coverImage: { extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg' },
+                  bannerImage: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/test.jpg'
+                }
+              }]
+            }
+          }
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (query.includes('Media(id:')) {
+        return new Response(JSON.stringify({ data: { Media: null } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+    }
+
+    if (u.hostname === 'api.themoviedb.org' && u.pathname.endsWith('/search/tv')) {
+      return new Response(JSON.stringify({ page: 1, total_pages: 1, results: [] }), {
+        status: 200, headers: { 'content-type': 'application/json' }
+      });
+    }
+    throw new Error(`unexpected ${u}`);
+  };
+
+  try {
+    api._internals.catalogCache.clear?.();
+    api._internals.anilistCache.clear?.();
+    api._internals.mappingCache.clear?.();
+    const catalog = api._internals.resolveArchiveCatalog(
+      'archives-global-v1-series-anime-asia-today', 'series', fixedNow, tz
+    );
+    const result = await api._internals.buildAnimeAsiaSeriesCatalog({
+      catalog,
+      timeZone: tz,
+      now: fixedNow,
+      useCache: false
+    });
+    assert.equal(result.metas.length, 1);
+    assert.equal(result.metas[0].id, 'anilist:777');
+    assert.equal(result.metas[0].name, 'AniList Only Hero');
+    assert.equal(result.metas[0].type, 'series');
+    assert.match(result.metas[0].releaseInfo, /Épisode 7/);
+    assert.equal(result.stats.anilistFallbacks, 1);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.TMDB_API_KEY;
+    else process.env.TMDB_API_KEY = oldKey;
+  }
+});
+
+test('global manifest and meta route support AniList fallback IDs', async () => {
+  const manifest = api._internals.buildManifest('https://global.example', fixedNow, tz);
+  assert(manifest.idPrefixes.includes('anilist:'));
+  const metaResource = manifest.resources.find((resource) => resource.name === 'meta');
+  assert(metaResource.idPrefixes.includes('anilist:'));
+
+  const oldFetch = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    const u = new URL(String(url));
+    if (u.hostname !== 'graphql.anilist.co') throw new Error(`unexpected ${u}`);
+    const body = JSON.parse(options.body || '{}');
+    if (!String(body.query || '').includes('Media(id:')) throw new Error('unexpected AniList query');
+    return new Response(JSON.stringify({
+      data: {
+        Media: {
+          id: 777,
+          title: { english: 'AniList Detail Hero', romaji: null, native: null },
+          seasonYear: 2026,
+          countryOfOrigin: 'KR',
+          format: 'TV',
+          status: 'RELEASING',
+          isAdult: false,
+          duration: 24,
+          popularity: 5000,
+          averageScore: 80,
+          genres: ['Drama'],
+          description: 'Detail from AniList',
+          coverImage: { extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/detail.jpg' },
+          bannerImage: null
+        }
+      }
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const response = await call('/meta/series/anilist:777.json');
+    assert.equal(response.statusCode, 200);
+    const payload = JSON.parse(response.text);
+    assert.equal(payload.meta.id, 'anilist:777');
+    assert.equal(payload.meta.name, 'AniList Detail Hero');
+    assert.equal(payload.meta.country, 'Corée du Sud');
+  } finally {
+    global.fetch = oldFetch;
+  }
+});
