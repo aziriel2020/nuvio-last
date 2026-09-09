@@ -1,8 +1,6 @@
 name: D Smart Source Diagnostic
 on:
-  push:
-    branches: [main]
-    paths: [".github/dsmart-source-diagnostic-run"]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
