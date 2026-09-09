@@ -1,0 +1,168 @@
+name: Oracle Resume Verify
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/oracle-resume-verify-trigger"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: oracle-nuvio-resume-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore existing Oracle Terraform state
+        uses: actions/download-artifact@v4
+        with:
+          name: oracle-nuvio-provision-34347339416
+          path: ${{ runner.temp }}/oracle-state
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34347339416
+
+      - name: Resolve existing VM endpoint
+        id: endpoint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          state="$(find "$RUNNER_TEMP/oracle-state" -type f -name terraform.tfstate -print -quit)"
+          [[ -n "$state" ]] || { echo "::error::terraform.tfstate missing"; exit 1; }
+          ip="$(jq -r '.outputs.public_ip.value // empty' "$state")"
+          host="$(jq -r '.outputs.public_host.value // empty' "$state")"
+          origin="$(jq -r '.outputs.public_origin.value // empty' "$state")"
+          [[ -n "$ip" && -n "$host" && -n "$origin" ]] || { echo "::error::Oracle endpoint missing from state"; exit 1; }
+          echo "::add-mask::$ip"
+          echo "ip=$ip" >> "$GITHUB_OUTPUT"
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "origin=$origin" >> "$GITHUB_OUTPUT"
+
+      - name: Install SSH key
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ["ORACLE_SSH_PRIVATE_KEY"].strip()
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          Path(os.environ["RUNNER_TEMP"]+"/keys/oracle_ssh.pem").write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("ORACLE_SSH_PRIVATE_KEY")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+
+      - name: Bootstrap current Nuvio on existing VM
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
+          PUBLIC_HOST: ${{ steps.endpoint.outputs.host }}
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ubuntu@"$PUBLIC_IP" \
+            "sudo PUBLIC_HOST='$PUBLIC_HOST' NUVIO_BRANCH=main bash -s" < oracle/bootstrap.sh
+
+      - name: Verify local runtime over SSH
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+            'set -Eeuo pipefail; systemctl is-active --quiet nuvio; systemctl is-active --quiet caddy; curl -fsS --max-time 10 http://127.0.0.1:3000/_oracle/health | jq .'
+
+      - name: Verify public production endpoints
+        shell: bash
+        env:
+          PUBLIC_ORIGIN: ${{ steps.endpoint.outputs.origin }}
+        run: |
+          set -Eeuo pipefail
+          check_json() {
+            local path="$1"
+            echo "Checking $path"
+            body="$(curl -fsS --retry 8 --retry-delay 2 --connect-timeout 10 --max-time 25 "$PUBLIC_ORIGIN$path")"
+            printf '%s' "$body" | jq -e . >/dev/null
+          }
+          check_json /_oracle/health
+          check_json /fr/manifest.json
+          check_json /global/manifest.json
+          check_json /tr/manifest.json
+          check_json /us/manifest.json
+          check_json /nuvio-collections-desktop.json
+          check_json /nuvio-collections-fr-global-tr-usa.json
+
+      - name: Targeted production audit
+        shell: bash
+        env:
+          PUBLIC_ORIGIN: ${{ steps.endpoint.outputs.origin }}
+          AUDIT_RUNTIME: oracle-vm
+          AUDIT_MODE: safe
+          AUDIT_STRICT: "1"
+          AUDIT_CONCURRENCY: "4"
+          AUDIT_ATTEMPTS: "2"
+          AUDIT_TIMEOUT_MS: "10000"
+          AUDIT_REQUEST_BUDGET: "1200"
+          AUDIT_DESKTOP_CARDS: "8"
+          AUDIT_REPORT: reports/oracle-resume-audit.json
+        run: |
+          set -Eeuo pipefail
+          node scripts/audit-production-catalogs.mjs
+
+      - name: Summary
+        if: always()
+        shell: bash
+        env:
+          PUBLIC_ORIGIN: ${{ steps.endpoint.outputs.origin }}
+        run: |
+          {
+            echo "## Oracle Resume Verify"
+            echo
+            echo "- Origin: $PUBLIC_ORIGIN"
+            echo "- Health: $PUBLIC_ORIGIN/_oracle/health"
+            echo "- France: $PUBLIC_ORIGIN/fr/manifest.json"
+            echo "- Global: $PUBLIC_ORIGIN/global/manifest.json"
+            echo "- Türkiye: $PUBLIC_ORIGIN/tr/manifest.json"
+            echo "- USA: $PUBLIC_ORIGIN/us/manifest.json"
+            echo "- Desktop: $PUBLIC_ORIGIN/nuvio-collections-desktop.json"
+            echo "- Combined: $PUBLIC_ORIGIN/nuvio-collections-fr-global-tr-usa.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-resume-verify-${{ github.run_id }}
+          path: reports/oracle-resume-audit.json
+          if-no-files-found: warn
+          retention-days: 30
