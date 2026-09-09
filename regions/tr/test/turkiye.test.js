@@ -105,3 +105,24 @@ test('Max resolver also accepts legacy BluTV naming and Crunchyroll is a native 
   assert(collection);
   assert.deepEqual(collection.folders.map((f) => f.title), ['Séries', 'Films']);
 });
+
+
+test('local Türkiye network fallback accepts platform originals when watch-provider metadata is missing', () => {
+  for (const [slug, network] of [
+    ['exxen', 'Exxen'],
+    ['gain', 'GAİN'],
+    ['tabii', 'tabii'],
+    ['puhutv', 'Puhu TV'],
+    ['tv-plus', 'Turkcell TV+'],
+    ['tivibu', 'Tivibu'],
+    ['d-smart-go', 'D-Smart']
+  ]) {
+    const provider = I.PROVIDERS.find((entry) => entry.slug === slug);
+    assert(provider, slug);
+    assert.equal(
+      I.hasProviderAccess({ networks: [{ name: network }], 'watch/providers': { results: { TR: {} } } }, { ...provider, ids: [] }),
+      true,
+      slug
+    );
+  }
+});
