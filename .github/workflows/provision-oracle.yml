@@ -131,6 +131,7 @@ jobs:
 
           if [[ "$success" != "1" ]]; then
             echo "::error::No configured Oracle Availability Domain could provision the guarded A1 Always Free VM."
+            terraform destroy -auto-approve || true
             exit 1
           fi
 
