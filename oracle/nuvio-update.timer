@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Nuvio GitHub main for validated releases
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target
