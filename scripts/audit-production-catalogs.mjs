@@ -68,7 +68,7 @@ export function createClient(cfg, fetcher = fetch) {
     if (delay) await sleep(delay);
   }
   function release() { if (queue.length) queue.shift()(); else active--; }
-  async function get(route, { native = true, json = true, attempts = cfg.attempts } = {}) {
+  async function get(route, { native = true, json = true, attempts = cfg.attempts, stopOnRuntimeUnavailable = true } = {}) {
     const url = new URL(route, cfg.origin);
     if (url.origin !== cfg.origin) throw new AuditError('Audit URL escaped configured origin', 'invalid-origin');
     const history = [];
@@ -91,7 +91,9 @@ export function createClient(cfg, fetcher = fetch) {
         history.push(item);
         const category = classify(response.status, body, response.headers);
         if (category === 'runtime-unavailable' || (native && response.ok && response.headers.get('x-nuvio-origin') !== 'cloudflare-only')) {
-          throw (stopped = new AuditError('Dynamic runtime unavailable: ' + url.pathname + ' returned ' + response.headers.get('content-type') + ' without native headers', 'runtime-unavailable', history));
+          const runtimeError = new AuditError('Dynamic runtime unavailable: ' + url.pathname + ' returned ' + response.headers.get('content-type') + ' without native headers', 'runtime-unavailable', history);
+          if (stopOnRuntimeUnavailable) stopped = runtimeError;
+          throw runtimeError;
         }
         if (!response.ok || response.headers.get('x-nuvio-upstream-error') === '1') {
           item.category = category;
@@ -185,12 +187,29 @@ export function summarize(results, inventory) {
   return { discovered: inventory.length, selected: results.length, tested: results.filter(r => r.status !== 'NOT_TESTED').length, byRegion, families };
 }
 export async function run(cfg, fetcher = fetch) {
-  const client = createClient(cfg, fetcher), inventory = [], results = [], cards = [], metas = new Map();
-  const report = { schemaVersion: 2, startedAt: new Date().toISOString(), config: cfg, inventory, results, cards };
+  const client = createClient(cfg, fetcher), inventory = [], results = [], cards = [], metas = new Map(), health = {};
+  const report = { schemaVersion: 3, startedAt: new Date().toISOString(), config: cfg, inventory, results, cards, health };
   let fatal;
   try {
     for (const r of cfg.regions) inventory.push(...await discover(client, r));
     console.log('[DISCOVER] ' + inventory.length + ' catalogs');
+
+    for (const region of cfg.regions) {
+      try {
+        const response = await client.get('/' + region + '/health', { attempts: 2, stopOnRuntimeUnavailable: false });
+        health[region] = { status: 'OK', data: response.data };
+        const providers = response.data?.providers;
+        if (providers && typeof providers === 'object') {
+          const unavailable = Object.entries(providers).filter(([, ok]) => !ok).map(([name]) => name);
+          console.log('[HEALTH] ' + region.toUpperCase() + ' OK providers-unavailable=' + (unavailable.join(',') || 'none'));
+        } else {
+          console.log('[HEALTH] ' + region.toUpperCase() + ' OK');
+        }
+      } catch (error) {
+        health[region] = { status: 'FAIL', category: error.category || 'health', error: error.message };
+        console.error('[HEALTH FAIL] ' + region.toUpperCase() + ' ' + (error.category || error.message));
+      }
+    }
     const prior = cfg.failures ? JSON.parse(fs.readFileSync(cfg.failures, 'utf8')) : {};
     const selected = select(inventory, cfg, Array.isArray(prior) ? prior : prior.results || []);
     if (!selected.length) throw new Error('No catalog matches filters');
@@ -268,7 +287,7 @@ export async function run(cfg, fetcher = fetch) {
   fs.writeFileSync(cfg.report, JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ ...report.summary, families: undefined, requests: report.requests, desktop: cards, fatal }, null, 2));
   const uncertainEmpty = report.summary.families.some(f => f.complete && f.allEmpty && f.discovered >= 6);
-  return { report, failed: Boolean(fatal || results.some(r => ['FAIL', 'NOT_TESTED'].includes(r.status)) || cards.some(c => c.status === 'FAIL') || (cfg.cards && cards.length < cfg.cards) || uncertainEmpty) };
+  return { report, failed: Boolean(fatal || Object.values(health).some(h => h.status === 'FAIL') || results.some(r => ['FAIL', 'NOT_TESTED'].includes(r.status)) || cards.some(c => c.status === 'FAIL') || (cfg.cards && cards.length < cfg.cards) || uncertainEmpty) };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const cfg = config();
