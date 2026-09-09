@@ -52,15 +52,15 @@ try {
   const health = await retry('/health');
   requireHeader(health, 'x-nuvio-origin', 'oracle-vm');
   const healthBody = await health.json();
-  if (healthBody.ok !== true || healthBody.collectionCount !== 47) {
+  if (healthBody.ok !== true || healthBody.collectionCount !== 48) {
     throw new Error('Unexpected coexistence health payload');
   }
 
   const collections = await retry('/nuvio-collections-fr-global-tr-usa.json');
   requireHeader(collections, 'x-nuvio-origin', 'oracle-vm');
   const collectionBody = await collections.json();
-  if (!Array.isArray(collectionBody) || collectionBody.length !== 47) {
-    throw new Error('Oracle runtime did not preserve the 47 combined collections');
+  if (!Array.isArray(collectionBody) || collectionBody.length !== 48) {
+    throw new Error('Oracle runtime did not preserve the 48 combined collections');
   }
   if (JSON.stringify(collectionBody).includes('vercel.app')) {
     throw new Error('Oracle collections still reference Vercel');
