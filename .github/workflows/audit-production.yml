@@ -16,10 +16,10 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     env:
       PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
-      AUDIT_STRICT: "0"
+      AUDIT_STRICT: ${{ github.event_name == 'workflow_run' && '1' || '0' }}
       AUDIT_CONCURRENCY: "8"
     steps:
       - uses: actions/checkout@v4
