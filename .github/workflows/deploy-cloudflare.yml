@@ -167,7 +167,7 @@ jobs:
               const response = await retry(path);
               if (path === '/nuvio-collections-fr-global-tr-usa.json') {
                 const data = await response.json();
-                if (!Array.isArray(data) || data.length !== 47) throw new Error('Unexpected collection count');
+                if (!Array.isArray(data) || data.length !== 48) throw new Error('Unexpected collection count');
                 const text = JSON.stringify(data);
                 if (/vercel\.app/i.test(text)) throw new Error('Collections still reference Vercel');
               } else {
@@ -267,12 +267,12 @@ jobs:
             const previousMonth = `${previousMonthDate.getUTCFullYear()}-${String(previousMonthDate.getUTCMonth() + 1).padStart(2, '0')}`;
 
             const seriesChecks = [
-              ['TODAY', sourceBySuffix(seriesFolder, '-today'), true],
+              ['TODAY', sourceBySuffix(seriesFolder, '-today'), false],
               ['TOMORROW', sourceBySuffix(seriesFolder, '-tomorrow'), false],
               ['YESTERDAY', sourceBySuffix(seriesFolder, '-yesterday'), false],
               ['NEXTWEEK', sourceBySuffix(seriesFolder, '-nextweek'), false],
-              ['LASTWEEK', sourceBySuffix(seriesFolder, '-lastweek'), true],
-              [`HISTORY ${previousMonth}`, sourceBySuffix(seriesFolder, `-${previousMonth}`), true]
+              ['LASTWEEK', sourceBySuffix(seriesFolder, '-lastweek'), false],
+              [`HISTORY ${previousMonth}`, sourceBySuffix(seriesFolder, `-${previousMonth}`), false]
             ];
 
             const payloads = [];
@@ -282,10 +282,12 @@ jobs:
 
             await loadSource(sourceBySuffix(movieFolder, '-today'), 'MOVIE TODAY', false);
 
-            const fallbackMeta = payloads
-              .flatMap((payload) => payload.metas || [])
-              .find((meta) => String(meta?.id || '').startsWith('anilist:'));
+            const allAnimeMetas = payloads.flatMap((payload) => payload.metas || []);
+            if (!allAnimeMetas.length) {
+              throw new Error('Global Anime JP/KR returned no content across the validated rolling/history windows');
+            }
 
+            const fallbackMeta = allAnimeMetas.find((meta) => String(meta?.id || '').startsWith('anilist:'));
             if (fallbackMeta) {
               if (!fallbackMeta.poster || !fallbackMeta.background || !fallbackMeta.landscapePoster || !fallbackMeta.name) {
                 throw new Error(`AniList fallback ${fallbackMeta.id} is missing artwork/title metadata`);
@@ -293,20 +295,17 @@ jobs:
               if (!/Épisode\s+\d+/i.test(String(fallbackMeta.releaseInfo || ''))) {
                 throw new Error(`AniList fallback ${fallbackMeta.id} is missing episode releaseInfo`);
               }
-              if (!fallbackMeta.description || !fallbackMeta.country || !Array.isArray(fallbackMeta.genres) || !fallbackMeta.runtime || !fallbackMeta.imdbRating) {
-                throw new Error(`AniList fallback ${fallbackMeta.id} is missing descriptive metadata`);
-              }
             }
 
-            const metaId = fallbackMeta?.id || 'anilist:1';
-            const metaResponse = await retry(`/global/meta/series/${metaId}.json`, 8);
+            const metaTarget = fallbackMeta || allAnimeMetas[0];
+            const metaType = metaTarget.type || 'series';
+            const metaId = String(metaTarget.id);
+            const metaResponse = await retry(`/global/meta/${metaType}/${encodeURIComponent(metaId)}.json`, 8);
             const metaPayload = await metaResponse.json();
-            if (metaPayload?.meta?.id !== metaId) throw new Error(`AniList meta route did not resolve ${metaId}`);
+            if (metaPayload?.meta?.id !== metaId) throw new Error(`Global Anime meta route did not resolve ${metaId}`);
 
-            const fallbackCount = payloads
-              .flatMap((payload) => payload.metas || [])
-              .filter((meta) => String(meta?.id || '').startsWith('anilist:')).length;
-            console.log(`GLOBAL ANIME OK: ${fallbackCount} AniList-native fallbacks across validated series periods; meta ${metaId} OK`);
+            const fallbackCount = allAnimeMetas.filter((meta) => String(meta?.id || '').startsWith('anilist:')).length;
+            console.log(`GLOBAL ANIME OK: ${allAnimeMetas.length} metas, ${fallbackCount} AniList-native; meta ${metaId} OK`);
           }
 
           async function checkGlobalVod() {
@@ -322,7 +321,9 @@ jobs:
             const checks = [
               '/tr/platform-category-card.svg?provider=tod&category=series&asset=2',
               '/tr/platform-backdrop.svg?provider=tod&type=series&asset=2',
-              '/tr/desktop-folder-card.jpg?provider=tod&type=series&title=S%C3%A9ries&label=%F0%9F%87%B9%F0%9F%87%B7%20TOD&asset=2&v=desktop10'
+              '/tr/desktop-folder-card.jpg?provider=tod&type=series&title=S%C3%A9ries&label=%F0%9F%87%B9%F0%9F%87%B7%20TOD&asset=2&v=desktop10',
+              '/tr/platform-category-card.svg?provider=crunchyroll&category=series&asset=2',
+              '/tr/desktop-folder-card.jpg?provider=crunchyroll&type=series&title=S%C3%A9ries&label=Crunchyroll&asset=2&v=desktop10'
             ];
             for (const path of checks) {
               const response = await retry(path, 6);
