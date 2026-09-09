@@ -53,7 +53,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network2';
+const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network3-tvmaze';
 const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
@@ -449,11 +449,11 @@ const PROVIDERS = [
   { slug: 'max', label: 'Max', aliases: ['Max', 'HBO Max', 'BluTV', 'Blu TV'], matchPrefixes: ['max', 'hbo max', 'blutv', 'blu tv'], networkAliases: ['Max', 'HBO Max', 'BluTV', 'Blu TV'], monetizationTypes: ['flatrate'] },
   { slug: 'apple-tv-plus', label: 'Apple TV+', aliases: ['Apple TV Plus', 'Apple TV+'], networkAliases: ['Apple TV+'], monetizationTypes: ['flatrate'] },
   { slug: 'mubi', label: 'MUBI', aliases: ['MUBI', 'Mubi'], matchPrefixes: ['mubi'], networkAliases: ['MUBI'], monetizationTypes: ['flatrate'] },
-  { slug: 'exxen', label: 'Exxen', aliases: ['Exxen'], matchPrefixes: ['exxen'], networkAliases: ['Exxen'], monetizationTypes: ['flatrate'] },
-  { slug: 'gain', label: 'GAİN', aliases: ['GAİN', 'GAIN', 'Gain'], matchPrefixes: ['gain'], networkAliases: ['GAİN', 'GAIN', 'Gain'], monetizationTypes: ['flatrate', 'free', 'ads'] },
-  { slug: 'tabii', label: 'tabii', aliases: ['tabii', 'Tabii'], matchPrefixes: ['tabii'], networkAliases: ['tabii', 'Tabii', 'TRT'], monetizationTypes: ['flatrate', 'free', 'ads'] },
-  { slug: 'tod', label: 'TOD', aliases: ['TOD', 'TOD TV', 'beIN CONNECT', 'beIN Connect'], matchPrefixes: ['tod', 'bein connect'], networkAliases: ['TOD', 'beIN', 'beIN CONNECT'], monetizationTypes: ['flatrate'] },
-  { slug: 'puhutv', label: 'puhutv', aliases: ['puhutv', 'Puhu TV', 'PuhuTV'], matchPrefixes: ['puhutv', 'puhu tv'], networkAliases: ['puhutv', 'Puhu TV', 'PuhuTV'], monetizationTypes: ['flatrate', 'free', 'ads'] },
+  { slug: 'exxen', label: 'Exxen', aliases: ['Exxen'], matchPrefixes: ['exxen'], networkAliases: ['Exxen'], fallbackIds: [1791], tvmazeArchive: true, monetizationTypes: ['flatrate'] },
+  { slug: 'gain', label: 'GAİN', aliases: ['GAİN', 'GAIN', 'Gain'], matchPrefixes: ['gain'], networkAliases: ['GAİN', 'GAIN', 'Gain'], fallbackIds: [2240], tvmazeArchive: true, monetizationTypes: ['flatrate', 'free', 'ads'] },
+  { slug: 'tabii', label: 'tabii', aliases: ['tabii', 'Tabii'], matchPrefixes: ['tabii'], networkAliases: ['tabii', 'Tabii', 'TRT'], fallbackIds: [2235], tvmazeArchive: true, monetizationTypes: ['flatrate', 'free', 'ads'] },
+  { slug: 'tod', label: 'TOD', aliases: ['TOD', 'TOD TV', 'beIN CONNECT', 'beIN Connect'], matchPrefixes: ['tod', 'bein connect'], networkAliases: ['TOD', 'beIN', 'beIN CONNECT'], tvmazeArchive: true, monetizationTypes: ['flatrate'] },
+  { slug: 'puhutv', label: 'puhutv', aliases: ['puhutv', 'Puhu TV', 'PuhuTV'], matchPrefixes: ['puhutv', 'puhu tv'], networkAliases: ['puhutv', 'Puhu TV', 'PuhuTV'], tvmazeArchive: true, monetizationTypes: ['flatrate', 'free', 'ads'] },
   { slug: 'tv-plus', label: 'TV+', aliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], matchPrefixes: ['turkcell tv', 'tv+'], networkAliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], monetizationTypes: ['flatrate'] },
   { slug: 'tivibu', label: 'Tivibu', aliases: ['Tivibu'], matchPrefixes: ['tivibu'], networkAliases: ['Tivibu'], monetizationTypes: ['flatrate'] },
   { slug: 'd-smart-go', label: 'D-Smart GO', aliases: ['D-Smart GO', 'D Smart GO', 'D-Smart'], matchPrefixes: ['d-smart', 'd smart'], networkAliases: ['D-Smart', 'D Smart'], monetizationTypes: ['flatrate'] },
@@ -2723,6 +2723,18 @@ async function buildStreamingSeriesYearArchive({ catalog, timeZone, now = new Da
     if (result?.reason === 'wrong-provider') { stats.excludedWrongProvider += 1; continue; }
     metas.push(...(result?.metas || []));
   }
+
+  // Some Turkish originals are fully scheduled on TVmaze but incompletely
+  // represented in JustWatch/TMDb. For monthly archives, fall back to the exact
+  // Turkish web-channel calendar only when TMDb produced nothing.
+  if (!metas.length && provider.tvmazeArchive && /^archive-\d{4}-\d{2}$/.test(String(period || ''))) {
+    const tvmazeWindow = await tvmazeProviderWindowMetas(provider, window, timeZone, Math.min(180, getConfig().maxCandidates * 2));
+    stats.candidates += tvmazeWindow.candidates;
+    stats.enrichmentErrors += tvmazeWindow.scheduleErrors + tvmazeWindow.enrichmentErrors;
+    stats.excludedMapping += tvmazeWindow.mappingErrors;
+    metas.push(...tvmazeWindow.metas);
+  }
+
   const sorted = sortAndDedupeMetas(metas).reverse().slice(0, getConfig().maxItems);
   stats.duplicatesRemoved = Math.max(0, metas.length - sorted.length);
   stats.final = sorted.length;
@@ -3090,17 +3102,118 @@ async function resolveTvmazeShowToTmdb(show) {
   const cacheKey = `tvmaze-map:${show?.id}`;
   const cached = mappingCache.get(cacheKey);
   if (cached !== null && cached !== undefined) return cached || null;
+
   let tmdbId = null;
   const imdb = show?.externals?.imdb;
   const tvdb = Number(show?.externals?.thetvdb);
-  if (/^tt\d+$/.test(String(imdb || ''))) {
-    tmdbId = await lookupTmdbFromExternal(imdb, 'series', 'imdb_id');
-  } else if (Number.isFinite(tvdb) && tvdb > 0) {
-    tmdbId = await lookupTmdbFromExternal(tvdb, 'series', 'tvdb_id');
+
+  try {
+    if (/^tt\d+$/.test(String(imdb || ''))) {
+      tmdbId = await lookupTmdbFromExternal(imdb, 'series', 'imdb_id');
+    } else if (Number.isFinite(tvdb) && tvdb > 0) {
+      tmdbId = await lookupTmdbFromExternal(tvdb, 'series', 'tvdb_id');
+    }
+  } catch (_) {
+    tmdbId = null;
   }
+
+  // Turkish web-channel records are often missing IMDb/TVDB IDs. Use a
+  // deliberately strict title fallback so exact Exxen/GAİN/tabii/Puhu entries
+  // can still be enriched without risking a fuzzy cross-title mapping.
+  if (!tmdbId && String(show?.name || '').trim()) {
+    try {
+      const payload = await tmdbFetch('/search/tv', {
+        query: String(show.name).trim(),
+        language: getConfig().language,
+        include_adult: false,
+        page: 1
+      });
+      const target = normalizeProviderName(show.name);
+      const premieredYear = Number(String(show?.premiered || '').slice(0, 4));
+      const exact = (payload?.results || [])
+        .filter((entry) =>
+          [entry?.name, entry?.original_name].some((value) => normalizeProviderName(value) === target)
+        )
+        .map((entry) => {
+          const year = Number(String(entry?.first_air_date || '').slice(0, 4));
+          const yearPenalty = Number.isFinite(premieredYear) && Number.isFinite(year)
+            ? Math.abs(year - premieredYear)
+            : 50;
+          const languagePenalty = String(entry?.original_language || '').toLowerCase() === 'tr' ? 0 : 1;
+          return { entry, yearPenalty, languagePenalty };
+        })
+        .sort((a, b) =>
+          a.languagePenalty - b.languagePenalty ||
+          a.yearPenalty - b.yearPenalty ||
+          Number(b.entry?.popularity || 0) - Number(a.entry?.popularity || 0)
+        );
+      const id = Number(exact[0]?.entry?.id);
+      if (Number.isFinite(id) && id > 0) tmdbId = id;
+    } catch (_) {}
+  }
+
   mappingCache.set(cacheKey, tmdbId || 0, MAPPING_TTL_MS);
   return tmdbId || null;
 }
+
+async function tvmazeProviderWindowMetas(provider, window, timeZone, maxCandidates = getConfig().maxCandidates) {
+  const stats = {
+    scheduleErrors: 0,
+    candidates: 0,
+    mappingErrors: 0,
+    enrichmentErrors: 0,
+    metas: []
+  };
+  if (!provider || window?.empty) return stats;
+
+  const dates = isoDateRange(window.start, window.end);
+  const scheduleResults = await mapLimitSettled(dates, 6, (date) => tvmazeWebScheduleDate(date));
+  stats.scheduleErrors = scheduleResults.filter((result) => result?.error).length;
+
+  const deduped = new Map();
+  for (const result of scheduleResults) {
+    if (!Array.isArray(result)) continue;
+    for (const episode of result) {
+      const show = tvmazeShowFromEpisode(episode);
+      if (!webChannelMatchesProvider(show, provider)) continue;
+      const key = Number.isFinite(Number(episode?.id))
+        ? `id:${episode.id}`
+        : `${show?.id || show?.name}:${episode?.season || 0}:${episode?.number || episode?.airdate}`;
+      if (!deduped.has(key)) deduped.set(key, episode);
+    }
+  }
+
+  const episodes = [...deduped.values()].slice(0, Math.max(1, Number(maxCandidates) || 1));
+  stats.candidates = episodes.length;
+
+  const settled = await mapLimitSettled(episodes, 5, async (episode) => {
+    const show = tvmazeShowFromEpisode(episode);
+    const tmdbId = await resolveTvmazeShowToTmdb(show);
+    if (!tmdbId) return { meta: null, reason: 'mapping' };
+    const details = await fetchDetails('series', tmdbId);
+
+    // An exact TVmaze web-channel match is itself provider-authoritative.
+    // Do not discard a real Exxen/GAİN/tabii/Puhu episode merely because
+    // JustWatch/TMDb has not attached the provider to this title yet.
+    return tvmazeStreamingEpisodeToMeta(episode, details, provider, timeZone, window);
+  });
+
+  for (const result of settled) {
+    if (result?.error) {
+      stats.enrichmentErrors += 1;
+      continue;
+    }
+    if (result?.reason === 'mapping') {
+      stats.mappingErrors += 1;
+      continue;
+    }
+    if (result?.meta) stats.metas.push(result.meta);
+  }
+
+  stats.metas = sortAndDedupeMetas(stats.metas).slice(0, getConfig().maxItems);
+  return stats;
+}
+
 
 function tvmazeStreamingEpisodeToMeta(episode, details, provider, timeZone, window) {
   const show = tvmazeShowFromEpisode(episode);
@@ -3190,43 +3303,13 @@ async function buildStreamingSeriesCatalog({ catalog, timeZone, now = new Date()
 
   const metas = [];
 
-  // Pass 1 — provider-specific TVmaze web schedule. This is the highest confidence
-  // source because it can name the web channel and sometimes provides a real time.
-  const dates = isoDateRange(window.start, window.end);
-  const scheduleResults = await mapLimitSettled(dates, 4, (date) => tvmazeWebScheduleDate(date));
-  const allEpisodes = scheduleResults.flatMap((result) => Array.isArray(result) ? result : []);
-  stats.enrichmentErrors += scheduleResults.filter((result) => result?.error).length;
-  const providerEpisodes = allEpisodes.filter((episode) => webChannelMatchesProvider(tvmazeShowFromEpisode(episode), provider));
-  stats.candidates += providerEpisodes.length;
-
-  const exactSettled = await mapLimitSettled(providerEpisodes.slice(0, getConfig().maxCandidates), 5, async (episode) => {
-    const show = tvmazeShowFromEpisode(episode);
-    const tmdbId = await resolveTvmazeShowToTmdb(show);
-    if (!tmdbId) return { meta: null, reason: 'mapping' };
-    const details = await fetchDetails('series', tmdbId);
-    if (!hasProviderAccess(details, provider)) return { meta: null, reason: 'wrong-provider' };
-    return tvmazeStreamingEpisodeToMeta(episode, details, provider, timeZone, window);
-  });
-
-  for (const result of exactSettled) {
-    if (result?.error) {
-      stats.enrichmentErrors += 1;
-      continue;
-    }
-    if (result?.reason === 'mapping') {
-      stats.excludedMapping += 1;
-      continue;
-    }
-    if (result?.reason === 'wrong-provider') {
-      stats.excludedWrongProvider += 1;
-      continue;
-    }
-    if (!result?.meta) {
-      countReason(stats, result?.reason);
-      continue;
-    }
-    metas.push(result.meta);
-  }
+  // Pass 1 — provider-specific TVmaze web schedule. Exact Turkish web-channel
+  // matches are authoritative and survive incomplete JustWatch/TMDb provider tags.
+  const tvmazeWindow = await tvmazeProviderWindowMetas(provider, window, timeZone);
+  stats.enrichmentErrors += tvmazeWindow.scheduleErrors + tvmazeWindow.enrichmentErrors;
+  stats.excludedMapping += tvmazeWindow.mappingErrors;
+  stats.candidates += tvmazeWindow.candidates;
+  metas.push(...tvmazeWindow.metas);
 
   // Pass 2 — TMDb fallback. TVmaze's web schedule does not list every streaming
   // service/title, which previously made whole series catalogs look empty. TMDb is
@@ -4383,6 +4466,7 @@ module.exports._internals = {
   isLowSignalTvUsaEpisode,
   tvmazeBroadcastToMeta,
   tvmazeStreamingEpisodeToMeta,
+  tvmazeProviderWindowMetas,
   webChannelMatchesProvider,
   resolveTvmazeShowToTmdb,
   anilistFetch,
