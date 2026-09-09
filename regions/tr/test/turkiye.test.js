@@ -126,3 +126,34 @@ test('local Türkiye network fallback accepts platform originals when watch-prov
     );
   }
 });
+
+
+test('Exxen, GAİN and tabii keep stable TMDb provider fallbacks', () => {
+  const exxen = I.PROVIDERS.find((entry) => entry.slug === 'exxen');
+  const gain = I.PROVIDERS.find((entry) => entry.slug === 'gain');
+  const tabii = I.PROVIDERS.find((entry) => entry.slug === 'tabii');
+  assert.deepEqual(exxen.fallbackIds, [1791]);
+  assert.deepEqual(gain.fallbackIds, [2240]);
+  assert.deepEqual(tabii.fallbackIds, [2235]);
+  assert.equal(exxen.tvmazeArchive, true);
+  assert.equal(gain.tvmazeArchive, true);
+  assert.equal(tabii.tvmazeArchive, true);
+});
+
+test('TVmaze exact Turkish web channels are accepted as authoritative provider matches', () => {
+  for (const [slug, webChannelName] of [
+    ['exxen', 'Exxen'],
+    ['gain', 'GAIN'],
+    ['tabii', 'tabii'],
+    ['tod', 'beIN CONNECT'],
+    ['puhutv', 'Puhu TV']
+  ]) {
+    const provider = I.PROVIDERS.find((entry) => entry.slug === slug);
+    assert(provider, slug);
+    assert.equal(
+      I.webChannelMatchesProvider({ webChannel: { name: webChannelName, country: { code: 'TR' } } }, provider),
+      true,
+      slug
+    );
+  }
+});
