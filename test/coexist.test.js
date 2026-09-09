@@ -609,8 +609,8 @@ test('desktop11 content banner carries adaptive title and subtitle metadata', ()
 
 test('standard and Desktop combined imports expose the same 18 Türkiye parents and source IDs', () => {
   const req = { headers: { host: 'example.test', 'x-forwarded-proto': 'https' } };
-  const standard = root._internals.combinedCollections(req);
-  const desktop = root._internals.combinedDesktopCollections(req);
+  const standard = handler._internals.combinedCollections(req);
+  const desktop = handler._internals.combinedDesktopCollections(req);
   const trStandard = standard.filter((c) => c.title.startsWith('🇹🇷 '));
   const trDesktop = desktop.filter((c) => c.title.startsWith('🇹🇷 '));
   assert.equal(trStandard.length, 18);
