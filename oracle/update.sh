@@ -48,7 +48,7 @@ run_nuvio() {
 }
 
 echo "Preparing Nuvio release $SHORT"
-run_nuvio "npm ci --no-audit --no-fund"
+run_nuvio "if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi"
 run_nuvio "npm test"
 run_nuvio "npm run test:cloudflare"
 
