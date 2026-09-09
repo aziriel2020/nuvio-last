@@ -62,7 +62,41 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
 
+# OCI Ubuntu images can ship a base iptables policy in front of UFW.
+# Explicitly allow the public service ports at the top of INPUT as well.
+for port in 22 80 443; do
+  iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 1 -p tcp --dport "$port" -j ACCEPT
+done
+
+cat >/usr/local/sbin/nuvio-ensure-firewall.sh <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+for port in 22 80 443; do
+  iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 1 -p tcp --dport "$port" -j ACCEPT
+done
+EOF
+chmod 0755 /usr/local/sbin/nuvio-ensure-firewall.sh
+
+cat >/etc/systemd/system/nuvio-firewall.service <<'EOF'
+[Unit]
+Description=Ensure Nuvio public firewall rules
+After=network-online.target
+Wants=network-online.target
+Before=caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nuvio-ensure-firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
+systemctl enable --now nuvio-firewall.service
 systemctl enable caddy
 systemctl restart caddy
 
