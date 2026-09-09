@@ -12,7 +12,7 @@ const ORIGIN = 'https://nuvio-last.vercel.app/tr';
 const expectedPlatforms = [
   '🇹🇷 Netflix','🇹🇷 Prime Video','🇹🇷 Disney+','🇹🇷 Max','🇹🇷 Apple TV+','🇹🇷 MUBI',
   '🇹🇷 Exxen','🇹🇷 GAİN','🇹🇷 tabii','🇹🇷 TOD','🇹🇷 puhutv','🇹🇷 TV+','🇹🇷 Tivibu',
-  '🇹🇷 D-Smart GO','🇹🇷 S Sport Plus','🇹🇷 Crunchyroll + AniList','🇹🇷 Türkiye Takvim','🇹🇷 VOD Türkiye'
+  '🇹🇷 D-Smart GO','🇹🇷 S Sport Plus','🇹🇷 Bi Kanal','🇹🇷 Crunchyroll + AniList','🇹🇷 Türkiye Takvim','🇹🇷 VOD Türkiye'
 ];
 
 test('Turkey market constants are forced', () => {
@@ -24,7 +24,7 @@ test('Turkey market constants are forced', () => {
 test('Turkey collections have requested platforms and global Turkey calendar', () => {
   const collections = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN);
   assert.deepEqual(collections.map(c => c.title), expectedPlatforms);
-  assert.equal(collections.length, 18);
+  assert.equal(collections.length, 19);
   assert.deepEqual(collections.at(-1).folders.map(f => f.title), ['Films']);
   assert.deepEqual(collections.at(-2).folders.map(f => f.title), ['Séries', 'Films']);
 });
@@ -156,4 +156,16 @@ test('TVmaze exact Turkish web channels are accepted as authoritative provider m
       slug
     );
   }
+});
+
+
+test('Bi Kanal is a series-only TVmaze-authoritative Türkiye collection', () => {
+  const provider = I.PROVIDERS.find((entry) => entry.slug === 'bi-kanal');
+  assert(provider);
+  assert.equal(provider.tvmazeArchive, true);
+  assert.equal(provider.seriesOnly, true);
+  assert.equal(I.webChannelMatchesProvider({ webChannel: { name: 'Bi Kanal', country: { code: 'TR' } } }, provider), true);
+  const collection = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN).find((entry) => entry.title === '🇹🇷 Bi Kanal');
+  assert(collection);
+  assert.deepEqual(collection.folders.map((folder) => folder.title), ['Séries']);
 });
