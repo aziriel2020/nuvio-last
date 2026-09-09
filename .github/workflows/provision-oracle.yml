@@ -144,6 +144,20 @@ jobs:
             echo "::error::ORACLE_SSH_PRIVATE_KEY"
             exit 1
           fi
+
+          derived_fingerprint="$(
+            openssl pkey -in "$RUNNER_TEMP/keys/oci_api_key.pem" -pubout -outform DER 2>/dev/null |
+            openssl md5 -c |
+            awk '{print $2}'
+          )"
+          if [[ -z "$derived_fingerprint" ]]; then
+            echo "::error::OCI_FINGERPRINT"
+            exit 1
+          fi
+
+          # Always use the fingerprint derived from the actual private key.
+          # This prevents stale OCI_FINGERPRINT secrets from producing 401 signature failures.
+          echo "TF_VAR_fingerprint=$derived_fingerprint" >> "$GITHUB_ENV"
           echo "TF_VAR_private_key_path=$RUNNER_TEMP/keys/oci_api_key.pem" >> "$GITHUB_ENV"
           echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
 
