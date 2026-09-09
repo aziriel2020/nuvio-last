@@ -41,8 +41,8 @@ jobs:
           state="$(find "$RUNNER_TEMP/oracle-state" -type f -name terraform.tfstate -print -quit)"
           [[ -n "$state" ]] || { echo "::error::terraform.tfstate missing"; exit 1; }
           ip="$(jq -r '.outputs.public_ip.value // empty' "$state")"
-          host="$(jq -r '.outputs.public_host.value // empty' "$state")"
-          origin="$(jq -r '.outputs.public_origin.value // empty' "$state")"
+          host="${ip//./-}.nip.io"
+          origin="https://$host"
           [[ -n "$ip" && -n "$host" && -n "$origin" ]] || { echo "::error::Oracle endpoint missing from state"; exit 1; }
           echo "::add-mask::$ip"
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
