@@ -12,7 +12,7 @@ const ORIGIN = 'https://nuvio-last.vercel.app/tr';
 const expectedPlatforms = [
   '🇹🇷 Netflix','🇹🇷 Prime Video','🇹🇷 Disney+','🇹🇷 Max','🇹🇷 Apple TV+','🇹🇷 MUBI',
   '🇹🇷 Exxen','🇹🇷 GAİN','🇹🇷 tabii','🇹🇷 TOD','🇹🇷 puhutv','🇹🇷 TV+','🇹🇷 Tivibu',
-  '🇹🇷 D-Smart GO','🇹🇷 S Sport Plus','🇹🇷 Türkiye Takvim','🇹🇷 VOD Türkiye'
+  '🇹🇷 D-Smart GO','🇹🇷 S Sport Plus','🇹🇷 Crunchyroll + AniList','🇹🇷 Türkiye Takvim','🇹🇷 VOD Türkiye'
 ];
 
 test('Turkey market constants are forced', () => {
@@ -24,7 +24,7 @@ test('Turkey market constants are forced', () => {
 test('Turkey collections have requested platforms and global Turkey calendar', () => {
   const collections = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN);
   assert.deepEqual(collections.map(c => c.title), expectedPlatforms);
-  assert.equal(collections.length, 17);
+  assert.equal(collections.length, 18);
   assert.deepEqual(collections.at(-1).folders.map(f => f.title), ['Films']);
   assert.deepEqual(collections.at(-2).folders.map(f => f.title), ['Séries', 'Films']);
 });
@@ -49,7 +49,7 @@ test('Turkey manifest has unique catalog IDs and correct addon identity', () => 
   const manifest = I.buildManifest(ORIGIN, NOW, TZ);
   assert.equal(manifest.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(manifest.language, 'tr');
-  assert.equal(manifest.catalogs.length, 6501);
+  assert.equal(manifest.catalogs.length, 6895);
   const keys = manifest.catalogs.map(c => `${c.type}:${c.id}`);
   assert.equal(new Set(keys).size, keys.length);
 });
@@ -87,4 +87,21 @@ test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG backgro
   assert.match(decorated.background, /calendar-card\.svg/);
   assert.match(decorated.banner, /desktop-content-card\.jpg/);
   assert.notEqual(decorated.banner, decorated.background);
+});
+
+
+test('Max resolver also accepts legacy BluTV naming and Crunchyroll is a native Turkey platform', () => {
+  const max = I.resolveProviderFromDirectory(
+    I.PROVIDERS.find((p) => p.slug === 'max'),
+    [{ id: 9991, name: 'BluTV', normalized: 'blutv', logoPath: '/blu.png' }]
+  );
+  assert.deepEqual(max.ids, [9991]);
+  assert.equal(max.matchedNames[0], 'BluTV');
+
+  const crunchy = I.PROVIDERS.find((p) => p.slug === 'crunchyroll');
+  assert(crunchy);
+  assert.equal(crunchy.label, 'Crunchyroll');
+  const collection = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN).find((c) => c.title.includes('Crunchyroll'));
+  assert(collection);
+  assert.deepEqual(collection.folders.map((f) => f.title), ['Séries', 'Films']);
 });
