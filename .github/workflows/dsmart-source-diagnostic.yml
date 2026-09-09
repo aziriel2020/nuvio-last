@@ -12,51 +12,89 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Inspect D-Smart GO bundle endpoints
+      - name: Resolve D-Smart GO public service configuration
         shell: bash
         run: |
           set -Eeuo pipefail
           curl -fsSL --retry 3 --connect-timeout 10 --max-time 40 \
-            -A "Mozilla/5.0 NuvioCalendarDiagnostic/2.0" \
+            -A "Mozilla/5.0 NuvioCalendarDiagnostic/3.0" \
             https://www.dsmartgo.com.tr/main.js -o "$RUNNER_TEMP/main.js"
           python3 - "$RUNNER_TEMP/main.js" <<'PY'
-          import re,sys
+          import re,sys,json,subprocess,tempfile,os
           s=open(sys.argv[1],encoding='utf-8',errors='replace').read()
-          print("bytes",len(s))
-          needles=[
-            'baseURL','baseUrl','apiUrl','apiURL','serviceUrl','serviceURL','environment',
-            'catalog','Catalogue','content','Content','vod','VOD','sec-izle','diziler',
-            'filmler','carousel','recommendation','GetContent','getContent','search'
-          ]
-          seen=set()
-          for needle in needles:
-              start=0
-              found=0
+
+          def safe_context(i,n=1200):
+              chunk=s[max(0,i-n//3):i+n]
+              # redact long tokens and obvious auth material
+              chunk=re.sub(r'(?i)(Authorization.{0,30})([A-Za-z0-9._-]{18,})',r'\1<redacted>',chunk)
+              chunk=re.sub(r'(?<![A-Za-z0-9])([A-Za-z0-9_-]{28,})(?![A-Za-z0-9])','<token>',chunk)
+              return chunk.replace('\n',' ')
+
+          for needle in ['client/site-config','com.dsmartgo.website.prod','servicesConfig.contentConfig','serviceBaseUrl','getConfig({']:
+              print('\n###',needle)
+              start=0; count=0
               while True:
-                  i=s.lower().find(needle.lower(),start)
+                  i=s.find(needle,start)
                   if i<0: break
-                  chunk=s[max(0,i-450):i+1100]
-                  key=chunk[:200]
-                  if key not in seen:
-                      seen.add(key); found+=1
-                      print("\n### TERM",needle,"AT",i)
-                      print(chunk.replace("\n"," ")[:1600])
-                  start=i+len(needle)
-                  if found>=8: break
-          print("\n### HOSTS")
-          hosts=[]
-          for m in re.finditer(r'(?i)(?:https?:)?//([a-z0-9.-]+)(?::\d+)?(?:/[^"\'\\ ]*)?',s):
-              host=m.group(1).lower()
-              if host not in hosts: hosts.append(host)
-          for h in hosts:
-              if any(k in h for k in ['dsmart','merlin','api','ott','vod','content','cms']):
-                  print(h)
-          print("\n### API-LIKE STRING LITERALS")
-          vals=[]
-          for m in re.finditer(r'["\']([^"\']{4,260})["\']',s):
-              v=m.group(1)
-              lv=v.lower()
-              if any(k in lv for k in ['api/','/api','catalog','content','vod','movie','film','dizi','search','carousel','recommend']) and (' ' not in v or '/' in v):
-                  if v not in vals: vals.append(v)
-          for v in vals[:500]: print(v)
+                  print('AT',i,safe_context(i)[:2200])
+                  start=i+len(needle); count+=1
+                  if count>=10: break
+
+          # Extract the public client-side authorization token privately and mask it
+          # before use. Never print the token itself.
+          m=re.search(r'Authorization:\x60([^\x60]{12,300})\x60',s)
+          if not m:
+              m=re.search(r'Authorization:\\?["\']([^"\']{12,300})["\']',s)
+          auth=m.group(1) if m else None
+          if auth:
+              # The minified expression can include string concatenation artifacts.
+              # Keep only a plausible literal token segment.
+              parts=re.findall(r'[A-Za-z0-9._-]{20,}',auth)
+              auth=max(parts,key=len) if parts else auth
+              print('AUTH_FOUND',bool(auth),'LEN',len(auth))
+              print('::add-mask::'+auth)
+          else:
+              print('AUTH_FOUND false')
+
+          # Find likely site keys without exposing credential-looking strings.
+          candidates=[]
+          for m in re.finditer(r'com\.dsmartgo\.[A-Za-z0-9._-]+',s):
+              v=m.group(0)
+              if v not in candidates: candidates.append(v)
+          print('SITE_KEY_CANDIDATES',json.dumps(candidates[:30]))
+
+          # Try the known public site-config base using non-secret site keys.
+          if auth:
+              for key in candidates[:20]:
+                  url='https://bfogwjgq8dbp.merlincdn.net/client/site-config'
+                  cmd=['curl','-sS','--connect-timeout','10','--max-time','25',
+                       '-H','Authorization: '+auth,
+                       '-H','Accept: application/json',
+                       '--get',url,
+                       '--data-urlencode','key='+key,
+                       '--data-urlencode','version=1.0.5',
+                       '--data-urlencode','platform=web-desktop']
+                  p=subprocess.run(cmd,capture_output=True,text=True)
+                  if p.returncode: continue
+                  try: payload=json.loads(p.stdout)
+                  except Exception: continue
+                  data=payload.get('data',payload) if isinstance(payload,dict) else payload
+                  text=json.dumps(data,ensure_ascii=False)
+                  if 'servicesConfig' not in text and 'serviceBaseUrl' not in text: continue
+                  print('CONFIG_KEY_OK',key)
+                  urls=[]
+                  def walk(v,path=''):
+                      if isinstance(v,dict):
+                          for k,x in v.items():
+                              walk(x,path+'.'+k if path else k)
+                      elif isinstance(v,list):
+                          for i,x in enumerate(v): walk(x,f'{path}[{i}]')
+                      elif isinstance(v,str) and (v.startswith('http://') or v.startswith('https://')):
+                          lp=path.lower()
+                          if any(k in lp for k in ['service','content','catalog','search','cms','image','metadata','recommend','ues']):
+                              urls.append((path,v))
+                  walk(data)
+                  for path,val in urls[:120]:
+                      print('SERVICE_URL',path,val)
+                  break
           PY
