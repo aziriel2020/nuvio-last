@@ -246,3 +246,61 @@ test('S Sport official iCalendar parser filters only S Sport Plus and preserves 
   assert.equal(events[0].title, 'Porto Riko - Çin');
   assert.equal(events[0].category, 'FIBA Kadinlar Dünya Kupasi');
 });
+
+
+test('D-Smart archive descriptors use the native CMS source for Series and Movies', () => {
+  const provider = I.PROVIDERS.find((entry) => entry.slug === 'd-smart-go');
+  assert(provider);
+  const series = I.archiveDynamicDescriptor('series', provider, 'today');
+  const movie = I.archiveDynamicDescriptor('movie', provider, 'today');
+  assert.equal(series.source, 'dsmart-cms');
+  assert.equal(movie.source, 'dsmart-cms');
+});
+
+test('D-Smart native item maps official dates, artwork and stable IDs', () => {
+  const item = {
+    id: 1383256,
+    name: 'Tudorlar: Taht, İhanet ve İnfaz',
+    displayTitle: 'Tudorlar: Taht, İhanet ve İnfaz',
+    displayStart: '2026-09-06T21:00:00+00:00',
+    createdDate: '2026-09-09T07:07:00+00:00',
+    updatedDate: '2026-09-09T07:22:15.6565044+00:00',
+    description: '<p>D-Smart test açıklaması</p>',
+    images: [
+      { type: 'Poster', url: 'https://zdi2vdd5r0wt.merlincdn.net/content/test/poster.jpg' },
+      { type: 'Thumbnail', url: 'https://zdi2vdd5r0wt.merlincdn.net/content/test/thumbnail.jpg' },
+      { type: 'Background', url: 'https://zdi2vdd5r0wt.merlincdn.net/content/test/background.jpg' }
+    ]
+  };
+  assert.equal(I.dsmartItemAvailabilityDate(item, 'Europe/Istanbul'), '2026-09-07');
+  const meta = I.dsmartItemToMeta(item, 'series', 'Europe/Istanbul');
+  assert.equal(meta.id, 'dsmart:1383256');
+  assert.equal(meta.type, 'series');
+  assert.equal(meta.name, item.displayTitle);
+  assert.equal(meta.poster, item.images[0].url);
+  assert.equal(meta.background, item.images[2].url);
+  assert.equal(meta.landscapePoster, item.images[2].url);
+  assert.match(meta.description, /D-Smart GO Türkiye/);
+  assert.equal(meta._calendarSource, 'dsmart-cms');
+  assert.equal(I.isAllowedPosterSource(meta.poster), true);
+});
+
+test('D-Smart 1969 availability sentinel falls back to CMS creation date', () => {
+  const item = {
+    id: 1357051,
+    name: 'Sekizinci Aile',
+    displayStart: '1969-12-31T22:00:00+00:00',
+    createdDate: '2026-09-07T10:59:25+00:00',
+    updatedDate: '2026-09-08T09:47:17.852317+00:00',
+    images: [{ type: 'Poster', url: 'https://zdi2vdd5r0wt.merlincdn.net/content/test/poster.jpg' }]
+  };
+  assert.equal(I.dsmartItemAvailabilityInstant(item), '2026-09-07T10:59:25.000Z');
+  assert.equal(I.dsmartItemAvailabilityDate(item, 'Europe/Istanbul'), '2026-09-07');
+});
+
+test('Türkiye manifest exposes native D-Smart meta IDs', () => {
+  const manifest = I.buildManifest(ORIGIN, NOW, TZ);
+  assert(manifest.idPrefixes.includes('dsmart:'));
+  const metaResource = manifest.resources.find((entry) => entry.name === 'meta');
+  assert(metaResource.idPrefixes.includes('dsmart:'));
+});
