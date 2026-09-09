@@ -172,6 +172,15 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
   assert.match(cardSvg, /S33E12/);
   assert.match(cardSvg, /NETFLIX/);
   assert.match(cardSvg, /<svg/);
+  assert.match(cardSvg, /data-renderer="shield-desktop-v3"/);
+  assert.match(cardSvg, /desktop-title/);
+  assert.match(cardSvg, /desktop-subtitle/);
+  assert.match(cardSvg, /desktop-provider/);
+
+  const longTitleSvg = worker.desktopContentCardSvg(
+    'https://edge.example/global/desktop-content-card.jpg?title=Bastard!!%20Heavy%20Metal%20Dark%20Fantasy%20The%20Requiem%20of%20Hell&append=S02E15%20%E2%80%A2%20MER%2009%20SEPT%20%E2%80%A2%20NETFLIX&label=Netflix&provider=netflix&type=series'
+  );
+  assert.match(longTitleSvg, /data-title-lines="2"/);
 });
 
 test('Cloudflare native adapter preserves public origin and viewer timezone for the shared engine', () => {
@@ -225,7 +234,7 @@ test('desktop catalog cards always keep the metadata renderer, even without usab
   );
 
   assert.match(meta.banner, /\/fr\/desktop-content-card\.jpg\?/);
-  assert.match(meta.banner, /desktop11/);
+  assert.match(meta.banner, /desktop12/);
   assert.match(meta.banner, /title=The(?:\+|%20)Chosen/);
   assert.match(meta.banner, /append=/);
   assert.match(meta.banner, /label=Netflix/);
