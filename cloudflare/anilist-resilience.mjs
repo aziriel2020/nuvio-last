@@ -219,7 +219,7 @@ function languageCode(code) {
 
 function desktopBanner(origin, meta) {
   const url = new URL('/global/desktop-content-card.jpg', origin);
-  url.searchParams.set('v', `${ANIME_RESILIENCE_REV}-desktop11`);
+  url.searchParams.set('v', `${ANIME_RESILIENCE_REV}-desktop12`);
   const src = meta.background || meta.landscapePoster || meta.poster;
   if (src) url.searchParams.set('src', src);
   url.searchParams.set('provider', 'anime-asia');
