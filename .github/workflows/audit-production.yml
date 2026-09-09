@@ -38,13 +38,15 @@ jobs:
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     env:
       PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
-      AUDIT_MODE: ${{ inputs.mode || 'safe' }}
+      AUDIT_MODE: ${{ github.event_name == 'workflow_run' && 'full' || inputs.mode || 'safe' }}
       AUDIT_REGIONS: ${{ inputs.regions || 'fr,global,tr,us' }}
       AUDIT_PROVIDERS: ${{ inputs.providers || '' }}
       AUDIT_YEARS: ${{ inputs.years || '' }}
       AUDIT_STRICT: '1'
       AUDIT_CONCURRENCY: '4'
       AUDIT_ATTEMPTS: '3'
+      AUDIT_REQUEST_BUDGET: ${{ github.event_name == 'workflow_run' && '90000' || '6000' }}
+      AUDIT_META_SAMPLES: ${{ github.event_name == 'workflow_run' && '1' || '2' }}
       AUDIT_INTERVAL_MS: '100'
       AUDIT_DESIGN: ${{ github.event_name == 'pull_request' && 'desktop11' || 'shield3' }}
       AUDIT_REPORT: reports/catalog-audit.json
