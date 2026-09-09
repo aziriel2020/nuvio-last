@@ -2,6 +2,21 @@ name: Audit Production Catalogs
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Safe checks or full inventory (about 45000 Function requests)
+        type: choice
+        options: [safe, full]
+        default: safe
+      regions:
+        description: Comma separated regions
+        default: fr,global,tr,us
+      providers:
+        description: Optional comma separated provider slugs
+        default: ''
+      years:
+        description: Optional comma separated archive years
+        default: ''
   pull_request:
     branches: [main]
   workflow_run:
@@ -11,20 +26,47 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: nuvio-production-audit
+  cancel-in-progress: false
+
 jobs:
   audit:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 180
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     env:
       PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
-      AUDIT_STRICT: ${{ github.event_name == 'workflow_run' && '1' || '0' }}
-      AUDIT_CONCURRENCY: ${{ github.event_name == 'workflow_run' && '12' || '24' }}
-      AUDIT_ATTEMPTS: ${{ github.event_name == 'workflow_run' && '2' || '1' }}
+      AUDIT_MODE: ${{ inputs.mode || 'safe' }}
+      AUDIT_REGIONS: ${{ inputs.regions || 'fr,global,tr,us' }}
+      AUDIT_PROVIDERS: ${{ inputs.providers || '' }}
+      AUDIT_YEARS: ${{ inputs.years || '' }}
+      AUDIT_STRICT: '1'
+      AUDIT_CONCURRENCY: '4'
+      AUDIT_ATTEMPTS: '3'
+      AUDIT_INTERVAL_MS: '100'
+      AUDIT_DESIGN: ${{ github.event_name == 'pull_request' && 'desktop11' || 'shield3' }}
+      AUDIT_REPORT: reports/catalog-audit.json
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Read Cloudflare runtime and quota diagnostics
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 7b21859ab1740325151b97717cedc0e7
+          CLOUDFLARE_PROJECT_NAME: nuvio-last-aziriel2020-1343705637
+        run: node scripts/diagnose-cloudflare.mjs
+        continue-on-error: true
       - run: node scripts/audit-production-catalogs.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-catalog-audit-${{ github.run_id }}
+          path: reports/
+          retention-days: 14
