@@ -213,3 +213,36 @@ test('S Sport Plus is a live-only collection backed by its official schedule par
   ]);
   assert.match(events[0].title, /Porto Riko/);
 });
+
+
+test('S Sport official iCalendar parser filters only S Sport Plus and preserves exact Istanbul datetime', () => {
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'BEGIN:VEVENT',
+    'DTSTART;TZID=Europe/Istanbul:20260909T184500',
+    'DTEND;TZID=Europe/Istanbul:20260909T191500',
+    'SUMMARY:Porto Riko - Çin',
+    'DESCRIPTION:FIBA Kadinlar Dünya Kupasi, Platform/Kanal : S Sport Plus',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+  const other = [
+    'BEGIN:VCALENDAR',
+    'BEGIN:VEVENT',
+    'DTSTART;TZID=Europe/Istanbul:20260909T200000',
+    'SUMMARY:Other Event',
+    'DESCRIPTION:Football, Platform/Kanal : Eurosport',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+  const html = [
+    '<a href="text/calendar;charset=utf8;base64,' + Buffer.from(ics).toString('base64') + '">Takvime ekle</a>',
+    '<a href="text/calendar;charset=utf8;base64,' + Buffer.from(other).toString('base64') + '">Takvime ekle</a>'
+  ].join('');
+  const events = I.parseSSportIcsEvents(html);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].calendarDate, '2026-09-09');
+  assert.equal(events[0].time, '18:45');
+  assert.equal(events[0].title, 'Porto Riko - Çin');
+  assert.equal(events[0].category, 'FIBA Kadinlar Dünya Kupasi');
+});
