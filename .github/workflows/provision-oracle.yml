@@ -11,12 +11,6 @@ on:
         description: CIDR allowed to SSH (0.0.0.0/0 = anywhere with key)
         required: true
         default: "0.0.0.0/0"
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/oracle-provision-once"
-
 permissions:
   contents: read
 
@@ -36,7 +30,7 @@ jobs:
       TF_VAR_region: ${{ secrets.OCI_REGION }}
       TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
       TF_VAR_ssh_public_key: ${{ secrets.ORACLE_SSH_PUBLIC_KEY }}
-      TF_VAR_ssh_ingress_cidr: ${{ inputs.ssh_ingress_cidr || '0.0.0.0/0' }}
+      TF_VAR_ssh_ingress_cidr: ${{ inputs.ssh_ingress_cidr }}
       TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
       TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
@@ -155,17 +149,6 @@ jobs:
             exit 1
           fi
 
-          hash_value() {
-            printf '%s' "$1" | sha256sum | awk '{print $1}'
-          }
-
-          mismatch=0
-          [[ "$(hash_value "$TF_VAR_user_ocid")" == "4e4c6c8f258756d41e951669f89119e89feb66cc5411bad4243416b148890fb8" ]] || { echo "::error::OCI_USER_OCID"; mismatch=1; }
-          [[ "$(hash_value "$TF_VAR_tenancy_ocid")" == "41d32f0a21b063ce48ba8f2c3527023d4ec6b33680625b66e416a168c5bbc26a" ]] || { echo "::error::OCI_TENANCY_OCID"; mismatch=1; }
-          [[ "$(hash_value "$TF_VAR_region")" == "cb96b3fce6e69fcb2e4f84d8e7ced2ff8adf5197acb3b5dcf4c91fb1b6e69e86" ]] || { echo "::error::OCI_REGION"; mismatch=1; }
-          [[ "$(hash_value "$derived_fingerprint")" == "6103633ecaa6f5504a90454ab2c9ccd4f0be706bbea0ddc745327b4fd2a438c2" ]] || { echo "::error::OCI_PRIVATE_KEY"; mismatch=1; }
-          [[ "$mismatch" == "0" ]] || exit 1
-
           # Always use the fingerprint derived from the actual private key.
           # This prevents stale OCI_FINGERPRINT secrets from producing 401 signature failures.
           echo "::add-mask::$derived_fingerprint"
@@ -186,7 +169,7 @@ jobs:
         working-directory: oracle/terraform
         shell: bash
         env:
-          AD_INDEXES: ${{ inputs.availability_domains || '0,1,2' }}
+          AD_INDEXES: ${{ inputs.availability_domains }}
         run: |
           set -Eeuo pipefail
           success=0
