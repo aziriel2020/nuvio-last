@@ -68,7 +68,7 @@ export function createClient(cfg, fetcher = fetch) {
     if (delay) await sleep(delay);
   }
   function release() { if (queue.length) queue.shift()(); else active--; }
-  async function get(route, { native = true, json = true, attempts = cfg.attempts } = {}) {
+  async function get(route, { native = true, json = true, attempts = cfg.attempts, stopOnRuntimeUnavailable = true } = {}) {
     const url = new URL(route, cfg.origin);
     if (url.origin !== cfg.origin) throw new AuditError('Audit URL escaped configured origin', 'invalid-origin');
     const history = [];
@@ -91,7 +91,9 @@ export function createClient(cfg, fetcher = fetch) {
         history.push(item);
         const category = classify(response.status, body, response.headers);
         if (category === 'runtime-unavailable' || (native && response.ok && response.headers.get('x-nuvio-origin') !== 'cloudflare-only')) {
-          throw (stopped = new AuditError('Dynamic runtime unavailable: ' + url.pathname + ' returned ' + response.headers.get('content-type') + ' without native headers', 'runtime-unavailable', history));
+          const runtimeError = new AuditError('Dynamic runtime unavailable: ' + url.pathname + ' returned ' + response.headers.get('content-type') + ' without native headers', 'runtime-unavailable', history);
+          if (stopOnRuntimeUnavailable) stopped = runtimeError;
+          throw runtimeError;
         }
         if (!response.ok || response.headers.get('x-nuvio-upstream-error') === '1') {
           item.category = category;
@@ -194,7 +196,7 @@ export async function run(cfg, fetcher = fetch) {
 
     for (const region of cfg.regions) {
       try {
-        const response = await client.get('/' + region + '/health', { attempts: 2 });
+        const response = await client.get('/' + region + '/health', { attempts: 2, stopOnRuntimeUnavailable: false });
         health[region] = { status: 'OK', data: response.data };
         const providers = response.data?.providers;
         if (providers && typeof providers === 'object') {
