@@ -3970,7 +3970,7 @@ async function buildCrunchyrollAnimeCatalog({ catalog, timeZone, now = new Date(
 }
 
 
-const SSPORT_HOME = 'https://www.ssportplus.com/';
+const SSPORT_HOME = 'https://www.ssportplus.com/yayin-akisi/';
 const SSPORT_CACHE_TTL_MS = 2 * 60 * 1000;
 const SSPORT_TURKISH_MONTHS = Object.freeze({
   ocak: 1, subat: 2, şubat: 2, mart: 3, nisan: 4, mayis: 5, mayıs: 5,
@@ -4037,7 +4037,74 @@ function ssportEventTitleCandidate(lines, dateIndex) {
   return null;
 }
 
+function decodeIcsText(value) {
+  return String(value || '')
+    .replace(/\\n/gi, ' ')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseSSportIcsEvents(htmlValue) {
+  const html = String(htmlValue || '');
+  const events = [];
+  const seen = new Set();
+  const re = /href=["']text\/calendar;charset=utf8;base64,([A-Za-z0-9+/=]+)["']/gi;
+  let match;
+
+  while ((match = re.exec(html))) {
+    let ics = '';
+    try {
+      ics = Buffer.from(match[1], 'base64').toString('utf8');
+    } catch (_) {
+      continue;
+    }
+    // RFC5545 folded lines start with a single space/tab.
+    ics = ics.replace(/\r?\n[ \t]/g, '');
+    const startMatch = ics.match(/^DTSTART(?:;TZID=([^:]+))?:(\d{8})T(\d{6})/mi);
+    const summaryMatch = ics.match(/^SUMMARY:(.*)$/mi);
+    const descriptionMatch = ics.match(/^DESCRIPTION:(.*)$/mi);
+    if (!startMatch || !summaryMatch) continue;
+
+    const description = decodeIcsText(descriptionMatch?.[1] || '');
+    if (!/Platform\/Kanal\s*:\s*[^\r\n]*S\s*Sport\s*Plus/i.test(description)) continue;
+
+    const dateRaw = startMatch[2];
+    const timeRaw = startMatch[3];
+    const calendarDate = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)}`;
+    const time = `${timeRaw.slice(0,2)}:${timeRaw.slice(2,4)}`;
+    const title = decodeIcsText(summaryMatch[1]);
+    if (!title) continue;
+
+    const category = description
+      .replace(/,?\s*Platform\/Kanal\s*:\s*.*$/i, '')
+      .trim();
+    const key = `${calendarDate}|${time}|${normalizeTitle(title)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push({
+      title,
+      calendarDate,
+      time,
+      category: category || 'Sport',
+      timezone: startMatch[1] || 'Europe/Istanbul'
+    });
+  }
+
+  return events.sort((a, b) =>
+    a.calendarDate.localeCompare(b.calendarDate) ||
+    a.time.localeCompare(b.time) ||
+    a.title.localeCompare(b.title, 'tr')
+  );
+}
+
 function parseSSportUpcomingHtml(htmlValue, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
+  const officialIcs = parseSSportIcsEvents(htmlValue);
+  if (officialIcs.length) return officialIcs;
+
+  // Minimal fallback for fixtures / emergency markup changes.
   const lines = htmlTextLines(htmlValue);
   const start = lines.findIndex((line) => /gelecek canlı yayınlar/i.test(line));
   const endCandidate = lines.findIndex((line, index) => index > start && /neden s sport plus/i.test(line));
@@ -4058,7 +4125,7 @@ function parseSSportUpcomingHtml(htmlValue, now = runtimeNow(), timeZone = DEFAU
     const key = `${calendarDate}|${time}|${normalizeTitle(title)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    events.push({ title, calendarDate, time });
+    events.push({ title, calendarDate, time, category: 'Sport', timezone: 'Europe/Istanbul' });
   }
 
   return events.sort((a, b) =>
@@ -4153,11 +4220,11 @@ async function buildSSportLiveCatalog({ catalog, timeZone, now = runtimeNow(), p
       background: null,
       landscapePoster: null,
       banner: null,
-      description: `S Sport Plus Türkiye • canlı spor yayını\n\n${event.title}\n\nKaynak: S Sport Plus resmi yayın akışı.`,
+      description: `S Sport Plus Türkiye • canlı spor yayını\n\n${event.title}${event.category ? ` • ${event.category}` : ''}\n\nKaynak: S Sport Plus resmi yayın akışı.`,
       releaseInfo: `${humanCalendarDate(event.calendarDate)} • ${event.time}`,
       released,
       status: 'Live',
-      genres: ['Sport', 'Live'],
+      genres: [...new Set(['Sport', 'Live', event.category].filter(Boolean))],
       country: 'TR',
       language: 'tr',
       behaviorHints: { hasScheduledVideos: true },
@@ -4725,6 +4792,7 @@ module.exports._internals = {
   tvmazeBroadcastToMeta,
   tvmazeStreamingEpisodeToMeta,
   tvmazeProviderWindowMetas,
+  parseSSportIcsEvents,
   parseSSportUpcomingHtml,
   ssportUpcomingEvents,
   buildSSportLiveCatalog,
