@@ -92,20 +92,16 @@ test('Cloudflare build emits the stable Nuvio surface as static assets', () => {
   assert(fs.existsSync(path.join(DIST, 'static', 'assets')));
 });
 
-test('Cloudflare routing excludes the large static JSON from Function invocations', () => {
+test('Cloudflare routing is Worker-first and static artifacts are delegated through ASSETS', () => {
   const routes = readJson('_routes.json');
   assert.deepEqual(routes.include, ['/*']);
-  for (const route of [
-    '/nuvio-collections-fr-global-tr-usa.json',
-    '/nuvio-collections-desktop.json',
-    '/fr/manifest.json',
-    '/global/manifest.json',
-    '/tr/manifest.json',
-    '/us/manifest.json',
-    '/static/*'
-  ]) {
-    assert(routes.exclude.includes(route), route);
-  }
+  assert.deepEqual(routes.exclude, []);
+
+  const entry = fs.readFileSync(path.join(ROOT, 'cloudflare', 'worker-entry.mjs'), 'utf8');
+  assert.match(entry, /STATIC_EXACT_PATHS/);
+  assert.match(entry, /pathname\.startsWith\('\/static\/'\)/);
+  assert.match(entry, /env\?\.ASSETS\?\.fetch/);
+  assert.match(entry, /X-Nuvio-Origin', 'cloudflare-static'/);
 });
 
 test('Cloudflare worker keeps dynamic data fresh and maps repository artwork locally', async () => {
