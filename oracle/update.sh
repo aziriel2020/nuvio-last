@@ -55,7 +55,7 @@ if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   PUBLIC_ORIGIN="https://$PUBLIC_HOST"
 fi
 
-run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' npm run build:cloudflare"
+run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:cloudflare"
 
 ln -sfn "$TARGET" "$BASE/current.new"
 mv -Tf "$BASE/current.new" "$CURRENT"
