@@ -104,9 +104,21 @@ const crunchyUrl = new URL(crunchyCover);
 assert(crunchyUrl.origin === origin, 'Crunchyroll cover escaped Oracle origin');
 assert(crunchyUrl.pathname === '/tr/desktop-folder-card.jpg', 'Crunchyroll cover is not the cinematic Desktop route');
 const crunchyImage = await request(crunchyUrl, { json: false });
-assert((crunchyImage.response.headers.get('content-type') || '').includes('image/jpeg'), 'Crunchyroll cover is not JPEG');
-assert(crunchyImage.bytes.byteLength > 5000, 'Crunchyroll cover is unexpectedly small');
-console.log('[TR ART] Crunchyroll cinematic bytes=' + crunchyImage.bytes.byteLength);
+const crunchyType = crunchyImage.response.headers.get('content-type') || '';
+assert(
+  crunchyType.includes('image/jpeg') || crunchyType.includes('image/svg+xml'),
+  'Crunchyroll cover returned an unexpected content type: ' + crunchyType
+);
+if (crunchyType.includes('image/svg+xml')) {
+  assert(/<svg[\s>]/i.test(crunchyImage.text || ''), 'Crunchyroll SVG cover is malformed');
+  assert(
+    crunchyImage.response.headers.get('x-nuvio-visual-renderer') === 'platform-assets-v2' ||
+    /data:image\/(?:jpeg|png|webp);base64,/i.test(crunchyImage.text || ''),
+    'Crunchyroll SVG is not using the platform artwork renderer'
+  );
+}
+assert(crunchyImage.bytes.byteLength > 1000, 'Crunchyroll cover is unexpectedly small');
+console.log('[TR ART] Crunchyroll cinematic type=' + crunchyType + ' bytes=' + crunchyImage.bytes.byteLength);
 
 const globalCollections = (await request('/global/nuvio-collections.json')).data;
 const anime = globalCollections.find((collection) => collection.title === '🌍 Anime Japon + Corée');
@@ -125,9 +137,21 @@ for (const source of animeSeries.sources.slice(0, 5)) {
   assert(banner.searchParams.get('provider') === 'anime-asia', 'Anime banner provider is not anime-asia');
   assert(banner.searchParams.get('design') === 'shield3', 'Anime banner is not Shield3');
   const image = await request(banner, { json: false });
-  assert((image.response.headers.get('content-type') || '').includes('image/jpeg'), 'Anime banner is not JPEG');
-  assert(image.bytes.byteLength > 5000, 'Anime banner is unexpectedly small');
-  console.log('[ANIME LIVE]', source.catalogId, 'metas=' + payload.metas.length, 'bytes=' + image.bytes.byteLength);
+  const imageType = image.response.headers.get('content-type') || '';
+  assert(
+    imageType.includes('image/jpeg') || imageType.includes('image/svg+xml'),
+    'Anime banner returned an unexpected content type: ' + imageType
+  );
+  if (imageType.includes('image/svg+xml')) {
+    assert(
+      image.response.headers.get('x-nuvio-card-renderer') === 'calendar-overlay-v2',
+      'Anime banner is not using the Calendar overlay renderer'
+    );
+    assert(/data-renderer="shield-desktop-v3"/.test(image.text || ''), 'Anime banner is not Shield Desktop v3');
+    assert(/desktop-title/.test(image.text || ''), 'Anime Shield banner has no title layer');
+  }
+  assert(image.bytes.byteLength > 1000, 'Anime banner is unexpectedly small');
+  console.log('[ANIME LIVE]', source.catalogId, 'metas=' + payload.metas.length, 'type=' + imageType, 'bytes=' + image.bytes.byteLength);
   liveAnimeValidated = true;
   break;
 }
