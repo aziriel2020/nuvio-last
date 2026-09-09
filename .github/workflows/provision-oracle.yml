@@ -10,13 +10,7 @@ on:
       ssh_ingress_cidr:
         description: CIDR allowed to SSH (0.0.0.0/0 = anywhere with key)
         required: true
-        default: "0.0.0.0/0"
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/oracle-provision-once"
-permissions:
+        default: "0.0.0.0/0"permissions:
   contents: read
 
 concurrency:
@@ -36,7 +30,7 @@ jobs:
       TF_VAR_region: ${{ secrets.OCI_REGION }}
       TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
       TF_VAR_ssh_public_key: ${{ secrets.ORACLE_SSH_PUBLIC_KEY }}
-      TF_VAR_ssh_ingress_cidr: ${{ inputs.ssh_ingress_cidr || '0.0.0.0/0' }}
+      TF_VAR_ssh_ingress_cidr: ${{ inputs.ssh_ingress_cidr }}
       TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
       TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
@@ -52,7 +46,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           required=(
-            TF_VAR_tenancy_ocid TF_VAR_user_ocid TF_VAR_fingerprint
+            TF_VAR_tenancy_ocid TF_VAR_user_ocid
             TF_VAR_region TF_VAR_compartment_ocid TF_VAR_ssh_public_key
           )
           for name in "${required[@]}"; do
@@ -174,7 +168,7 @@ jobs:
         working-directory: oracle/terraform
         shell: bash
         env:
-          AD_INDEXES: ${{ inputs.availability_domains || '0,1,2' }}
+          AD_INDEXES: ${{ inputs.availability_domains }}
         run: |
           set -Eeuo pipefail
           success=0
