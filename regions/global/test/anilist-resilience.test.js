@@ -80,7 +80,12 @@ test('Cloudflare resilience keeps JP AniList content when the primary runtime so
   assert.equal(payload.metas[0].imdbRating, '8.2');
   assert.match(payload.metas[0].description, /AniList/);
   assert.match(payload.metas[0].description, /Tsuzuki/);
-  assert.match(payload.metas[0].banner, /desktop-content-card\.jpg/);
+  for (const field of ['poster', 'background', 'landscapePoster', 'banner']) {
+    assert.match(payload.metas[0][field], /desktop-content-card\.jpg/, field);
+    assert.match(payload.metas[0][field], /design=shield3/, field);
+    assert.equal(new URL(payload.metas[0][field]).origin, 'https://edge.example', field);
+  }
+  assert.equal(payload.metas[0].posterShape, 'landscape');
   assert.match(payload.metas[0].banner, /desktop11/);
   assert.equal(payload.stats.anilistFallbacks, 1);
   assert.equal(response.headers.get('x-nuvio-anime-source'), 'anilist-cache-tsuzuki');
