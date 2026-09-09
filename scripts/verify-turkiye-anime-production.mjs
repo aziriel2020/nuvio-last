@@ -312,7 +312,7 @@ async function validateAnimePayload(source, label) {
     assert(urls.length >= 3, `${label}: insufficient cinematic artwork fields for ${meta.id}`);
     for (const value of urls) {
       const url = new URL(value);
-      assert(url.origin === origin, `${label}: Anime artwork escaped Oracle origin`);
+      assert(url.origin === origin, `${label}: Anime artwork escaped Oracle origin: ${value}`);
       assert(url.pathname === '/global/desktop-content-card.jpg', `${label}: Anime artwork is not Shield cinematic: ${url.pathname}`);
       assert(url.searchParams.get('provider') === 'anime-asia', `${label}: provider != anime-asia`);
       assert(url.searchParams.get('design') === 'shield3', `${label}: design != shield3`);
