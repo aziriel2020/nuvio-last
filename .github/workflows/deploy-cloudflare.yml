@@ -99,21 +99,33 @@ jobs:
           console.log('Cloudflare TMDB credential is configured.');
           NODE
 
-      - name: Configure Cloudflare fail-closed runtime
+      - name: Configure Cloudflare production branch
         run: node scripts/configure-cloudflare-pages.mjs
-        continue-on-error: true
 
       - name: Deploy Cloudflare-native Nuvio
         id: deploy
         shell: bash
         run: |
-          npx --yes wrangler@latest pages deploy dist             --project-name="$CLOUDFLARE_PROJECT_NAME"             --branch=main             --commit-hash="$GITHUB_SHA"
+          set -Eeuo pipefail
+          npx --yes wrangler@latest pages deploy dist \
+            --project-name="$CLOUDFLARE_PROJECT_NAME" \
+            --branch=main \
+            --commit-hash="$GITHUB_SHA" | tee "$RUNNER_TEMP/cloudflare-deploy.log"
 
-      - name: Verify Cloudflare-only production
+          deployment_url="$(grep -Eo 'https://[a-z0-9]+\.[a-z0-9-]+\.pages\.dev' "$RUNNER_TEMP/cloudflare-deploy.log" | tail -1)"
+          [[ -n "$deployment_url" ]] || {
+            echo "::error::Could not resolve Cloudflare deployment URL from Wrangler output"
+            exit 1
+          }
+          echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "CLOUDFLARE_DEPLOYMENT_URL=$deployment_url" >> "$GITHUB_ENV"
+          echo "Cloudflare exact deployment: $deployment_url"
+
+      - name: Verify exact Cloudflare Worker deployment
         shell: bash
         run: |
           node - <<'NODE'
-          const origin = process.env.PUBLIC_ORIGIN;
+          const origin = process.env.CLOUDFLARE_DEPLOYMENT_URL || process.env.PUBLIC_ORIGIN;
 
           async function retry(path, attempts = 8, acceptedStatuses = []) {
             let response = null;
