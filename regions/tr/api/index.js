@@ -1635,9 +1635,10 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   );
   const base = `${String(origin || '').replace(/\/$/, '')}/`;
   const url = new URL('desktop-content-card.jpg', base);
-  // desktop12 forces a fresh cache key after the Cloudflare-native renderer
+  // desktop11 forces a fresh cache key after the Cloudflare-native renderer
   // switched from raw artwork passthrough to the full Calendar overlay.
-  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop12`);
+  url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop11`);
+  url.searchParams.set('design', 'shield3');
   if (source && isAllowedPosterSource(source)) url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);
