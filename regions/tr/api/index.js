@@ -53,7 +53,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network3-tvmaze';
+const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network4-bikanal';
 const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
@@ -458,6 +458,7 @@ const PROVIDERS = [
   { slug: 'tivibu', label: 'Tivibu', aliases: ['Tivibu'], matchPrefixes: ['tivibu'], networkAliases: ['Tivibu'], monetizationTypes: ['flatrate'] },
   { slug: 'd-smart-go', label: 'D-Smart GO', aliases: ['D-Smart GO', 'D Smart GO', 'D-Smart'], matchPrefixes: ['d-smart', 'd smart'], networkAliases: ['D-Smart', 'D Smart'], monetizationTypes: ['flatrate'] },
   { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], networkAliases: ['S Sport', 'S Sport Plus'], monetizationTypes: ['flatrate'] },
+  { slug: 'bi-kanal', label: 'Bi Kanal', aliases: ['Bi Kanal'], matchPrefixes: ['bi kanal'], networkAliases: ['Bi Kanal'], tvmazeArchive: true, seriesOnly: true, monetizationTypes: ['free', 'ads', 'flatrate'] },
   { slug: 'crunchyroll', label: 'Crunchyroll', aliases: ['Crunchyroll', 'Crunchyroll Amazon Channel'], matchPrefixes: ['crunchyroll'], networkAliases: ['Crunchyroll'], monetizationTypes: ['flatrate'] }
 ];
 
@@ -484,7 +485,7 @@ const ARCHIVE_SERIES_PROVIDERS = Object.freeze([
   ARCHIVE_ALL_PROVIDER
 ]);
 const ARCHIVE_FILM_PROVIDERS = Object.freeze([
-  ...PROVIDERS,
+  ...PROVIDERS.filter((provider) => !provider.seriesOnly),
   ARCHIVE_ALL_PROVIDER,
   ARCHIVE_VOD_PROVIDER
 ]);
@@ -520,10 +521,12 @@ const ARCHIVE_DYNAMIC_PERIOD_ORDER = new Map(ARCHIVE_DYNAMIC_PERIODS.map((entry,
 const PLATFORM_COLLECTIONS = Object.freeze([
   ...PROVIDERS.map((provider) => ({
     provider,
-    categories: [
-      { key: 'series', type: 'series', title: 'Séries' },
-      { key: 'films', type: 'movie', title: 'Films' }
-    ]
+    categories: provider.seriesOnly
+      ? [{ key: 'series', type: 'series', title: 'Séries' }]
+      : [
+          { key: 'series', type: 'series', title: 'Séries' },
+          { key: 'films', type: 'movie', title: 'Films' }
+        ]
   })),
   {
     provider: ARCHIVE_ALL_PROVIDER,
