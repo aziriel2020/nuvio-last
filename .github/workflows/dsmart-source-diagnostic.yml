@@ -264,3 +264,100 @@ jobs:
 
           print('CMS_SUCCESSFUL_PROBES',[(a,b) for a,b,_ in successful])
           PY
+
+      - name: Extract D-Smart CMS SDK module
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fsSL --retry 3 --connect-timeout 10 --max-time 40 \
+            -A "Mozilla/5.0 NuvioCalendarDiagnostic/9.0" \
+            https://www.dsmartgo.com.tr/main.js -o "$RUNNER_TEMP/main.js"
+
+          python3 - "$RUNNER_TEMP/main.js" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='utf-8',errors='replace').read()
+
+          def safe(x):
+              x=re.sub(r'([A-Za-z0-9._-]{28,})','<redacted>',x)
+              return x.replace('\n',' ')
+
+          # Find modules that actually build an HTTP client from a CMS-style
+          # config (serviceBaseUrl/apiKey/tenantId). Print only structural code.
+          hits=[]
+          for needle in ['tenantId','serviceBaseUrl','apiKey','queryParam']:
+              start=0
+              while True:
+                  i=s.find(needle,start)
+                  if i<0: break
+                  window=s[max(0,i-4500):i+6500]
+                  if 'serviceBaseUrl' in window and 'apiKey' in window:
+                      hits.append(i)
+                  start=i+len(needle)
+
+          modules=[]
+          seen=set()
+          module_start_re=re.compile(r'(\d+):\(t,a,e\)=>\{')
+          for i in hits:
+              before=s[:i]
+              starts=list(module_start_re.finditer(before[max(0,len(before)-120000):]))
+              if starts:
+                  base=max(0,i-120000)
+                  m=starts[-1]
+                  start=base+m.start()
+                  module_id=m.group(1)
+              else:
+                  # fallback: bounded context
+                  start=max(0,i-12000); module_id='context'
+              if (module_id,start) in seen: continue
+              seen.add((module_id,start))
+              # webpack modules usually end before the next numeric module marker.
+              nxt=re.search(r'\},\d+:\(t,a,e\)=>\{',s[i:])
+              end=i+(nxt.start()+1 if nxt else 22000)
+              end=min(len(s),max(i+8000,end))
+              chunk=s[start:min(end,start+50000)]
+              if 'serviceBaseUrl' not in chunk or 'apiKey' not in chunk: continue
+              modules.append((module_id,start,chunk))
+
+          print('CMS_MODULE_CANDIDATES',len(modules))
+          for module_id,start,chunk in modules[:12]:
+              print('\n### CMS_MODULE',module_id,'AT',start)
+              # Extract method names and endpoint-like literal fragments first.
+              methods=[]
+              for m in re.finditer(r'(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]{2,80})\([^)]*\)\{',chunk):
+                  name=m.group(1)
+                  if name not in methods: methods.append(name)
+              print('METHODS',methods[:160])
+              candidates=[]
+              for pat in [
+                  r'["\x60\'](/[^"\x60\']{1,180})["\x60\']',
+                  r'url\s*:\s*["\x60\']([^"\x60\']{1,180})["\x60\']',
+                  r'\.get\(["\x60\']([^"\x60\']{1,180})["\x60\']',
+                  r'\.post\(["\x60\']([^"\x60\']{1,180})["\x60\']'
+              ]:
+                  for pat in [pat]:
+                      for m in re.finditer(pat,chunk):
+                          val=m.group(1)
+                          if val not in candidates: candidates.append(val)
+              print('ENDPOINT_LITERALS', [safe(v) for v in candidates[:200]])
+              print('MODULE_SNIPPET',safe(chunk[:30000]))
+          PY
+
+          # Check whether a source map is publicly available; if it is, its
+          # original source names make endpoint discovery deterministic.
+          code="$(curl -sS -o "$RUNNER_TEMP/main.js.map" -w '%{http_code}' --connect-timeout 8 --max-time 20 https://www.dsmartgo.com.tr/main.js.map || true)"
+          echo "SOURCEMAP_HTTP=$code"
+          if [[ "$code" == "200" ]]; then
+            python3 - "$RUNNER_TEMP/main.js.map" <<'PY'
+          import json,sys,re
+          try:
+              doc=json.load(open(sys.argv[1],encoding='utf-8'))
+          except Exception:
+              print('SOURCEMAP_JSON false'); raise SystemExit(0)
+          sources=doc.get('sources',[])
+          print('SOURCEMAP_JSON true SOURCES',len(sources))
+          for i,name in enumerate(sources):
+              low=str(name).lower()
+              if any(k in low for k in ['cms','content','service','landing','picker']):
+                  print('SOURCE',i,name)
+          PY
+          fi
