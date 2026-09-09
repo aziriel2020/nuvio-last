@@ -108,6 +108,25 @@ jobs:
           journalctl -u nuvio -n 120 --no-pager || true
           REMOTE
 
+      - name: Wait for public Oracle readiness
+        shell: bash
+        env:
+          PUBLIC_ORIGIN: "https://141-145-215-202.nip.io"
+        run: |
+          set -Eeuo pipefail
+          for attempt in {1..45}; do
+            code="$(curl -sS -o /tmp/oracle-public-health.json -w '%{http_code}' --connect-timeout 5 --max-time 10 "$PUBLIC_ORIGIN/_oracle/health" || true)"
+            if [[ "$code" == "200" ]] && jq -e '.ok == true and .runtime == "oracle-vm"' /tmp/oracle-public-health.json >/dev/null 2>&1; then
+              echo "Oracle public backend is ready."
+              exit 0
+            fi
+            echo "Waiting for Caddy backend health ($attempt/45, HTTP $code)"
+            sleep 2
+          done
+          echo "::error::Oracle public backend did not become ready"
+          cat /tmp/oracle-public-health.json 2>/dev/null || true
+          exit 1
+
       - name: Verify Türkiye collections and Anime design
         shell: bash
         env:
