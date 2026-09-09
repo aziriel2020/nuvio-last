@@ -204,6 +204,13 @@ export function platformStaticAssetPath(urlLike) {
   const info = platformAssetInfo(url);
   if (!info) return null;
   const variant = info.backdrop ? 'backdrop' : 'card';
+
+  // Türkiye Crunchyroll reuses the curated JP/KR Anime artwork so the new
+  // collection has a real cinematic card on both Oracle and Cloudflare.
+  if (info.region === 'tr' && info.provider === 'crunchyroll') {
+    return `/static/assets/platform-art/global/anime-asia-${variant}.jpg`;
+  }
+
   return `/static/assets/platform-art/${info.region}/${info.provider}-${variant}.jpg`;
 }
 
