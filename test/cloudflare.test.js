@@ -43,12 +43,12 @@ test('Cloudflare build emits the stable Nuvio surface as static assets', () => {
   }
 
   const collections = readJson('nuvio-collections-fr-global-tr-usa.json');
-  assert.equal(collections.length, 48);
+  assert.equal(collections.length, 49);
   assert.equal(collections[0].title, '🇫🇷 Netflix');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 
   const desktop = readJson('nuvio-collections-desktop.json');
-  assert.equal(desktop.length, 48);
+  assert.equal(desktop.length, 49);
 
   const install = readJson('install.json');
   assert.equal(install.combinedCollections, `${PUBLIC_ORIGIN}/nuvio-collections-fr-global-tr-usa.json`);
