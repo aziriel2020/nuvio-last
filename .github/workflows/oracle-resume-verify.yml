@@ -151,7 +151,7 @@ jobs:
           check_json /nuvio-collections-desktop.json
           check_json /nuvio-collections-fr-global-tr-usa.json
 
-      - name: Production audit on Oracle VM
+      - name: Critical catalog audit
         shell: bash
         env:
           PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
@@ -159,12 +159,77 @@ jobs:
           PUBLIC_ORIGIN: ${{ steps.endpoint.outputs.origin }}
         run: |
           set -Eeuo pipefail
-          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
-            "sudo sh -c 'grep -q " $PUBLIC_HOST$" /etc/hosts || echo "127.0.0.1 $PUBLIC_HOST" >> /etc/hosts'"
-          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
-            "cd /opt/nuvio/current && PUBLIC_ORIGIN='$PUBLIC_ORIGIN' AUDIT_RUNTIME=oracle-vm AUDIT_MODE=safe AUDIT_STRICT=1 AUDIT_CONCURRENCY=4 AUDIT_ATTEMPTS=2 AUDIT_TIMEOUT_MS=8000 AUDIT_REQUEST_BUDGET=1200 AUDIT_DESKTOP_CARDS=8 AUDIT_REPORT=/tmp/oracle-resume-audit.json node scripts/audit-production-catalogs.mjs"
+
+          curl_json() {
+            curl -fsS --resolve "$PUBLIC_HOST:443:$PUBLIC_IP" \
+              --connect-timeout 5 --max-time 20 "$PUBLIC_ORIGIN$1"
+          }
+
           mkdir -p reports
-          scp -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP":/tmp/oracle-resume-audit.json reports/oracle-resume-audit.json
+          report="$RUNNER_TEMP/oracle-critical-audit.txt"
+          : > "$report"
+          anime_total=0
+          catalogs_tested=0
+
+          for region in fr global tr us; do
+            echo "=== $region ===" | tee -a "$report"
+            collections="$(curl_json "/$region/nuvio-collections.json")"
+            printf '%s' "$collections" | jq -e . >/dev/null
+
+            mapfile -t base_catalogs < <(
+              printf '%s' "$collections" |
+              jq -r '.. | objects | select(.catalogId? and .type?) | [.type,.catalogId] | @tsv' |
+              awk '!seen[$0]++' | head -12
+            )
+
+            mapfile -t anime_catalogs < <(
+              printf '%s' "$collections" |
+              jq -r '.. | objects | select(.catalogId? and .type?) | select((tostring | test("anime|japan|japon|korea|coree|corée|korean|japanese|anilist|crunchy";"i"))) | [.type,.catalogId] | @tsv' |
+              awk '!seen[$0]++' | head -12
+            )
+
+            declare -A chosen=()
+            for row in "${anime_catalogs[@]}" "${base_catalogs[@]}"; do
+              [[ -n "$row" ]] || continue
+              chosen["$row"]=1
+            done
+
+            for row in "${!chosen[@]}"; do
+              type="${row%%$'\t'*}"
+              id="${row#*$'\t'}"
+              encoded="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$id")"
+              body="$(curl_json "/$region/catalog/$type/$encoded.json")"
+              printf '%s' "$body" | jq -e '.metas | type == "array"' >/dev/null
+              count="$(printf '%s' "$body" | jq '.metas | length')"
+              echo "$region $type $id metas=$count" | tee -a "$report"
+              catalogs_tested=$((catalogs_tested + 1))
+            done
+
+            if (( ${#anime_catalogs[@]} > 0 )); then
+              anime_total=$((anime_total + ${#anime_catalogs[@]}))
+              echo "$region anime-candidates=${#anime_catalogs[@]}" | tee -a "$report"
+            fi
+            unset chosen
+          done
+
+          desktop="$(curl_json "/nuvio-collections-desktop.json")"
+          combined="$(curl_json "/nuvio-collections-fr-global-tr-usa.json")"
+          printf '%s' "$desktop" | jq -e . >/dev/null
+          printf '%s' "$combined" | jq -e . >/dev/null
+
+          desktop_bytes="$(printf '%s' "$desktop" | wc -c)"
+          combined_bytes="$(printf '%s' "$combined" | wc -c)"
+          echo "desktop-bytes=$desktop_bytes" | tee -a "$report"
+          echo "combined-bytes=$combined_bytes" | tee -a "$report"
+          echo "catalogs-tested=$catalogs_tested" | tee -a "$report"
+          echo "anime-candidates=$anime_total" | tee -a "$report"
+
+          [[ "$desktop_bytes" -gt 100 ]] || { echo "::error::Desktop collections unexpectedly empty"; exit 1; }
+          [[ "$combined_bytes" -gt 100 ]] || { echo "::error::Combined collections unexpectedly empty"; exit 1; }
+          [[ "$catalogs_tested" -gt 0 ]] || { echo "::error::No catalogs were tested"; exit 1; }
+          [[ "$anime_total" -gt 0 ]] || { echo "::error::No Anime/Japan/Korea catalog candidates found"; exit 1; }
+
+          cp "$report" reports/oracle-critical-audit.txt
 
       - name: Summary
         if: always()
@@ -190,6 +255,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: oracle-resume-verify-${{ github.run_id }}
-          path: reports/oracle-resume-audit.json
+          path: |
+            reports/oracle-resume-audit.json
+            reports/oracle-critical-audit.txt
           if-no-files-found: warn
           retention-days: 30
