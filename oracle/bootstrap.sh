@@ -126,6 +126,23 @@ chmod 600 /etc/nuvio/nuvio.env
 
 # Reload EnvironmentFile values even when update.sh detects the same release.
 systemctl restart nuvio
+
+ready=0
+for _ in {1..30}; do
+  health="$(curl -fsS --max-time 5 http://127.0.0.1:3000/_oracle/health 2>/dev/null || true)"
+  if [[ -n "$health" ]] && printf '%s' "$health" | jq -e --arg origin "https://$PUBLIC_HOST" \
+      '.ok == true and .runtime == "oracle-vm" and .publicOrigin == $origin' >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$ready" != "1" ]]; then
+  echo "Nuvio did not become ready with the configured public origin" >&2
+  journalctl -u nuvio -n 100 --no-pager >&2 || true
+  exit 1
+fi
+
 systemctl enable --now nuvio-update.timer
 
 echo "Oracle Nuvio bootstrap complete: https://$PUBLIC_HOST"
