@@ -195,7 +195,7 @@ test('S Sport Plus is a live-only collection backed by its official schedule par
   const fixture = `
     <section>
       <h2>Gelecek Canlı Yayınlar</h2>
-      <h5>FIBA Basketball Women`s World Cup / Porto Riko - Çin / Çeyrek Final Elemeleri</h5>
+      <h5>FIBA Basketball Women's World Cup / Porto Riko - Çin / Çeyrek Final Elemeleri</h5>
       <div>9 Eylül Çarşamba 18:45</div>
       <h5>Roshn Saudi League 6. Hafta / Al Nassr - Abha</h5>
       <div>9 Eylül Çarşamba 21:00</div>
