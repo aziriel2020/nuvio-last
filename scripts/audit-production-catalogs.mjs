@@ -194,7 +194,8 @@ export async function run(cfg, fetcher = fetch) {
     const prior = cfg.failures ? JSON.parse(fs.readFileSync(cfg.failures, 'utf8')) : {};
     const selected = select(inventory, cfg, Array.isArray(prior) ? prior : prior.results || []);
     if (!selected.length) throw new Error('No catalog matches filters');
-    await client.get('/health', { attempts: 1 });
+    // Do not preflight the root /health route: Pages may serve the static landing page there.
+    // Every selected catalog request below already verifies the Cloudflare-native runtime headers.
     const cardCandidates = [];
     const checkMeta = async (region, m) => {
       const key = region + ':' + m.type + ':' + m.id;
