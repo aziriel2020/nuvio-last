@@ -262,3 +262,14 @@ test('TMDb artwork fallback keeps catalog/meta posters usable when poster_path i
     assert.match(meta.landscapePoster, /image\.tmdb\.org\/t\/p\/w780\/fallback-backdrop\.jpg/);
   }
 });
+
+test('regional in-memory caches are bounded to prevent Cloudflare 1102 exhaustion', () => {
+  const handler = require('../api/index');
+  const MemoryCache = handler._internals.frHandler._internals.MemoryCache;
+  const cache = new MemoryCache(8);
+  for (let i = 0; i < 20; i += 1) cache.set('k' + i, { i }, 60_000);
+  assert.equal(cache.map.size, 8);
+  assert.equal(cache.get('k0'), null);
+  assert.deepEqual(cache.get('k19'), { i: 19 });
+  assert.equal(cache.map.size, 8);
+});
