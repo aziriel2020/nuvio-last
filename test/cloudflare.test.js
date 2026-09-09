@@ -43,12 +43,12 @@ test('Cloudflare build emits the stable Nuvio surface as static assets', () => {
   }
 
   const collections = readJson('nuvio-collections-fr-global-tr-usa.json');
-  assert.equal(collections.length, 47);
+  assert.equal(collections.length, 48);
   assert.equal(collections[0].title, '🇫🇷 Netflix');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 
   const desktop = readJson('nuvio-collections-desktop.json');
-  assert.equal(desktop.length, 47);
+  assert.equal(desktop.length, 48);
 
   const install = readJson('install.json');
   assert.equal(install.combinedCollections, `${PUBLIC_ORIGIN}/nuvio-collections-fr-global-tr-usa.json`);
@@ -140,6 +140,10 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
   assert.equal(
     worker.platformStaticAssetPath('https://edge.example/tr/platform-backdrop.svg?provider=tod&type=series'),
     '/static/assets/platform-art/tr/tod-backdrop.jpg'
+  );
+  assert.equal(
+    worker.platformStaticAssetPath('https://edge.example/tr/desktop-folder-card.jpg?provider=crunchyroll&type=series'),
+    '/static/assets/platform-art/global/anime-asia-card.jpg'
   );
   assert.equal(
     worker.localAssetPath('https://edge.example/us/desktop-genre-card.jpg?genre=action&type=movie'),
