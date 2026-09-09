@@ -121,6 +121,38 @@ jobs:
           echo "CLOUDFLARE_DEPLOYMENT_URL=$deployment_url" >> "$GITHUB_ENV"
           echo "Cloudflare exact deployment: $deployment_url"
 
+      - name: Inspect Cloudflare Pages deployment metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fsS \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Accept: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/deployments" \
+            -o "$RUNNER_TEMP/cloudflare-deployments.json"
+
+          node - "$RUNNER_TEMP/cloudflare-deployments.json" <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const target = (payload?.result || []).find((entry) => entry?.url === process.env.CLOUDFLARE_DEPLOYMENT_URL);
+          if (!target) throw new Error('Exact Cloudflare deployment was not returned by the Pages API');
+          console.log(JSON.stringify({
+            id: target.id,
+            url: target.url,
+            environment: target.environment,
+            uses_functions: target.uses_functions,
+            latest_stage: target.latest_stage,
+            deployment_trigger: {
+              type: target.deployment_trigger?.type,
+              branch: target.deployment_trigger?.metadata?.branch,
+              commit_hash: target.deployment_trigger?.metadata?.commit_hash
+            }
+          }, null, 2));
+          if (target.uses_functions !== true) {
+            console.log('::warning::Cloudflare deployment metadata confirms uses_functions != true');
+          }
+          NODE
+
       - name: Capture Cloudflare Worker invocation
         shell: bash
         continue-on-error: true
