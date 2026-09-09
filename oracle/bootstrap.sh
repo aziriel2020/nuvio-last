@@ -44,10 +44,15 @@ fi
 sudo -u nuvio -H git config --global --add safe.directory /opt/nuvio/source
 sudo -u nuvio -H git -C /opt/nuvio/source fetch --prune origin "$BRANCH"
 SHA="$(sudo -u nuvio -H git -C /opt/nuvio/source rev-parse "origin/$BRANCH")"
-if [[ ! -d "/opt/nuvio/releases/$SHA" ]]; then
-  sudo -u nuvio -H git -C /opt/nuvio/source worktree add --detach "/opt/nuvio/releases/$SHA" "$SHA"
+
+# Only seed current on the very first bootstrap. On upgrades, update.sh must
+# prepare/test/build the target release before atomically switching current.
+if [[ ! -e /opt/nuvio/current ]]; then
+  if [[ ! -d "/opt/nuvio/releases/$SHA" ]]; then
+    sudo -u nuvio -H git -C /opt/nuvio/source worktree add --detach "/opt/nuvio/releases/$SHA" "$SHA"
+  fi
+  ln -sfn "/opt/nuvio/releases/$SHA" /opt/nuvio/current
 fi
-ln -sfn "/opt/nuvio/releases/$SHA" /opt/nuvio/current
 
 install -m 0644 /opt/nuvio/current/oracle/nuvio.service /etc/systemd/system/nuvio.service
 install -m 0644 /opt/nuvio/current/oracle/nuvio-update.service /etc/systemd/system/nuvio-update.service
