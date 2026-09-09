@@ -605,3 +605,20 @@ test('desktop11 content banner carries adaptive title and subtitle metadata', ()
   assert(url.searchParams.get('append'));
   assert.match(url.searchParams.get('label') || '', /Disney/i);
 });
+
+
+test('standard and Desktop combined imports expose the same 18 Türkiye parents and source IDs', () => {
+  const req = { headers: { host: 'example.test', 'x-forwarded-proto': 'https' } };
+  const standard = root._internals.combinedCollections(req);
+  const desktop = root._internals.combinedDesktopCollections(req);
+  const trStandard = standard.filter((c) => c.title.startsWith('🇹🇷 '));
+  const trDesktop = desktop.filter((c) => c.title.startsWith('🇹🇷 '));
+  assert.equal(trStandard.length, 18);
+  assert.equal(trDesktop.length, 18);
+  assert.deepEqual(trStandard.map((c) => c.id), trDesktop.map((c) => c.id));
+  for (let i = 0; i < trStandard.length; i += 1) {
+    const a = trStandard[i].folders.flatMap((f) => f.sources.map((s) => `${s.type}:${s.catalogId}`));
+    const b = trDesktop[i].folders.flatMap((f) => f.sources.map((s) => `${s.type}:${s.catalogId}`));
+    assert.deepEqual(a, b, trStandard[i].title);
+  }
+});
