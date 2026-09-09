@@ -12,7 +12,7 @@ BRANCH="${NUVIO_BRANCH:-main}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git jq ufw debian-keyring debian-archive-keyring apt-transport-https gnupg
+apt-get install -y ca-certificates curl git jq ufw sudo debian-keyring debian-archive-keyring apt-transport-https gnupg
 
 if ! command -v node >/dev/null || [[ "$(node -p 'Number(process.versions.node.split(".")[0])')" -lt 22 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
