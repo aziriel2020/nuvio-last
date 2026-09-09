@@ -39,3 +39,8 @@ variable "ssh_ingress_cidr" {
   type    = string
   default = "0.0.0.0/0"
 }
+
+variable "availability_domain_index" {
+  type    = number
+  default = 0
+}
