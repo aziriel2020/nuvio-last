@@ -240,3 +240,25 @@ test('desktop catalog cards always keep the metadata renderer, even without usab
   assert.match(meta.banner, /append=/);
   assert.match(meta.banner, /label=Netflix/);
 });
+
+test('TMDb artwork fallback keeps catalog/meta posters usable when poster_path is missing', () => {
+  for (const region of ['fr', 'global', 'tr', 'us']) {
+    const calendar = require(`../regions/${region}/src/calendar`);
+    const meta = calendar.baseMeta({
+      id: 777,
+      name: 'Posterless Series',
+      title: 'Posterless Movie',
+      poster_path: null,
+      backdrop_path: '/fallback-backdrop.jpg',
+      external_ids: {},
+      episode_run_time: [24],
+      genres: [],
+      origin_country: ['JP'],
+      production_countries: []
+    }, 'series', '2026-09-09', 'S01E01 • 09 SEPT');
+
+    assert.match(meta.poster, /image\.tmdb\.org\/t\/p\/w500\/fallback-backdrop\.jpg/);
+    assert.match(meta.background, /image\.tmdb\.org\/t\/p\/w1280\/fallback-backdrop\.jpg/);
+    assert.match(meta.landscapePoster, /image\.tmdb\.org\/t\/p\/w780\/fallback-backdrop\.jpg/);
+  }
+});
