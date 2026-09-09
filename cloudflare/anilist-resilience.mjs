@@ -1,6 +1,6 @@
 const TSUZUKI_BASE = 'https://tsuzuki.top/api/v1';
 const ANIME_TIMEZONE = 'Asia/Tokyo';
-export const ANIME_RESILIENCE_REV = 'anime-series-v3-anilist-cache-resilience';
+export const ANIME_RESILIENCE_REV = 'anime-series-v4-shield-cinematic-resilience';
 const ATTRIBUTION = 'Données AniList (anilist.co) • calendrier de secours Tsuzuki (tsuzuki.top).';
 
 function pad(value) {
@@ -280,7 +280,15 @@ function scheduleMeta(row, media, origin) {
     _eventHasTime: true,
     _eventMode: 'ANIME_ORIGINAL_AIRING'
   };
-  meta.banner = desktopBanner(origin, meta);
+  // Catalog fallback must obey the exact same visual contract as the normal
+  // Global Anime handler. Keep the raw AniList/Tsuzuki art only as the source
+  // embedded by the Oracle/Cloudflare renderer, never as a user-facing card URL.
+  const cinematic = desktopBanner(origin, meta);
+  meta.poster = cinematic;
+  meta.posterShape = 'landscape';
+  meta.background = cinematic;
+  meta.landscapePoster = cinematic;
+  meta.banner = cinematic;
   return meta;
 }
 
