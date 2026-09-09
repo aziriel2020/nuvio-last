@@ -19,6 +19,10 @@ fi
 
 mkdir -p "$RELEASES"
 
+# update.sh runs as root while the source checkout belongs to the nuvio account.
+# Trust only this exact repository path so Git 2.35+ does not reject it.
+git config --global --add safe.directory "$SOURCE"
+
 if [[ ! -d "$SOURCE/.git" ]]; then
   git clone --filter=blob:none "$REPO_URL" "$SOURCE"
 fi
