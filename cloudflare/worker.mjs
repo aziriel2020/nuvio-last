@@ -296,57 +296,127 @@ async function embeddedPosterDataUri(src) {
   }
 }
 
-export function desktopContentCardSvg(urlLike, imageDataUri = null) {
+function wrapDesktopTitle(value, maxChars = 30) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return [''];
+  if (text.length <= maxChars) return [text];
+
+  const words = text.split(' ');
+  const lines = [''];
+  for (const word of words) {
+    const current = lines[lines.length - 1];
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxChars || !current) {
+      lines[lines.length - 1] = candidate;
+      continue;
+    }
+    if (lines.length === 1) lines.push(word);
+    else lines[1] = `${lines[1]} ${word}`;
+  }
+
+  if (lines.length > 1 && lines[1].length > maxChars + 7) {
+    lines[1] = `${lines[1].slice(0, maxChars + 4).trimEnd()}…`;
+  }
+  return lines.slice(0, 2);
+}
+
+function desktopTitleFontSize(lines) {
+  const longest = Math.max(...lines.map((line) => line.length), 1);
+  if (lines.length > 1 || longest > 27) return 70;
+  if (longest > 20) return 80;
+  return 92;
+}
+
+export function desktopContentCardSvg(urlLike, imageDataUri = null, logoDataUri = null) {
   const url = normalizedUrl(urlLike);
-  const internals = regionCalendarInternals(url);
   const title = String(url.searchParams.get('title') || '').trim();
   const provider = String(
     url.searchParams.get('label') ||
     url.searchParams.get('provider') ||
     'NUVIO'
   ).trim();
-  const append = String(url.searchParams.get('append') || '').trim();
+  const append = String(url.searchParams.get('append') || '').replace(/\s+/g, ' ').trim();
   const type = String(url.searchParams.get('type') || 'series').toLowerCase() === 'movie'
     ? 'movie'
     : 'series';
-
-  if (typeof internals?.calendarCardSvg === 'function') {
-    return internals.calendarCardSvg({
-      imageDataUri,
-      title,
-      provider,
-      append,
-      type,
-      layout: 'landscape'
-    });
-  }
-
   const accent = /^#[0-9a-f]{6}$/i.test(String(url.searchParams.get('color') || ''))
     ? String(url.searchParams.get('color'))
-    : '#38bdf8';
-  const safeTitle = escapeXml(title || (type === 'movie' ? 'Film' : 'Série'));
-  const safeAppend = escapeXml(append || (type === 'movie' ? 'SORTIE' : 'NOUVEL ÉPISODE'));
+    : '#e50914';
+
+  const lines = wrapDesktopTitle(title || (type === 'movie' ? 'Film' : 'Série'));
+  const titleSize = desktopTitleFontSize(lines);
+  const titleStartY = lines.length > 1 ? 625 : 690;
+  const lineStep = Math.round(titleSize * 1.08);
   const safeProvider = escapeXml(provider.toUpperCase());
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  const safeAppend = escapeXml(append || (type === 'movie' ? 'SORTIE' : 'NOUVEL ÉPISODE'));
+  const titleNodes = lines.map((line, index) =>
+    `<text class="desktop-title" x="104" y="${titleStartY + index * lineStep}" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="${titleSize}" font-weight="900" letter-spacing=".2">${escapeXml(line)}</text>`
+  ).join('');
+  const typeLabel = type === 'movie' ? 'FILM' : 'SÉRIE';
+  const typeGlyph = type === 'movie'
+    ? '<path d="M1437 69h78v58h-78zM1449 80h54v36h-54z" fill="none" stroke="#fff" stroke-width="6" rx="5"/>'
+    : '<rect x="1438" y="70" width="76" height="54" rx="9" fill="none" stroke="#fff" stroke-width="6"/><path d="M1465 129h24" stroke="#fff" stroke-width="6" stroke-linecap="round"/>';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" data-renderer="shield-desktop-v3" data-title-lines="${lines.length}">
     <defs>
-      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#020617" stop-opacity="0"/>
-        <stop offset="100%" stop-color="#061c42" stop-opacity=".98"/>
+      <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#020203" stop-opacity=".88"/>
+        <stop offset="46%" stop-color="#020203" stop-opacity=".40"/>
+        <stop offset="76%" stop-color="#020203" stop-opacity=".08"/>
+        <stop offset="100%" stop-color="#020203" stop-opacity="0"/>
       </linearGradient>
+      <linearGradient id="bottomShade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="34%" stop-color="#020203" stop-opacity="0"/>
+        <stop offset="70%" stop-color="#020203" stop-opacity=".48"/>
+        <stop offset="100%" stop-color="#020203" stop-opacity=".96"/>
+      </linearGradient>
+      <linearGradient id="topShade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#020203" stop-opacity=".36"/>
+        <stop offset="100%" stop-color="#020203" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000" flood-opacity=".8"/></filter>
     </defs>
-    ${imageDataUri ? `<image href="${escapeXml(imageDataUri)}" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>` : '<rect width="1600" height="900" fill="#07111f"/>'}
-    <rect y="330" width="1600" height="570" fill="url(#bottom)"/>
-    <rect x="58" y="585" width="14" height="220" rx="7" fill="${accent}"/>
-    <text x="100" y="690" fill="#fff" font-family="sans-serif" font-size="94" font-weight="900">${safeTitle}</text>
-    <text x="102" y="774" fill="#eef5ff" font-family="sans-serif" font-size="46" font-weight="800">${safeAppend}</text>
-    <text x="102" y="842" fill="${accent}" font-family="sans-serif" font-size="42" font-weight="900">${safeProvider}</text>
+    ${imageDataUri ? `<image href="${escapeXml(imageDataUri)}" width="1600" height="900" preserveAspectRatio="xMidYMid slice"/>` : '<rect width="1600" height="900" fill="#101114"/>'}
+    <rect width="1600" height="900" fill="url(#leftShade)"/>
+    <rect width="1600" height="900" fill="url(#bottomShade)"/>
+    <rect width="1600" height="230" fill="url(#topShade)"/>
+
+    <g filter="url(#shadow)">
+      <rect x="1110" y="42" width="294" height="104" rx="24" fill="#050506" fill-opacity=".90" stroke="${accent}" stroke-width="4"/>
+      ${logoDataUri
+        ? `<image href="${escapeXml(logoDataUri)}" x="1140" y="61" width="234" height="66" preserveAspectRatio="xMidYMid meet"/>`
+        : `<text x="1257" y="108" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="900">${safeProvider}</text>`}
+      <rect x="1418" y="42" width="140" height="104" rx="24" fill="${accent}" fill-opacity=".98"/>
+      ${typeGlyph}
+      <text x="1488" y="139" text-anchor="middle" fill="#fff" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="900" letter-spacing="2">${typeLabel}</text>
+    </g>
+
+    <rect x="70" y="${lines.length > 1 ? 570 : 630}" width="12" height="${lines.length > 1 ? 205 : 150}" rx="6" fill="${accent}"/>
+    <g filter="url(#shadow)">${titleNodes}</g>
+    <text class="desktop-subtitle" x="106" y="796" fill="#f4f4f5" font-family="Arial,Helvetica,sans-serif" font-size="38" font-weight="800" letter-spacing=".3">${safeAppend}</text>
+    <text class="desktop-provider" x="106" y="852" fill="${accent}" font-family="Arial,Helvetica,sans-serif" font-size="30" font-weight="900" letter-spacing="1.4">${safeProvider}</text>
+    <rect x="106" y="870" width="360" height="5" rx="2.5" fill="${accent}" opacity=".92"/>
   </svg>`;
 }
 
 async function serveDesktopContentCard(request, env, url) {
   const src = String(url.searchParams.get('src') || '').trim();
   const imageDataUri = await embeddedPosterDataUri(src);
-  const svg = desktopContentCardSvg(url, imageDataUri);
+  const internals = regionCalendarInternals(url);
+  const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  const type = String(url.searchParams.get('type') || 'series').toLowerCase() === 'movie' ? 'movie' : 'series';
+
+  let logoDataUri = null;
+  if (providerSlug && typeof internals?.platformLogoAsset === 'function') {
+    try {
+      const logo = await internals.platformLogoAsset(providerSlug, type);
+      logoDataUri = logo?.dataUri || null;
+    } catch {
+      logoDataUri = null;
+    }
+  }
+
+  const svg = desktopContentCardSvg(url, imageDataUri, logoDataUri);
 
   return new Response(svg, {
     status: 200,
@@ -357,7 +427,7 @@ async function serveDesktopContentCard(request, env, url) {
       'Cache-Control': `public, max-age=86400, s-maxage=${GENERATED_ART_TTL}, stale-while-revalidate=2592000`,
       'X-Nuvio-Edge': 'cloudflare-native',
       'X-Nuvio-Origin': 'cloudflare-only',
-      'X-Nuvio-Card-Renderer': 'calendar-overlay-v2'
+      'X-Nuvio-Card-Renderer': 'shield-desktop-v3'
     }
   });
 }
