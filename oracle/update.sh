@@ -63,6 +63,10 @@ fi
 run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:cloudflare"
 
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
+install -d -m 0755 /etc/nuvio
+printf 'NUVIO_GIT_SHA=%s\n' "$SHA" > /etc/nuvio/release.env.new
+chmod 0644 /etc/nuvio/release.env.new
+mv -f /etc/nuvio/release.env.new /etc/nuvio/release.env
 install -m 0644 "$TARGET/oracle/nuvio-update.service" /etc/systemd/system/nuvio-update.service
 install -m 0644 "$TARGET/oracle/nuvio-update.timer" /etc/systemd/system/nuvio-update.timer
 chmod +x "$TARGET/oracle/update.sh"
