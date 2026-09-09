@@ -38,6 +38,10 @@ if [[ ! -d /opt/nuvio/source/.git ]]; then
   rm -rf /opt/nuvio/source
   sudo -u nuvio -H git clone --filter=blob:none "$REPO_URL" /opt/nuvio/source
 fi
+
+# Git 2.35+ may reject repositories reached through sudo even when the target
+# working tree is owned by the service account. Trust only this exact repo path.
+sudo -u nuvio -H git config --global --add safe.directory /opt/nuvio/source
 sudo -u nuvio -H git -C /opt/nuvio/source fetch --prune origin "$BRANCH"
 SHA="$(sudo -u nuvio -H git -C /opt/nuvio/source rev-parse "origin/$BRANCH")"
 if [[ ! -d "/opt/nuvio/releases/$SHA" ]]; then
