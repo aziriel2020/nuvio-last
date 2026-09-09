@@ -102,6 +102,33 @@ jobs:
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
             'set -Eeuo pipefail; systemctl is-active --quiet nuvio; systemctl is-active --quiet caddy; curl -fsS --max-time 10 http://127.0.0.1:3000/_oracle/health | jq .'
 
+      - name: Ensure Caddy TLS certificate is ready
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
+          PUBLIC_HOST: ${{ steps.endpoint.outputs.host }}
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+            "sudo bash -s -- '$PUBLIC_HOST'" <<'REMOTE'
+          set -Eeuo pipefail
+          host="$1"
+          systemctl restart caddy
+          for attempt in {1..24}; do
+            if timeout 8 openssl s_client -connect 127.0.0.1:443 -servername "$host" </dev/null 2>/dev/null |
+               openssl x509 -noout -subject -issuer >/tmp/nuvio-cert.txt 2>/dev/null; then
+              cat /tmp/nuvio-cert.txt
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Caddy TLS certificate was not ready" >&2
+          getent ahostsv4 "$host" || true
+          ss -lntp | grep -E ':(80|443)\\b' || true
+          journalctl -u caddy -n 160 --no-pager >&2 || true
+          exit 1
+          REMOTE
+
       - name: Verify public production endpoints
         shell: bash
         env:
