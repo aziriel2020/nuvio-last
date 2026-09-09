@@ -406,6 +406,47 @@ for (const proof of [
   console.log(`[TR PROOF] ${proof.title} ${proof.month} metas=${result.data.metas.length}`);
 }
 
+console.log('=== D-SMART GO NATIVE CMS ===');
+const dsmartCollection = trDedicated.find((entry) => entry.title === '🇹🇷 D-Smart GO');
+assert(dsmartCollection, 'D-Smart GO collection missing');
+const currentMonth = new Date().toISOString().slice(0, 7);
+let dsmartMetas = [];
+let dsmartCatalogType = null;
+for (const folder of dsmartCollection.folders || []) {
+  const source = (folder.sources || []).find((entry) => String(entry.catalogId).endsWith(`-${currentMonth}`));
+  if (!source) continue;
+  const result = await request(catalogPath('tr', source), { attempts: 4 });
+  assertOracleHeaders(result.response, `D-Smart GO/${folder.title}/${currentMonth}`);
+  assert(Array.isArray(result.data?.metas), `D-Smart GO/${folder.title}: metas[] missing`);
+  for (const meta of result.data.metas.slice(0, 8)) {
+    assertMetaBasics(meta, source.type, `D-Smart GO/${folder.title}`);
+    assert(String(meta.id || '').startsWith('dsmart:'), `D-Smart GO invalid native id: ${meta.id}`);
+    assert(/D-Smart GO/i.test(String(meta.description || '')), 'D-Smart GO official-source description missing');
+    assert(meta.released && !Number.isNaN(Date.parse(meta.released)), `D-Smart GO invalid released date: ${meta.released}`);
+    const visual = meta.banner || meta.landscapePoster || meta.background || meta.poster;
+    assert(visual, 'D-Smart GO visual missing');
+    await verifyVisual(visual, `D-Smart GO/${meta.id} visual`, { shield: true });
+  }
+  if (result.data.metas.length && !dsmartMetas.length) {
+    dsmartMetas = result.data.metas;
+    dsmartCatalogType = source.type;
+  }
+  console.log(`[D-SMART] ${folder.title} ${currentMonth} metas=${result.data.metas.length}`);
+}
+assert(dsmartMetas.length > 0, `D-Smart GO ${currentMonth} native CMS catalogs are empty`);
+
+const dsmartSample = dsmartMetas[0];
+const dsmartMetaPath = `/tr/meta/${dsmartCatalogType}/${encodeURIComponent(dsmartSample.id)}.json`;
+const dsmartMetaResult = await request(dsmartMetaPath, { attempts: 4 });
+assertOracleHeaders(dsmartMetaResult.response, 'D-Smart native meta');
+assert(dsmartMetaResult.data?.meta?.id === dsmartSample.id, `D-Smart native meta route did not resolve ${dsmartSample.id}`);
+assert(dsmartMetaResult.data?.meta?.name, 'D-Smart native meta name missing');
+assert(
+  dsmartMetaResult.data?.meta?.poster || dsmartMetaResult.data?.meta?.background,
+  'D-Smart native meta artwork missing'
+);
+console.log(`[D-SMART META] ${dsmartSample.id} OK`);
+
 console.log('=== ANIME STANDARD + DESKTOP ===');
 const animeStandard = standard.find((entry) => entry.title === '🌍 Anime Japon + Corée');
 const animeDesktop = desktop.find((entry) => entry.title === '🌍 Anime Japon + Corée');
@@ -486,6 +527,8 @@ console.log(JSON.stringify({
   localTurkishServicesWithContent: localServicesWithContent,
   sSportLiveEvents: ssportMetas.length,
   recentArchiveTurkishServicesWithContent: archiveServicesWithContent,
+  dsmartNativeCmsMetas: dsmartMetas.length,
+  dsmartNativeMetaRoute: true,
   recentArchiveServiceStats: Object.fromEntries(archiveServiceStats),
   animeRollingNonEmptyChecks: animeLiveNonEmpty,
   animeArchiveSeries,
