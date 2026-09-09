@@ -29,10 +29,18 @@ test('Turkey collections have requested platforms and global Turkey calendar', (
   assert.deepEqual(collections.at(-2).folders.map(f => f.title), ['Séries', 'Films']);
 });
 
-test('Every Turkey folder uses all 197 predefined periods', () => {
+test('Turkey folders expose their real operational periods', () => {
   const collections = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN);
   for (const collection of collections) {
     for (const folder of collection.folders) {
+      if (collection.title === '🇹🇷 S Sport Plus') {
+        assert.equal(folder.title, 'Sports en direct');
+        assert.equal(folder.sources.length, 3);
+        assert.match(folder.sources[0].catalogId, /-today$/);
+        assert.match(folder.sources[1].catalogId, /-tomorrow$/);
+        assert.match(folder.sources[2].catalogId, /-nextweek$/);
+        continue;
+      }
       assert.equal(folder.sources.length, 197, `${collection.title}/${folder.title}`);
       assert.match(folder.sources[0].catalogId, /-today$/);
       assert.match(folder.sources[1].catalogId, /-tomorrow$/);
@@ -49,7 +57,7 @@ test('Turkey manifest has unique catalog IDs and correct addon identity', () => 
   const manifest = I.buildManifest(ORIGIN, NOW, TZ);
   assert.equal(manifest.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(manifest.language, 'tr');
-  assert.equal(manifest.catalogs.length, 7092);
+  assert.equal(manifest.catalogs.length, 6895);
   const keys = manifest.catalogs.map(c => `${c.type}:${c.id}`);
   assert.equal(new Set(keys).size, keys.length);
 });
@@ -168,4 +176,40 @@ test('Bi Kanal is a series-only TVmaze-authoritative Türkiye collection', () =>
   const collection = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN).find((entry) => entry.title === '🇹🇷 Bi Kanal');
   assert(collection);
   assert.deepEqual(collection.folders.map((folder) => folder.title), ['Séries']);
+});
+
+
+test('S Sport Plus is a live-only collection backed by its official schedule parser', () => {
+  const provider = I.PROVIDERS.find((entry) => entry.slug === 's-sport-plus');
+  assert(provider);
+  assert.equal(provider.seriesOnly, true);
+  assert.equal(provider.liveSports, true);
+  const collection = I.buildNuvioCollectionsImport(NOW, TZ, ORIGIN).find((entry) => entry.title === '🇹🇷 S Sport Plus');
+  assert(collection);
+  assert.deepEqual(collection.folders.map((folder) => folder.title), ['Sports en direct']);
+  assert.deepEqual(
+    collection.folders[0].sources.map((source) => source.catalogId.split('-').at(-1)),
+    ['today', 'tomorrow', 'nextweek']
+  );
+
+  const fixture = `
+    <section>
+      <h2>Gelecek Canlı Yayınlar</h2>
+      <h5>FIBA Basketball Women`s World Cup / Porto Riko - Çin / Çeyrek Final Elemeleri</h5>
+      <div>9 Eylül Çarşamba 18:45</div>
+      <h5>Roshn Saudi League 6. Hafta / Al Nassr - Abha</h5>
+      <div>9 Eylül Çarşamba 21:00</div>
+      <h5>NFL Kickoff Game / New England Patriots - Seattle Seahawks</h5>
+      <div>10 Eylül Perşembe 03:20</div>
+      <h2>Neden S Sport Plus?</h2>
+    </section>
+  `;
+  const events = I.parseSSportUpcomingHtml(fixture, new Date('2026-09-09T10:00:00Z'), TZ);
+  assert.equal(events.length, 3);
+  assert.deepEqual(events.map((event) => [event.calendarDate, event.time]), [
+    ['2026-09-09', '18:45'],
+    ['2026-09-09', '21:00'],
+    ['2026-09-10', '03:20']
+  ]);
+  assert.match(events[0].title, /Porto Riko/);
 });
