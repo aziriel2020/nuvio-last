@@ -8,7 +8,8 @@ const suites = [
   { name: 'France engine', cwd: path.join(root, 'regions', 'fr'), args: ['--test'] },
   { name: 'Türkiye engine', cwd: path.join(root, 'regions', 'tr'), args: ['--test'] },
   { name: 'Global VOD engine', cwd: path.join(root, 'regions', 'global'), args: ['--test'] },
-  { name: 'Coexistence wrapper', cwd: root, args: ['--test', 'test/coexist.test.js'] }
+  { name: 'Coexistence wrapper', cwd: root, args: ['--test', 'test/coexist.test.js'] },
+  { name: 'Production audit helpers', cwd: root, args: ['--test', 'test/audit.test.mjs'] }
 ];
 
 for (const suite of suites) {
@@ -16,4 +17,4 @@ for (const suite of suites) {
   const result = spawnSync(process.execPath, suite.args, { cwd: suite.cwd, stdio: 'inherit', env: process.env });
   if (result.status !== 0) process.exit(result.status || 1);
 }
-console.log('\nAll France + Türkiye + Global VOD + USA coexistence suites passed.');
+console.log('\nAll France + Türkiye + Global VOD + USA coexistence + audit suites passed.');
