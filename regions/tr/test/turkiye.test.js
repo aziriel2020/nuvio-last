@@ -49,7 +49,7 @@ test('Turkey manifest has unique catalog IDs and correct addon identity', () => 
   const manifest = I.buildManifest(ORIGIN, NOW, TZ);
   assert.equal(manifest.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(manifest.language, 'tr');
-  assert.equal(manifest.catalogs.length, 6895);
+  assert.equal(manifest.catalogs.length, 7092);
   const keys = manifest.catalogs.map(c => `${c.type}:${c.id}`);
   assert.equal(new Set(keys).size, keys.length);
 });
