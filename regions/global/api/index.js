@@ -54,7 +54,7 @@ const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-rev
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
 const SOURCE_VERSION = 'calendar-archives-global-v1.3.1-modern-shield';
-const VISUAL_REV = 'coex-global131-cinematic-anime2';
+const VISUAL_REV = 'coex-global131-cinematic-anime-standard3';
 
 const REGION_ART_KEY = 'global';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/global');
@@ -1232,17 +1232,22 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
       ? desktopContentCardUrl(origin, meta, catalog, wideSource)
       : null;
 
+    const cinematicCard = animeCinematic
+      ? (desktopPoster || widePoster || portraitPoster || originalPoster)
+      : null;
+
     const copy = {
       ...meta,
-      poster: portraitPoster || originalPoster,
-      posterShape: homeVisible ? 'landscape' : (meta?.posterShape || 'poster'),
-      landscapePoster: widePoster,
-      // Anime Japon + Corée always keeps the approved Desktop Shield cinematic
-      // banner, including month/archive rows, so it never falls back to raw art.
+      // The regular/non-Desktop collection now receives the exact same approved
+      // 16:9 Shield card for JP/KR Anime instead of a raw portrait poster.
+      poster: animeCinematic ? cinematicCard : (portraitPoster || originalPoster),
+      posterShape: (homeVisible || animeCinematic) ? 'landscape' : (meta?.posterShape || 'poster'),
+      landscapePoster: animeCinematic ? cinematicCard : widePoster,
+      // Anime Japon + Corée always keeps the approved Shield cinematic banner,
+      // including month/archive rows, so it never falls back to raw art.
       banner: (homeVisible || animeCinematic) ? (desktopPoster || originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
-      // Critical Modern View targeting: when landscape-card style is active,
-      // Nuvio reads/freeze-selects the backdrop. Feed it the Calendar card here.
-      background: homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground,
+      // Standard + Desktop Anime rows must agree on the same cinematic card.
+      background: animeCinematic ? cinematicCard : (homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground),
       // Modern Home draws a logo/title overlay on landscape cards. A valid but
       // transparent logo freezes that overlay slot so our card artwork remains
       // the single source of truth. Detail metadata later restores the real logo.
