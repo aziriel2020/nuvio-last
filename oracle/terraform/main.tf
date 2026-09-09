@@ -96,10 +96,10 @@ resource "oci_core_subnet" "nuvio" {
 }
 
 resource "oci_core_instance" "nuvio" {
-  compartment_id      = var.compartment_ocid
-  availability_domain = element(data.oci_identity_availability_domains.ads.availability_domains[*].name, var.availability_domain_index)
-  display_name        = var.instance_name
-  shape               = "VM.Standard.A1.Flex"
+  compartment_id       = var.compartment_ocid
+  availability_domain  = element(data.oci_identity_availability_domains.ads.availability_domains[*].name, var.availability_domain_index)
+  display_name         = var.instance_name
+  shape                = "VM.Standard.A1.Flex"
   preserve_boot_volume = false
 
   shape_config {
