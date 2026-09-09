@@ -10,7 +10,9 @@ on:
       ssh_ingress_cidr:
         description: CIDR allowed to SSH (0.0.0.0/0 = anywhere with key)
         required: true
-        default: "0.0.0.0/0"permissions:
+        default: "0.0.0.0/0"
+
+permissions:
   contents: read
 
 concurrency:
