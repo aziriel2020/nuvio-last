@@ -477,14 +477,18 @@ function baseMeta(details, type, releaseDate, releaseInfo) {
     ? details?.runtime
     : Array.isArray(details?.episode_run_time) ? details.episode_run_time.find(Boolean) : null;
 
+  const posterArtwork = image(details?.poster_path, 'w500') || image(details?.backdrop_path, 'w500');
+  const backgroundArtwork = image(details?.backdrop_path, 'w1280') || image(details?.poster_path, 'w780') || posterArtwork;
+  const landscapeArtwork = image(details?.backdrop_path, 'w780') || image(details?.poster_path, 'w780') || posterArtwork;
+
   return {
     id: imdbId || tmdbFallbackId(type, tmdbId),
     type,
     name: (isMovie ? details?.title : details?.name) || 'Sans titre',
-    poster: image(details?.poster_path, 'w500'),
+    poster: posterArtwork,
     posterShape: 'poster',
-    background: image(details?.backdrop_path, 'w1280') || image(details?.poster_path, 'w780'),
-    landscapePoster: image(details?.backdrop_path, 'w780'),
+    background: backgroundArtwork,
+    landscapePoster: landscapeArtwork,
     description: details?.overview || null,
     releaseInfo,
     released: releaseDate,

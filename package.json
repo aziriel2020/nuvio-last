@@ -8,7 +8,8 @@
     "test": "node scripts/test-all.js",
     "build:cloudflare": "node scripts/build-cloudflare.js",
     "test:cloudflare": "node --test test/cloudflare.test.js",
-    "build:cloudflare-worker": "node scripts/build-cloudflare-worker.js"
+    "build:cloudflare-worker": "node scripts/build-cloudflare-worker.js",
+    "audit:catalogs": "node scripts/audit-production-catalogs.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -14,6 +14,7 @@ on:
       - "cloudflare/**"
       - "scripts/build-cloudflare.js"
       - "scripts/build-cloudflare-worker.js"
+      - "scripts/configure-cloudflare-pages.mjs"
       - "package.json"
       - "wrangler.jsonc"
       - ".github/workflows/deploy-cloudflare.yml"
@@ -97,6 +98,9 @@ jobs:
           }
           console.log('Cloudflare TMDB credential is configured.');
           NODE
+
+      - name: Configure Cloudflare fail-closed runtime
+        run: node scripts/configure-cloudflare-pages.mjs
 
       - name: Deploy Cloudflare-native Nuvio
         id: deploy

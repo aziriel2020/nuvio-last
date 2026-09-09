@@ -1306,8 +1306,9 @@ const CATALOGS = {};
 const EXPLORE_CATALOG_IDS = [];
 
 class MemoryCache {
-  constructor() {
+  constructor(maxEntries = 128) {
     this.map = new Map();
+    this.maxEntries = Math.max(8, Number(maxEntries) || 128);
   }
 
   get(key) {
@@ -1317,11 +1318,24 @@ class MemoryCache {
       this.map.delete(key);
       return null;
     }
+    // Refresh insertion order so the bounded map behaves like a small LRU cache.
+    this.map.delete(key);
+    this.map.set(key, entry);
     return entry.value;
   }
 
   set(key, value, ttlMs) {
-    this.map.set(key, { value, expiresAt: Date.now() + ttlMs });
+    const now = Date.now();
+    for (const [cachedKey, entry] of this.map) {
+      if (entry.expiresAt <= now) this.map.delete(cachedKey);
+    }
+    if (this.map.has(key)) this.map.delete(key);
+    while (this.map.size >= this.maxEntries) {
+      const oldestKey = this.map.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.map.delete(oldestKey);
+    }
+    this.map.set(key, { value, expiresAt: now + ttlMs });
     return value;
   }
 
@@ -1330,12 +1344,12 @@ class MemoryCache {
   }
 }
 
-const catalogCache = new MemoryCache();
-const detailsCache = new MemoryCache();
-const providerCache = new MemoryCache();
-const tvmazeCache = new MemoryCache();
-const anilistCache = new MemoryCache();
-const mappingCache = new MemoryCache();
+const catalogCache = new MemoryCache(64);
+const detailsCache = new MemoryCache(256);
+const providerCache = new MemoryCache(32);
+const tvmazeCache = new MemoryCache(96);
+const anilistCache = new MemoryCache(128);
+const mappingCache = new MemoryCache(256);
 
 function json(res, status, body, cache = 'private, max-age=60') {
   res.statusCode = status;
@@ -1619,6 +1633,7 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   // desktop11 forces a fresh cache key after the Cloudflare-native renderer
   // switched from raw artwork passthrough to the full Calendar overlay.
   url.searchParams.set('v', `${VERSION}-${VISUAL_REV}-desktop11`);
+  url.searchParams.set('design', 'shield3');
   if (source && isAllowedPosterSource(source)) url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
   if (providerSlug) url.searchParams.set('provider', providerSlug);

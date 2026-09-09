@@ -172,6 +172,15 @@ test('Cloudflare worker keeps dynamic data fresh and maps repository artwork loc
   assert.match(cardSvg, /S33E12/);
   assert.match(cardSvg, /NETFLIX/);
   assert.match(cardSvg, /<svg/);
+  assert.match(cardSvg, /data-renderer="shield-desktop-v3"/);
+  assert.match(cardSvg, /desktop-title/);
+  assert.match(cardSvg, /desktop-subtitle/);
+  assert.match(cardSvg, /desktop-provider/);
+
+  const longTitleSvg = worker.desktopContentCardSvg(
+    'https://edge.example/global/desktop-content-card.jpg?title=Bastard!!%20Heavy%20Metal%20Dark%20Fantasy%20The%20Requiem%20of%20Hell&append=S02E15%20%E2%80%A2%20MER%2009%20SEPT%20%E2%80%A2%20NETFLIX&label=Netflix&provider=netflix&type=series'
+  );
+  assert.match(longTitleSvg, /data-title-lines="2"/);
 });
 
 test('Cloudflare native adapter preserves public origin and viewer timezone for the shared engine', () => {
@@ -226,7 +235,41 @@ test('desktop catalog cards always keep the metadata renderer, even without usab
 
   assert.match(meta.banner, /\/fr\/desktop-content-card\.jpg\?/);
   assert.match(meta.banner, /desktop11/);
+  assert.match(meta.banner, /(?:\?|&)design=shield3(?:&|$)/);
   assert.match(meta.banner, /title=The(?:\+|%20)Chosen/);
   assert.match(meta.banner, /append=/);
   assert.match(meta.banner, /label=Netflix/);
+});
+
+test('TMDb artwork fallback keeps catalog/meta posters usable when poster_path is missing', () => {
+  for (const region of ['fr', 'global', 'tr', 'us']) {
+    const calendar = require(`../regions/${region}/src/calendar`);
+    const meta = calendar.baseMeta({
+      id: 777,
+      name: 'Posterless Series',
+      title: 'Posterless Movie',
+      poster_path: null,
+      backdrop_path: '/fallback-backdrop.jpg',
+      external_ids: {},
+      episode_run_time: [24],
+      genres: [],
+      origin_country: ['JP'],
+      production_countries: []
+    }, 'series', '2026-09-09', 'S01E01 • 09 SEPT');
+
+    assert.match(meta.poster, /image\.tmdb\.org\/t\/p\/w500\/fallback-backdrop\.jpg/);
+    assert.match(meta.background, /image\.tmdb\.org\/t\/p\/w1280\/fallback-backdrop\.jpg/);
+    assert.match(meta.landscapePoster, /image\.tmdb\.org\/t\/p\/w780\/fallback-backdrop\.jpg/);
+  }
+});
+
+test('regional in-memory caches are bounded to prevent Cloudflare 1102 exhaustion', () => {
+  const handler = require('../api/index');
+  const MemoryCache = handler._internals.frHandler._internals.MemoryCache;
+  const cache = new MemoryCache(8);
+  for (let i = 0; i < 20; i += 1) cache.set('k' + i, { i }, 60_000);
+  assert.equal(cache.map.size, 8);
+  assert.equal(cache.get('k0'), null);
+  assert.deepEqual(cache.get('k19'), { i: 19 });
+  assert.equal(cache.map.size, 8);
 });
