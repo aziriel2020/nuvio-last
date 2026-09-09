@@ -330,7 +330,21 @@ export async function buildTsuzukiMeta(urlLike, options = {}) {
   const media = payload?.media;
   if (!media) return null;
   const row = mediaScheduleRow(media, options.now || new Date());
-  if (row) return scheduleMeta(row, media, url.origin);
+  if (row) {
+    const meta = scheduleMeta(row, media, url.origin);
+    if (!meta) return null;
+
+    // Detail pages should retain the source artwork. Only catalog cards are
+    // forced through the Shield cinematic renderer.
+    const poster = media?.coverImage?.extraLarge || media?.coverImage?.large || media?.coverImage?.medium || null;
+    const background = media?.bannerImage || poster;
+    meta.poster = poster;
+    meta.posterShape = 'poster';
+    meta.background = background;
+    meta.landscapePoster = background;
+    meta.banner = desktopBanner(url.origin, { ...meta, poster, background, landscapePoster: background });
+    return meta;
+  }
 
   const country = String(media.countryOfOrigin || '').toUpperCase();
   if (media.isAdult || !['JP', 'KR'].includes(country) || String(media.format || '').toUpperCase() === 'MOVIE') return null;
