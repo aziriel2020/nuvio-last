@@ -1,0 +1,92 @@
+name: Oracle Türkiye Anime Verify
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/oracle-turkiye-anime-run"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-turkiye-anime-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Oracle SSH key
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ["ORACLE_SSH_PRIVATE_KEY"].strip()
+          values=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: values.append(json.loads(raw))
+              except Exception: pass
+          expanded=[]
+          for value in values:
+              expanded.append(value)
+              expanded.append(value.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: expanded.append(base64.b64decode(value,validate=True).decode())
+              except Exception: pass
+          target=Path(os.environ["RUNNER_TEMP"]+"/keys/oracle_ssh.pem")
+          for value in expanded:
+              value=value.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  begin="-----BEGIN "+label+"-----"; end="-----END "+label+"-----"
+                  if begin in value and end in value:
+                      body="".join(value.split(begin,1)[1].split(end,1)[0].split())
+                      if body:
+                          target.write_text(begin+"\n"+body+"\n"+end+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("ORACLE_SSH_PRIVATE_KEY")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+
+      - name: Update existing Oracle VM
+        shell: bash
+        env:
+          PUBLIC_IP: "141.145.215.202"
+          PUBLIC_HOST: "141-145-215-202.nip.io"
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 ubuntu@"$PUBLIC_IP" \
+            "sudo PUBLIC_HOST='$PUBLIC_HOST' NUVIO_BRANCH=main bash -s" < oracle/bootstrap.sh
+
+      - name: Verify deployed release SHA
+        shell: bash
+        env:
+          PUBLIC_IP: "141.145.215.202"
+        run: |
+          set -Eeuo pipefail
+          remote_sha="$(
+            ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+              "readlink -f /opt/nuvio/current | xargs basename"
+          )"
+          echo "Oracle release: $remote_sha"
+          test "$remote_sha" = "$GITHUB_SHA"
+
+      - name: Verify Türkiye collections and Anime design
+        shell: bash
+        env:
+          PUBLIC_ORIGIN: "https://141-145-215-202.nip.io"
+          VERIFY_TIMEOUT_MS: "30000"
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-turkiye-anime-production.mjs
