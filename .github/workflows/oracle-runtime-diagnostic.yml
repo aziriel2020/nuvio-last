@@ -66,13 +66,18 @@ jobs:
             sudo journalctl -u nuvio -n 80 --no-pager || true
             exit 1
           }
-          echo
+          REMOTE
+
+      - name: Check public HTTPS from GitHub runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ORIGIN="https://141-145-215-202.sslip.io"
           echo "PUBLIC_HEALTH:"
-          curl -fsS --max-time 15 https://141-145-215-202.sslip.io/_oracle/health
+          curl -fsS --retry 5 --retry-delay 2 --max-time 20 "$ORIGIN/_oracle/health"
           echo
           for p in /fr/manifest.json /global/manifest.json /tr/manifest.json /us/manifest.json /nuvio-collections-desktop.json /nuvio-collections-fr-global-tr-usa.json; do
-            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://141-145-215-202.sslip.io$p")"
+            code="$(curl -sS --retry 3 --retry-delay 2 --max-time 20 -o /dev/null -w '%{http_code}' "$ORIGIN$p")"
             echo "$p $code"
             [[ "$code" == "200" ]]
           done
-          REMOTE
