@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: oracle-nuvio-production
@@ -43,6 +44,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Restore Terraform state for existing Oracle VM
+        uses: actions/download-artifact@v4
+        with:
+          name: oracle-nuvio-provision-34347339416
+          path: ${{ runner.temp }}/oracle-state-restore
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34347339416
+
+      - name: Install restored Terraform state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          state_file="$(find "$RUNNER_TEMP/oracle-state-restore" -type f -name terraform.tfstate -print -quit)"
+          if [[ -z "$state_file" ]]; then
+            echo "::error::RESTORE_TERRAFORM_STATE"
+            exit 1
+          fi
+          cp "$state_file" oracle/terraform/terraform.tfstate
 
       - name: Validate required secrets
         shell: bash
