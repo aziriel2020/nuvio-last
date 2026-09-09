@@ -1,0 +1,25 @@
+name: Audit Production Catalogs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    env:
+      PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
+      AUDIT_STRICT: "0"
+      AUDIT_CONCURRENCY: "8"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/audit-production-catalogs.mjs
