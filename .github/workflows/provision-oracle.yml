@@ -1,0 +1,244 @@
+name: Provision Oracle Nuvio Free
+
+on:
+  workflow_dispatch:
+    inputs:
+      availability_domains:
+        description: Availability Domain indexes to try in order
+        required: true
+        default: "0,1,2"
+      ssh_ingress_cidr:
+        description: CIDR allowed to SSH (0.0.0.0/0 = anywhere with key)
+        required: true
+        default: "0.0.0.0/0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-nuvio-production
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+      TF_VAR_region: ${{ secrets.OCI_REGION }}
+      TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+      TF_VAR_ssh_public_key: ${{ secrets.ORACLE_SSH_PUBLIC_KEY }}
+      TF_VAR_ssh_ingress_cidr: ${{ inputs.ssh_ingress_cidr }}
+      TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          required=(
+            TF_VAR_tenancy_ocid TF_VAR_user_ocid TF_VAR_fingerprint
+            TF_VAR_region TF_VAR_compartment_ocid TF_VAR_ssh_public_key
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub secret backing $name"
+              exit 1
+            fi
+          done
+          if [[ -z "${TMDB_READ_TOKEN:-}" && -z "${TMDB_API_KEY:-}" ]]; then
+            echo "::error::Add TMDB_READ_TOKEN or TMDB_API_KEY as a GitHub secret before provisioning."
+            exit 1
+          fi
+          if [[ -z "${{ secrets.OCI_PRIVATE_KEY }}" ]]; then
+            echo "::error::Missing OCI_PRIVATE_KEY GitHub secret"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" ]]; then
+            echo "::error::Missing ORACLE_SSH_PRIVATE_KEY GitHub secret"
+            exit 1
+          fi
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+
+      - name: Install Oracle API and SSH keys
+        shell: bash
+        env:
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          printf '%s\n' "$OCI_PRIVATE_KEY" > "$RUNNER_TEMP/keys/oci_api_key.pem"
+          printf '%s\n' "$ORACLE_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          chmod 600 "$RUNNER_TEMP/keys/"*.pem
+          echo "TF_VAR_private_key_path=$RUNNER_TEMP/keys/oci_api_key.pem" >> "$GITHUB_ENV"
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+
+      - name: Terraform init and validate
+        working-directory: oracle/terraform
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          terraform init
+          terraform validate
+
+      - name: Provision only the guarded Always Free profile
+        id: provision
+        working-directory: oracle/terraform
+        shell: bash
+        env:
+          AD_INDEXES: ${{ inputs.availability_domains }}
+        run: |
+          set -Eeuo pipefail
+          success=0
+          IFS=',' read -ra indexes <<< "$AD_INDEXES"
+          for raw in "${indexes[@]}"; do
+            index="$(echo "$raw" | xargs)"
+            [[ "$index" =~ ^[0-9]+$ ]] || continue
+            echo "Trying Oracle Availability Domain index $index"
+            export TF_VAR_availability_domain_index="$index"
+
+            if ! terraform plan -out=tfplan; then
+              echo "::warning::Terraform plan failed for AD index $index"
+              continue
+            fi
+            terraform show -json tfplan > tfplan.json
+            node ../verify-free-plan.mjs tfplan.json
+
+            if terraform apply -auto-approve tfplan; then
+              success=1
+              echo "availability_domain_index=$index" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            echo "::warning::Oracle capacity/apply failed for AD index $index; trying the next configured AD."
+          done
+
+          if [[ "$success" != "1" ]]; then
+            echo "::error::No configured Oracle Availability Domain could provision the guarded A1 Always Free VM."
+            exit 1
+          fi
+
+          public_ip="$(terraform output -raw public_ip)"
+          public_host="$(terraform output -raw public_host)"
+          public_origin="$(terraform output -raw public_origin)"
+          echo "public_ip=$public_ip" >> "$GITHUB_OUTPUT"
+          echo "public_host=$public_host" >> "$GITHUB_OUTPUT"
+          echo "public_origin=$public_origin" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Oracle SSH
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.provision.outputs.public_ip }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          for attempt in {1..60}; do
+            if ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 ubuntu@"$PUBLIC_IP" 'echo oracle-ready' >/dev/null 2>&1; then
+              echo "Oracle VM SSH is ready."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Oracle VM did not become reachable over SSH."
+          exit 1
+
+      - name: Install Nuvio secrets on Oracle
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.provision.outputs.public_ip }}
+          PUBLIC_HOST: ${{ steps.provision.outputs.public_host }}
+        run: |
+          set -Eeuo pipefail
+          {
+            printf 'PUBLIC_HOST=%s\n' "$PUBLIC_HOST"
+            printf 'PUBLIC_ORIGIN=https://%s\n' "$PUBLIC_HOST"
+            printf 'NUVIO_TIMEZONE=Europe/Brussels\n'
+            printf 'NUVIO_REPO_URL=https://github.com/aziriel2020/nuvio-last.git\n'
+            printf 'NUVIO_BRANCH=main\n'
+            if [[ -n "${TMDB_READ_TOKEN:-}" ]]; then printf 'TMDB_READ_TOKEN=%s\n' "$TMDB_READ_TOKEN"; fi
+            if [[ -n "${TMDB_API_KEY:-}" ]]; then printf 'TMDB_API_KEY=%s\n' "$TMDB_API_KEY"; fi
+          } | ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP"               'sudo install -d -m 700 /etc/nuvio && sudo tee /etc/nuvio/nuvio.env >/dev/null && sudo chmod 600 /etc/nuvio/nuvio.env'
+
+      - name: Bootstrap Nuvio on Oracle
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.provision.outputs.public_ip }}
+          PUBLIC_HOST: ${{ steps.provision.outputs.public_host }}
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP"             "sudo PUBLIC_HOST='$PUBLIC_HOST' NUVIO_BRANCH=main bash -s" < oracle/bootstrap.sh
+
+      - name: Preserve Terraform state on the VM
+        working-directory: oracle/terraform
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.provision.outputs.public_ip }}
+        run: |
+          set -Eeuo pipefail
+          scp -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new terraform.tfstate ubuntu@"$PUBLIC_IP":/tmp/nuvio-terraform.tfstate
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP"             'sudo mv /tmp/nuvio-terraform.tfstate /etc/nuvio/terraform.tfstate && sudo chmod 600 /etc/nuvio/terraform.tfstate'
+
+      - name: Verify live Oracle production
+        shell: bash
+        env:
+          PUBLIC_ORIGIN: ${{ steps.provision.outputs.public_origin }}
+          AUDIT_RUNTIME: oracle-vm
+          AUDIT_MODE: safe
+          AUDIT_STRICT: "1"
+          AUDIT_CONCURRENCY: "2"
+          AUDIT_ATTEMPTS: "3"
+          AUDIT_REQUEST_BUDGET: "3000"
+          AUDIT_DESKTOP_CARDS: "12"
+          AUDIT_REPORT: reports/oracle-production-audit.json
+        run: |
+          set -Eeuo pipefail
+          curl -fsS --retry 20 --retry-delay 3 "$PUBLIC_ORIGIN/_oracle/health" | jq .
+          node scripts/audit-production-catalogs.mjs
+
+      - name: Publish Oracle endpoint summary
+        shell: bash
+        env:
+          PUBLIC_IP: ${{ steps.provision.outputs.public_ip }}
+          PUBLIC_HOST: ${{ steps.provision.outputs.public_host }}
+          PUBLIC_ORIGIN: ${{ steps.provision.outputs.public_origin }}
+        run: |
+          {
+            echo "## Nuvio Oracle production"
+            echo
+            echo "- Runtime: Oracle VM.Standard.A1.Flex"
+            echo "- Guarded resources: 2 OCPU / 12 GB RAM / 100 GB boot volume"
+            echo "- Public IP: `$PUBLIC_IP`"
+            echo "- Public origin: $PUBLIC_ORIGIN"
+            echo "- France: $PUBLIC_ORIGIN/fr/manifest.json"
+            echo "- Global: $PUBLIC_ORIGIN/global/manifest.json"
+            echo "- Türkiye: $PUBLIC_ORIGIN/tr/manifest.json"
+            echo "- USA: $PUBLIC_ORIGIN/us/manifest.json"
+            echo "- Desktop collections: $PUBLIC_ORIGIN/nuvio-collections-desktop.json"
+            echo "- Combined collections: $PUBLIC_ORIGIN/nuvio-collections-fr-global-tr-usa.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload guarded Terraform state and production audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-nuvio-provision-${{ github.run_id }}
+          path: |
+            oracle/terraform/terraform.tfstate
+            oracle/terraform/tfplan.json
+            reports/oracle-production-audit.json
+          if-no-files-found: warn
+          retention-days: 90
