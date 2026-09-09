@@ -4,12 +4,16 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
+  workflow_run:
+    workflows: ["Deploy Cloudflare Pages"]
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   audit:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     continue-on-error: true
