@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import http from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,7 @@ const CACHE_DIR = process.env.NUVIO_CACHE_DIR || '/var/cache/nuvio';
 const CACHE_MAX_ENTRIES = Math.max(128, Number(process.env.NUVIO_CACHE_MAX_ENTRIES || 2048));
 const DEFAULT_TIMEZONE = process.env.NUVIO_TIMEZONE || 'Europe/Brussels';
 const MAX_RESPONSE_BYTES = Math.max(1024 * 1024, Number(process.env.NUVIO_MAX_RESPONSE_BYTES || 24 * 1024 * 1024));
+const CACHE_NAMESPACE = String(process.env.NUVIO_GIT_SHA || process.env.NUVIO_CACHE_NAMESPACE || 'unversioned').trim() || 'unversioned';
 
 function sha(value) {
   return createHash('sha256').update(String(value)).digest('hex');
@@ -34,11 +35,12 @@ class FileCache {
     this.maxEntries = maxEntries;
     this.puts = 0;
     this.lastPrune = 0;
+    this.writes = new Map();
   }
 
   key(input) {
     const url = typeof input === 'string' ? input : input?.url || String(input);
-    return sha(url);
+    return sha(CACHE_NAMESPACE + '\n' + url);
   }
 
   paths(input) {
@@ -76,27 +78,48 @@ class FileCache {
 
   async put(input, response) {
     if (!response?.ok) return;
+
+    // Serialize writes per cache key. Multiple simultaneous Nuvio requests can
+    // render the same card/catalog in the same millisecond; without this guard
+    // concurrent temp-file renames can race and leave a partial cache entry.
+    const key = this.key(input);
+    const stored = response.clone();
+    const previous = this.writes.get(key) || Promise.resolve();
+    const task = previous
+      .catch(() => {})
+      .then(() => this.writeEntry(input, stored));
+    this.writes.set(key, task);
+    try {
+      await task;
+    } finally {
+      if (this.writes.get(key) === task) this.writes.delete(key);
+    }
+  }
+
+  async writeEntry(input, response) {
     try {
       await this.ensure();
-      const clone = response.clone();
-      const bytes = Buffer.from(await clone.arrayBuffer());
+      const bytes = Buffer.from(await response.arrayBuffer());
       if (!bytes.length || bytes.length > MAX_RESPONSE_BYTES) return;
 
-      const ttl = cacheMaxAge(clone.headers);
+      const ttl = cacheMaxAge(response.headers);
       const files = this.paths(input);
       const meta = {
-        status: clone.status,
-        statusText: clone.statusText,
-        headers: Object.fromEntries(clone.headers.entries()),
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
         expiresAt: Date.now() + ttl * 1000,
         createdAt: Date.now(),
-        bytes: bytes.length
+        bytes: bytes.length,
+        namespace: CACHE_NAMESPACE
       };
-      const suffix = '.tmp-' + process.pid + '-' + Date.now();
-      await fs.writeFile(files.body + suffix, bytes);
-      await fs.writeFile(files.meta + suffix, JSON.stringify(meta));
-      await fs.rename(files.body + suffix, files.body);
-      await fs.rename(files.meta + suffix, files.meta);
+      const suffix = '.tmp-' + process.pid + '-' + Date.now() + '-' + randomUUID();
+      const bodyTmp = files.body + suffix;
+      const metaTmp = files.meta + suffix;
+      await fs.writeFile(bodyTmp, bytes);
+      await fs.writeFile(metaTmp, JSON.stringify(meta));
+      await fs.rename(bodyTmp, files.body);
+      await fs.rename(metaTmp, files.meta);
 
       this.puts += 1;
       if (this.puts % 64 === 0 || Date.now() - this.lastPrune > 10 * 60 * 1000) {
@@ -222,7 +245,7 @@ async function oracleHealth() {
     uptimeSeconds: Math.floor(process.uptime()),
     gitSha: process.env.NUVIO_GIT_SHA || null,
     publicOrigin: process.env.PUBLIC_ORIGIN || null,
-    cache: { dir: CACHE_DIR, maxEntries: CACHE_MAX_ENTRIES },
+    cache: { dir: CACHE_DIR, maxEntries: CACHE_MAX_ENTRIES, namespace: CACHE_NAMESPACE },
     memory: {
       rssMb: Math.round(memory.rss / 1024 / 1024),
       heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
