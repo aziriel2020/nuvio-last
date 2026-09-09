@@ -2,6 +2,11 @@ name: Oracle Türkiye Anime Verify
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/oracle-turkiye-anime-run"
 
 permissions:
   contents: read
