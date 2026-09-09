@@ -409,21 +409,24 @@ jobs:
 
           # Build likely filenames from the exact runtime expression by finding
           # hash strings paired to IDs and testing standard webpack shapes.
-          urls=[]
+          # Runtime is explicit: n.u=t=>(353===t?"reactPlayerPreview":t)+".js".
+          # Therefore the lazy application chunks are /761.js and /169.js.
+          urls=[
+              'https://www.dsmartgo.com.tr/761.js',
+              'https://www.dsmartgo.com.tr/169.js'
+          ]
           for cid in ('761','169'):
               vals=candidates.get(cid,[])
               for val in vals:
-                  guesses=[
+                  for g in [
                     f'{cid}.{val}.js',
                     f'{cid}.{val}.chunk.js',
                     f'static/js/{cid}.{val}.js',
                     f'static/js/{cid}.{val}.chunk.js',
-                  ]
-                  for g in guesses:
+                  ]:
                       url='https://www.dsmartgo.com.tr/'+g
                       if url not in urls: urls.append(url)
 
-          # Also parse direct concatenation patterns from n.u.
           print('CHUNK_URL_GUESSES',[safe(x) for x in urls])
           found=[]
           for idx,url in enumerate(urls):
