@@ -79,8 +79,8 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Advanced Pages mode: every request enters this Worker. Static build
-    // artifacts are deliberately handed to the Pages ASSETS binding here;
+    // Advanced Pages mode: every request enters this Worker (Worker-first v2).
+    // Static build artifacts are deliberately handed to the Pages ASSETS binding here;
     // all runtime routes stay inside Nuvio's Cloudflare worker.
     if (['GET', 'HEAD'].includes(request.method) && isStaticPagesAsset(url.pathname)) {
       return staticPagesAsset(request, env);
