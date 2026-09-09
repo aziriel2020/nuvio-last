@@ -100,16 +100,22 @@ systemctl enable --now nuvio-firewall.service
 systemctl enable caddy
 systemctl restart caddy
 
-if [[ ! -f /etc/nuvio/nuvio.env ]]; then
-  cat >/etc/nuvio/nuvio.env <<EOF
+touch /etc/nuvio/nuvio.env
+sed -i \
+  -e '/^PUBLIC_HOST=/d' \
+  -e '/^PUBLIC_ORIGIN=/d' \
+  -e '/^NUVIO_TIMEZONE=/d' \
+  -e '/^NUVIO_REPO_URL=/d' \
+  -e '/^NUVIO_BRANCH=/d' \
+  /etc/nuvio/nuvio.env
+cat >>/etc/nuvio/nuvio.env <<EOF
 PUBLIC_HOST=$PUBLIC_HOST
 PUBLIC_ORIGIN=https://$PUBLIC_HOST
 NUVIO_TIMEZONE=Europe/Brussels
 NUVIO_REPO_URL=$REPO_URL
 NUVIO_BRANCH=$BRANCH
 EOF
-  chmod 600 /etc/nuvio/nuvio.env
-fi
+chmod 600 /etc/nuvio/nuvio.env
 
 /opt/nuvio/current/oracle/update.sh
 systemctl enable --now nuvio-update.timer
