@@ -105,13 +105,15 @@ jobs:
       - name: Verify public production endpoints
         shell: bash
         env:
+          PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
+          PUBLIC_HOST: ${{ steps.endpoint.outputs.host }}
           PUBLIC_ORIGIN: ${{ steps.endpoint.outputs.origin }}
         run: |
           set -Eeuo pipefail
           check_json() {
             local path="$1"
             echo "Checking $path"
-            body="$(curl -fsS --retry 8 --retry-delay 2 --connect-timeout 10 --max-time 25 "$PUBLIC_ORIGIN$path")"
+            body="$(curl -fsS --resolve "$PUBLIC_HOST:443:$PUBLIC_IP" --retry 3 --retry-delay 1 --connect-timeout 5 --max-time 15 "$PUBLIC_ORIGIN$path")"
             printf '%s' "$body" | jq -e . >/dev/null
           }
           check_json /_oracle/health
@@ -122,22 +124,20 @@ jobs:
           check_json /nuvio-collections-desktop.json
           check_json /nuvio-collections-fr-global-tr-usa.json
 
-      - name: Targeted production audit
+      - name: Production audit on Oracle VM
         shell: bash
         env:
+          PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
+          PUBLIC_HOST: ${{ steps.endpoint.outputs.host }}
           PUBLIC_ORIGIN: ${{ steps.endpoint.outputs.origin }}
-          AUDIT_RUNTIME: oracle-vm
-          AUDIT_MODE: safe
-          AUDIT_STRICT: "1"
-          AUDIT_CONCURRENCY: "4"
-          AUDIT_ATTEMPTS: "2"
-          AUDIT_TIMEOUT_MS: "10000"
-          AUDIT_REQUEST_BUDGET: "1200"
-          AUDIT_DESKTOP_CARDS: "8"
-          AUDIT_REPORT: reports/oracle-resume-audit.json
         run: |
           set -Eeuo pipefail
-          node scripts/audit-production-catalogs.mjs
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+            "sudo sh -c 'grep -q " $PUBLIC_HOST$" /etc/hosts || echo "127.0.0.1 $PUBLIC_HOST" >> /etc/hosts'"
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+            "cd /opt/nuvio/current && PUBLIC_ORIGIN='$PUBLIC_ORIGIN' AUDIT_RUNTIME=oracle-vm AUDIT_MODE=safe AUDIT_STRICT=1 AUDIT_CONCURRENCY=4 AUDIT_ATTEMPTS=2 AUDIT_TIMEOUT_MS=8000 AUDIT_REQUEST_BUDGET=1200 AUDIT_DESKTOP_CARDS=8 AUDIT_REPORT=/tmp/oracle-resume-audit.json node scripts/audit-production-catalogs.mjs"
+          mkdir -p reports
+          scp -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP":/tmp/oracle-resume-audit.json reports/oracle-resume-audit.json
 
       - name: Summary
         if: always()
