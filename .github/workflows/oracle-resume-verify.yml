@@ -97,10 +97,11 @@ jobs:
         shell: bash
         env:
           PUBLIC_IP: ${{ steps.endpoint.outputs.ip }}
+          PUBLIC_HOST: ${{ steps.endpoint.outputs.host }}
         run: |
           set -Eeuo pipefail
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
-            'set -Eeuo pipefail; systemctl is-active --quiet nuvio; systemctl is-active --quiet caddy; curl -fsS --max-time 10 http://127.0.0.1:3000/_oracle/health | jq .'
+            "set -Eeuo pipefail; systemctl is-active --quiet nuvio; systemctl is-active --quiet caddy; curl -fsS --max-time 10 http://127.0.0.1:3000/_oracle/health | jq -e --arg origin 'https://$PUBLIC_HOST' '.ok == true and .runtime == \"oracle-vm\" and .publicOrigin == \\$origin'"
 
       - name: Ensure Caddy TLS certificate is ready
         shell: bash
@@ -223,6 +224,20 @@ jobs:
           echo "combined-bytes=$combined_bytes" | tee -a "$report"
           echo "catalogs-tested=$catalogs_tested" | tee -a "$report"
           echo "anime-candidates=$anime_total" | tee -a "$report"
+
+          bad_desktop_origins="$(
+            printf '%s' "$desktop" |
+            jq -r --arg origin "$PUBLIC_ORIGIN" '.. | strings | select(contains("/desktop-content-card.jpg")) | select(startswith($origin) | not)' |
+            head -5
+          )"
+          [[ -z "$bad_desktop_origins" ]] || {
+            echo "::error::Desktop card URLs are not using the active Oracle origin"
+            printf '%s\n' "$bad_desktop_origins" >&2
+            exit 1
+          }
+
+          health="$(curl_json "/_oracle/health")"
+          printf '%s' "$health" | jq -e --arg origin "$PUBLIC_ORIGIN" '.ok == true and .runtime == "oracle-vm" and .publicOrigin == $origin' >/dev/null
 
           [[ "$desktop_bytes" -gt 100 ]] || { echo "::error::Desktop collections unexpectedly empty"; exit 1; }
           [[ "$combined_bytes" -gt 100 ]] || { echo "::error::Combined collections unexpectedly empty"; exit 1; }
