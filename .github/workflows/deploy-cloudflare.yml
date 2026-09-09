@@ -166,10 +166,32 @@ jobs:
             for (const path of checks) {
               const response = await retry(path);
               if (path === '/nuvio-collections-fr-global-tr-usa.json') {
-                const data = await response.json();
-                if (!Array.isArray(data) || data.length !== 48) throw new Error('Unexpected collection count');
+                let data = await response.json();
+
+                // Pages can briefly serve the previous static deployment from an
+                // edge cache immediately after wrangler reports success.
+                for (let propagationAttempt = 1; (!Array.isArray(data) || data.length !== 48) && propagationAttempt <= 12; propagationAttempt++) {
+                  console.log(`Waiting for static collection propagation: got ${Array.isArray(data) ? data.length : 'invalid'}, expected 48 (${propagationAttempt}/12)`);
+                  await new Promise((resolve) => setTimeout(resolve, 2500));
+                  const bust = `?deploy_verify=${Date.now()}-${propagationAttempt}`;
+                  const fresh = await retry(path + bust, 3);
+                  data = await fresh.json();
+                }
+
+                if (!Array.isArray(data) || data.length !== 48) {
+                  throw new Error(`Unexpected collection count after propagation wait: ${Array.isArray(data) ? data.length : 'invalid'}`);
+                }
                 const text = JSON.stringify(data);
                 if (/vercel\.app/i.test(text)) throw new Error('Collections still reference Vercel');
+              } else if (path === '/nuvio-collections-desktop.json') {
+                let data = await response.json();
+                if (!Array.isArray(data) || data.length !== 48) {
+                  const fresh = await retry(path + `?deploy_verify=${Date.now()}`, 4);
+                  data = await fresh.json();
+                }
+                if (!Array.isArray(data) || data.length !== 48) {
+                  throw new Error(`Unexpected Desktop collection count: ${Array.isArray(data) ? data.length : 'invalid'}`);
+                }
               } else {
                 await response.arrayBuffer();
               }
