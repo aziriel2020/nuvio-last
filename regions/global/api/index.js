@@ -54,7 +54,7 @@ const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-rev
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
 const SOURCE_VERSION = 'calendar-archives-global-v1.3.1-modern-shield';
-const VISUAL_REV = 'coex-global131-cinematic';
+const VISUAL_REV = 'coex-global131-cinematic-anime2';
 
 const REGION_ART_KEY = 'global';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/global');
@@ -1227,7 +1227,8 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
     const widePoster = getConfig().calendarCards && wideSource
       ? (calendarCardUrl(origin, meta, catalog, timeZone, 'landscape', wideSource) || wideSource)
       : (meta?.landscapePoster || wideSource);
-    const desktopPoster = homeVisible
+    const animeCinematic = String(catalog?.providerSlug || catalog?.archiveProvider || '').toLowerCase() === 'anime-asia';
+    const desktopPoster = (homeVisible || animeCinematic)
       ? desktopContentCardUrl(origin, meta, catalog, wideSource)
       : null;
 
@@ -1236,9 +1237,9 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
       poster: portraitPoster || originalPoster,
       posterShape: homeVisible ? 'landscape' : (meta?.posterShape || 'poster'),
       landscapePoster: widePoster,
-      // NuvioDesktop landscape cards prefer `banner`. Mirror the exact same
-      // approved 16:9 cinematic card there; the Shield renderer stays unchanged.
-      banner: homeVisible ? (desktopPoster || originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
+      // Anime Japon + Corée always keeps the approved Desktop Shield cinematic
+      // banner, including month/archive rows, so it never falls back to raw art.
+      banner: (homeVisible || animeCinematic) ? (desktopPoster || originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
       // Critical Modern View targeting: when landscape-card style is active,
       // Nuvio reads/freeze-selects the backdrop. Feed it the Calendar card here.
       background: homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground,
