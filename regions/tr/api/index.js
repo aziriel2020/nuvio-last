@@ -54,7 +54,7 @@ const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-rev
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
 const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield';
-const VISUAL_REV = 'coex-tr140-cinematic';
+const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/tr');
@@ -67,11 +67,18 @@ function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   try { const data = fs.readFileSync(absolutePath); const uri = `data:${mime};base64,${data.toString('base64')}`; LOCAL_VISUAL_DATA_CACHE.set(key, uri); return uri; }
   catch (_) { LOCAL_VISUAL_DATA_CACHE.set(key, null); return null; }
 }
-function platformPhotoDataUri(providerSlug, variant = 'card') { return localVisualDataUri(path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`)); }
+function platformArtPath(providerSlug, variant = 'card') {
+  const file = `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`;
+  if (providerSlug === 'crunchyroll') {
+    return path.resolve(__dirname, '../../../assets/platform-art/global', `anime-asia-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`);
+  }
+  return path.join(PLATFORM_ART_DIR, file);
+}
+function platformPhotoDataUri(providerSlug, variant = 'card') { return localVisualDataUri(platformArtPath(providerSlug, variant)); }
 function servePlatformArtJpeg(res, url, variant = 'card') {
   const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
   if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
-  return serveLocalJpeg(res, path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`));
+  return serveLocalJpeg(res, platformArtPath(providerSlug, variant));
 }
 function genreCinematicDataUri(genreSlug, variant='card') { const v=variant==='backdrop'?'backdrop':'card'; return localVisualDataUri(path.join(GENRE_CINEMATIC_ART_DIR, `${String(genreSlug || '').trim().toLowerCase()}-${v}.jpg`)); }
 function serveGenreCinematicJpeg(res, url, variant = 'card') {
@@ -249,7 +256,7 @@ async function handleDesktopFolderCard(res, url) {
   const type = normalizedDesktopType(url.searchParams.get('type'));
   if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
   try {
-    const source = fs.readFileSync(path.join(PLATFORM_ART_DIR, `${providerSlug}-card.jpg`));
+    const source = fs.readFileSync(platformArtPath(providerSlug, 'card'));
     const asset = await platformLogoAsset(providerSlug, type);
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
     const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
@@ -439,7 +446,7 @@ const PROVIDERS = [
   { slug: 'netflix', label: 'Netflix', aliases: ['Netflix', 'Netflix Standard with Ads'], monetizationTypes: ['flatrate'] },
   { slug: 'prime-video', label: 'Prime Video', aliases: ['Amazon Prime Video', 'Prime Video', 'Amazon Prime Video with Ads'], monetizationTypes: ['flatrate'] },
   { slug: 'disney-plus', label: 'Disney+', aliases: ['Disney Plus', 'Disney+'], monetizationTypes: ['flatrate'] },
-  { slug: 'max', label: 'Max', aliases: ['Max', 'HBO Max'], matchPrefixes: ['max', 'hbo max'], monetizationTypes: ['flatrate'] },
+  { slug: 'max', label: 'Max', aliases: ['Max', 'HBO Max', 'BluTV', 'Blu TV'], matchPrefixes: ['max', 'hbo max', 'blutv', 'blu tv'], monetizationTypes: ['flatrate'] },
   { slug: 'apple-tv-plus', label: 'Apple TV+', aliases: ['Apple TV Plus', 'Apple TV+'], monetizationTypes: ['flatrate'] },
   { slug: 'mubi', label: 'MUBI', aliases: ['MUBI', 'Mubi'], matchPrefixes: ['mubi'], monetizationTypes: ['flatrate'] },
   { slug: 'exxen', label: 'Exxen', aliases: ['Exxen'], matchPrefixes: ['exxen'], monetizationTypes: ['flatrate'] },
@@ -450,7 +457,8 @@ const PROVIDERS = [
   { slug: 'tv-plus', label: 'TV+', aliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], matchPrefixes: ['turkcell tv', 'tv+'], monetizationTypes: ['flatrate'] },
   { slug: 'tivibu', label: 'Tivibu', aliases: ['Tivibu'], matchPrefixes: ['tivibu'], monetizationTypes: ['flatrate'] },
   { slug: 'd-smart-go', label: 'D-Smart GO', aliases: ['D-Smart GO', 'D Smart GO', 'D-Smart'], matchPrefixes: ['d-smart', 'd smart'], monetizationTypes: ['flatrate'] },
-  { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], monetizationTypes: ['flatrate'] }
+  { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], monetizationTypes: ['flatrate'] },
+  { slug: 'crunchyroll', label: 'Crunchyroll', aliases: ['Crunchyroll', 'Crunchyroll Amazon Channel'], matchPrefixes: ['crunchyroll'], monetizationTypes: ['flatrate'] }
 ];
 
 const PROVIDER_BY_SLUG = new Map(PROVIDERS.map((provider) => [provider.slug, provider]));
@@ -1743,7 +1751,16 @@ function providerAccentColor(provider = '') {
   if (value.includes('adn') || value.includes('animation digital network')) return '#ef4444';
   if (value.includes('hbo max') || value === 'max') return '#7c3aed';
   if (value.includes('peacock')) return '#facc15';
-  if (value.includes('crunchyroll')) return '#f97316';
+  if (value.includes('crunchyroll')) return '#f47521';
+  if (value.includes('exxen')) return '#f5c400';
+  if (value.includes('gain')) return '#ff2f7d';
+  if (value.includes('tabii')) return '#14b8a6';
+  if (value.includes('tod') || value.includes('bein')) return '#7c3aed';
+  if (value.includes('puhu')) return '#ff7a00';
+  if (value.includes('tv plus') || value.includes('turkcell')) return '#2563eb';
+  if (value.includes('tivibu')) return '#f59e0b';
+  if (value.includes('d smart')) return '#ef4444';
+  if (value.includes('s sport')) return '#dc2626';
   if (value.includes('tv france')) return '#38bdf8';
   if (value.includes('anime')) return '#a855f7';
   return '#38bdf8';
@@ -2193,18 +2210,30 @@ function providerMonetizationTypes(providerSlug) {
   return [...new Set(types)];
 }
 
+function providerNameMatches(provider, value) {
+  const normalized = normalizeProviderName(value);
+  if (!normalized || !provider) return false;
+  const aliases = new Set((provider.aliases || []).map(normalizeProviderName));
+  if (aliases.has(normalized)) return true;
+  const prefixes = (provider.matchPrefixes || []).map(normalizeProviderName).filter(Boolean);
+  return prefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix} `));
+}
+
 function hasProviderAccess(details, provider) {
-  if (!provider?.ids?.length) return false;
+  if (!provider) return false;
   const watch = details?.['watch/providers']?.results?.[DEFAULT_COUNTRY] || {};
   const allowed = new Set(providerMonetizationTypes(provider.slug));
   const activeIds = new Set();
+  const activeNames = [];
   for (const mode of allowed) {
     for (const entry of watch?.[mode] || []) {
       const id = Number(entry?.provider_id);
       if (Number.isFinite(id)) activeIds.add(id);
+      if (entry?.provider_name) activeNames.push(entry.provider_name);
     }
   }
-  return provider.ids.some((id) => activeIds.has(Number(id)));
+  if ((provider.ids || []).some((id) => activeIds.has(Number(id)))) return true;
+  return activeNames.some((name) => providerNameMatches(provider, name));
 }
 
 function platformCollectionTitle(providerSlug) {
@@ -2382,12 +2411,19 @@ function fallbackDiscoverParams(catalog, window, providerIds, page, timeZone) {
 
 async function discoverCandidates(catalog, window, providerIds, timeZone) {
   const endpoint = catalog.type === 'movie' ? '/discover/movie' : '/discover/tv';
-  const maxCandidates = getConfig().maxCandidates;
+  const maxCandidates = providerIds.length
+    ? getConfig().maxCandidates
+    : Math.min(240, Math.max(120, getConfig().maxCandidates * 2));
   const items = [];
   for (let page = 1; page <= 5 && items.length < maxCandidates; page += 1) {
     let payload;
     try {
-      payload = await tmdbFetch(endpoint, discoverParams(catalog, window, providerIds, page, timeZone));
+      payload = await tmdbFetch(
+        endpoint,
+        providerIds.length
+          ? discoverParams(catalog, window, providerIds, page, timeZone)
+          : fallbackDiscoverParams(catalog, window, providerIds, page, timeZone)
+      );
     } catch (error) {
       if (error?.code === 'TMDB_HTTP_ERROR' && [400, 422].includes(error.status)) {
         payload = await tmdbFetch(endpoint, fallbackDiscoverParams(catalog, window, providerIds, page, timeZone));
@@ -2711,12 +2747,12 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
   }
   const provider = await resolveProvider(catalog.providerSlug, catalog.type);
   const stats = emptyStats(provider, { ...catalog, period }, window, timeZone);
-  if (!provider?.ids?.length) {
+  if (!provider) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
 
-  const raw = await discoverCandidates({ ...catalog, period }, window, provider.ids, timeZone);
+  const raw = await discoverCandidates({ ...catalog, period }, window, provider.ids || [], timeZone);
   stats.candidates = raw.length;
 
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
