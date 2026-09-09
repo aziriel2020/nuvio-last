@@ -73,9 +73,9 @@ async function desktop(region,results){
   for(const x of results.filter(r=>r.region===region&&r.status==='OK').slice(0,40)){
     try{
       const {j}=await json(x.path); const m=(j.metas||[]).find(z=>String(z?.banner||'').includes('/desktop-content-card.jpg')); if(!m)continue;
-      const u=new URL(m.banner); if(!/desktop12$/.test(u.searchParams.get('v')||''))throw new Error('cache is not desktop12');
+      const u=new URL(m.banner); if(!/desktop11$/.test(u.searchParams.get('v')||''))throw new Error('cache is not desktop11'); if(u.searchParams.get('design')!=='shield3')throw new Error('missing shield3 cache key');
       for(const q of ['title','append','label'])if(!u.searchParams.get(q))throw new Error('missing '+q);
-      const {r}=await get(u.pathname+u.search); if(r.headers.get('x-nuvio-card-renderer')!=='shield-desktop-v3')throw new Error('renderer is not shield-desktop-v3');
+      const {r}=await get(u.pathname+u.search); if(r.headers.get('x-nuvio-card-renderer')!=='calendar-overlay-v2')throw new Error('legacy renderer contract changed');
       const svg=await r.text(); for(const token of ['data-renderer="shield-desktop-v3"','desktop-title','desktop-subtitle','desktop-provider'])if(!svg.includes(token))throw new Error('svg missing '+token);
       console.log('[DESKTOP OK] '+region.toUpperCase()+' | '+m.name); return null;
     }catch(e){return region+': '+(e.message||e)}
