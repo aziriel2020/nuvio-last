@@ -223,8 +223,18 @@ let turkeyFolders = 0;
 for (const collection of trDedicated) {
   for (const folder of collection.folders || []) {
     turkeyFolders += 1;
-    assert(Array.isArray(folder.sources) && folder.sources.length >= 5, `${collection.title}/${folder.title}: fewer than 5 sources`);
-    const expectedSuffixes = ['-today','-tomorrow','-yesterday','-lastweek','-nextweek'];
+    const isSSport = collection.title === '🇹🇷 S Sport Plus';
+    const expectedSuffixes = isSSport
+      ? ['-today','-tomorrow','-nextweek']
+      : ['-today','-tomorrow','-yesterday','-lastweek','-nextweek'];
+    assert(
+      Array.isArray(folder.sources) && folder.sources.length >= expectedSuffixes.length,
+      `${collection.title}/${folder.title}: insufficient sources`
+    );
+    if (isSSport) {
+      assert(folder.title === 'Sports en direct', 'S Sport folder must be Sports en direct');
+      assert(folder.sources.length === 3, `S Sport must expose exactly 3 live windows, got ${folder.sources.length}`);
+    }
     for (let index = 0; index < expectedSuffixes.length; index += 1) {
       assert(
         String(folder.sources[index]?.catalogId || '').endsWith(expectedSuffixes[index]),
@@ -293,10 +303,49 @@ for (const title of requiredTurkey) {
 assert(localServicesWithContent >= 2, `Only ${localServicesWithContent} local Turkish services returned any content across Today/Tomorrow/NextWeek`);
 console.log(`[TR DYNAMIC] routes=${dynamicJobs.length}; local services with live content=${localServicesWithContent}`);
 
+console.log('=== S SPORT PLUS OFFICIAL LIVE CALENDAR ===');
+const ssportCollection = trDedicated.find((entry) => entry.title === '🇹🇷 S Sport Plus');
+assert(ssportCollection, 'S Sport Plus collection missing');
+const ssportFolder = ssportCollection.folders?.find((entry) => entry.title === 'Sports en direct');
+assert(ssportFolder, 'S Sport Plus live folder missing');
+assert(ssportFolder.sources?.length === 3, 'S Sport Plus must expose Today/Tomorrow/NextWeek only');
+
+let ssportMetas = [];
+for (const source of ssportFolder.sources) {
+  const label = String(source.catalogId).split('-').at(-1);
+  const result = await request(catalogPath('tr', source), { attempts: 4 });
+  assertOracleHeaders(result.response, `S Sport Plus/${label}`);
+  assert(Array.isArray(result.data?.metas), `S Sport Plus/${label}: metas[] missing`);
+  for (const meta of result.data.metas.slice(0, 8)) {
+    assertMetaBasics(meta, 'series', `S Sport Plus/${label}`);
+    assert(String(meta.id || '').startsWith('ssport:'), `S Sport Plus/${label}: invalid official event id ${meta.id}`);
+    assert(/Sport/i.test(JSON.stringify(meta.genres || [])), `S Sport Plus/${label}: Sport genre missing`);
+    assert(meta.released && !Number.isNaN(Date.parse(meta.released)), `S Sport Plus/${label}: event timestamp missing`);
+    assert(/S Sport Plus/i.test(String(meta.description || '')), `S Sport Plus/${label}: official source label missing`);
+    const visual = meta.banner || meta.landscapePoster || meta.background || meta.poster;
+    assert(visual, `S Sport Plus/${label}: cinematic visual missing`);
+    const visualUrl = new URL(visual);
+    assert(visualUrl.origin === origin, `S Sport Plus/${label}: visual escaped Oracle`);
+    assert(visualUrl.pathname === '/tr/desktop-content-card.jpg', `S Sport Plus/${label}: not using cinematic renderer`);
+    assert(visualUrl.searchParams.get('provider') === 's-sport-plus', `S Sport Plus/${label}: provider renderer mismatch`);
+  }
+  if (result.data.metas[0]) {
+    await verifyVisual(
+      result.data.metas[0].banner || result.data.metas[0].landscapePoster || result.data.metas[0].poster,
+      `S Sport Plus/${label} live card`,
+      { shield: true }
+    );
+  }
+  ssportMetas.push(...result.data.metas);
+  console.log(`[S SPORT] ${label} metas=${result.data.metas.length}`);
+}
+assert(ssportMetas.length > 0, 'S Sport Plus official live schedule returned no events across Today/Tomorrow/NextWeek');
+console.log(`[S SPORT] official live events validated=${ssportMetas.length}`);
+
 console.log('=== TÜRKİYE RECENT ARCHIVES ===');
 const archiveTargets = [
   '🇹🇷 MUBI','🇹🇷 Exxen','🇹🇷 GAİN','🇹🇷 tabii','🇹🇷 TOD','🇹🇷 puhutv',
-  '🇹🇷 TV+','🇹🇷 Tivibu','🇹🇷 D-Smart GO','🇹🇷 S Sport Plus'
+  '🇹🇷 TV+','🇹🇷 Tivibu','🇹🇷 D-Smart GO'
 ];
 const archiveMonths = [];
 {
@@ -435,6 +484,7 @@ console.log(JSON.stringify({
   turkeySourceLinks: turkeySources,
   turkeyDynamicRoutesChecked: dynamicJobs.length,
   localTurkishServicesWithContent: localServicesWithContent,
+  sSportLiveEvents: ssportMetas.length,
   recentArchiveTurkishServicesWithContent: archiveServicesWithContent,
   recentArchiveServiceStats: Object.fromEntries(archiveServiceStats),
   animeRollingNonEmptyChecks: animeLiveNonEmpty,
