@@ -1,0 +1,24 @@
+__PUBLIC_HOST__ {
+  encode zstd gzip
+
+  header {
+    -Server
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "no-referrer"
+  }
+
+  reverse_proxy 127.0.0.1:3000 {
+    health_uri /_oracle/health
+    health_interval 30s
+    health_timeout 5s
+  }
+
+  log {
+    output file /var/log/caddy/nuvio-access.log {
+      roll_size 50mb
+      roll_keep 5
+      roll_keep_for 168h
+    }
+    format json
+  }
+}
