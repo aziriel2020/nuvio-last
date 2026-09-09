@@ -32,3 +32,11 @@ jobs:
         env:
           PUBLIC_ORIGIN: https://nuvio-edge-test.example
         run: npm run test:cloudflare
+
+      - name: Build portable runtime assets
+        env:
+          PUBLIC_ORIGIN: http://127.0.0.1:3317
+        run: npm run build:cloudflare
+
+      - name: Test Oracle VM runtime
+        run: npm run test:oracle
