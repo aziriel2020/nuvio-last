@@ -16,6 +16,9 @@ test('Oracle infrastructure is hard-pinned inside the Always Free profile', () =
   assert.match(tf, /memory_in_gbs\s*=\s*12/);
   assert.match(tf, /boot_volume_size_in_gbs\s*=\s*100/);
   assert.match(tf, /preserve_boot_volume\s*=\s*false/);
+  assert.match(tf, /oci_identity_region_subscriptions/);
+  assert.match(tf, /var\.region\s*==\s*local\.home_region/);
+  assert.match(tf, /Always Free Compute must be provisioned in the tenancy home region/);
   assert.doesNotMatch(tf, /oci_(?:load_balancer|network_load_balancer|database|containerengine|core_nat_gateway)/);
 });
 
