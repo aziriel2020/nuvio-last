@@ -54,6 +54,6 @@ jobs:
 
       - name: Validate Oracle Always Free Terraform
         run: |
-          terraform -chdir=oracle/terraform fmt -check -recursive
+          terraform -chdir=oracle/terraform fmt -check -diff -recursive
           terraform -chdir=oracle/terraform init -backend=false
           terraform -chdir=oracle/terraform validate
