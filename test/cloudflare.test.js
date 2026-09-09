@@ -234,7 +234,8 @@ test('desktop catalog cards always keep the metadata renderer, even without usab
   );
 
   assert.match(meta.banner, /\/fr\/desktop-content-card\.jpg\?/);
-  assert.match(meta.banner, /desktop12/);
+  assert.match(meta.banner, /desktop11/);
+  assert.match(meta.banner, /(?:\?|&)design=shield3(?:&|$)/);
   assert.match(meta.banner, /title=The(?:\+|%20)Chosen/);
   assert.match(meta.banner, /append=/);
   assert.match(meta.banner, /label=Netflix/);
