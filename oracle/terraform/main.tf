@@ -21,6 +21,18 @@ data "oci_identity_availability_domains" "ads" {
   compartment_id = var.tenancy_ocid
 }
 
+data "oci_identity_region_subscriptions" "subscriptions" {
+  tenancy_id = var.tenancy_ocid
+}
+
+locals {
+  home_regions = [
+    for subscription in data.oci_identity_region_subscriptions.subscriptions.region_subscriptions :
+    subscription.region_name if subscription.is_home_region
+  ]
+  home_region = one(local.home_regions)
+}
+
 data "oci_core_images" "ubuntu_a1" {
   compartment_id   = var.compartment_ocid
   operating_system = "Canonical Ubuntu"
@@ -128,5 +140,12 @@ resource "oci_core_instance" "nuvio" {
     project = "nuvio"
     runtime = "oracle-vm"
     tier    = "always-free"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.region == local.home_region
+      error_message = "Always Free Compute must be provisioned in the tenancy home region. OCI_REGION does not match the detected home region."
+    }
   }
 }
