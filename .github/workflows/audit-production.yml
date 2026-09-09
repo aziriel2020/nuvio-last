@@ -20,7 +20,8 @@ jobs:
     env:
       PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
       AUDIT_STRICT: ${{ github.event_name == 'workflow_run' && '1' || '0' }}
-      AUDIT_CONCURRENCY: "8"
+      AUDIT_CONCURRENCY: ${{ github.event_name == 'workflow_run' && '12' || '24' }}
+      AUDIT_ATTEMPTS: ${{ github.event_name == 'workflow_run' && '2' || '1' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
