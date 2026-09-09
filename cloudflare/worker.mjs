@@ -427,7 +427,7 @@ async function serveDesktopContentCard(request, env, url) {
       'Cache-Control': `public, max-age=86400, s-maxage=${GENERATED_ART_TTL}, stale-while-revalidate=2592000`,
       'X-Nuvio-Edge': 'cloudflare-native',
       'X-Nuvio-Origin': 'cloudflare-only',
-      'X-Nuvio-Card-Renderer': 'shield-desktop-v3'
+      'X-Nuvio-Card-Renderer': 'calendar-overlay-v2'
     }
   });
 }
