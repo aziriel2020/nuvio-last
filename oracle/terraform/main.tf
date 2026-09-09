@@ -22,11 +22,11 @@ data "oci_identity_availability_domains" "ads" {
 }
 
 data "oci_core_images" "ubuntu_a1" {
-  compartment_id           = var.compartment_ocid
-  operating_system         = "Canonical Ubuntu"
-  shape                    = "VM.Standard.A1.Flex"
-  sort_by                  = "TIMECREATED"
-  sort_order               = "DESC"
+  compartment_id   = var.compartment_ocid
+  operating_system = "Canonical Ubuntu"
+  shape            = "VM.Standard.A1.Flex"
+  sort_by          = "TIMECREATED"
+  sort_order       = "DESC"
 }
 
 resource "oci_core_vcn" "nuvio" {
