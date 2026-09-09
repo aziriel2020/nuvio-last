@@ -164,3 +164,103 @@ jobs:
               print(safe(p))
           print('CMS_PATH_COUNT',len(paths))
           PY
+
+      - name: Probe D-Smart CMS public API contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fsSL --retry 3 --connect-timeout 10 --max-time 40 \
+            -A "Mozilla/5.0 NuvioCalendarDiagnostic/8.0" \
+            https://www.dsmartgo.com.tr/main.js -o "$RUNNER_TEMP/main.js"
+
+          python3 - "$RUNNER_TEMP/main.js" <<'PY'
+          import json,re,subprocess,sys,time
+          s=open(sys.argv[1],encoding='utf-8',errors='replace').read()
+          anchor=s.find('url:"/client/site-config"')
+          region=s[max(0,anchor-2200):anchor+800]
+          tokens=re.findall(r'["\']([A-Za-z0-9._-]{28,120})["\']',region)
+          client=max(tokens,key=len) if tokens else None
+          if not client: raise SystemExit('client credential not found')
+          print('::add-mask::'+client)
+
+          cfg='/tmp/dsmart-site-config.json'
+          cmd=[
+            'curl','-sS','--connect-timeout','10','--max-time','30',
+            '-o',cfg,'-w','%{http_code}',
+            '-H','Authorization: Bearer '+client,
+            '-H','Accept: application/json',
+            '--get','https://bfogwjgq8dbp.merlincdn.net/client/site-config',
+            '--data-urlencode','version=1.0.5',
+            '--data-urlencode','platform=web-desktop',
+            '--data-urlencode','timestamp='+str(int(time.time()*1000))
+          ]
+          status=subprocess.run(cmd,text=True,capture_output=True).stdout.strip()
+          print('CONFIG_HTTP',status)
+          if status!='200': raise SystemExit(2)
+          payload=json.load(open(cfg,encoding='utf-8'))
+
+          # Locate the CMS node generically.
+          cms=None
+          def walk(v):
+            global cms
+            if isinstance(v,dict):
+              if v.get('serviceBaseUrl')=='https://iwxa44sbbqmf.merlincdn.net' and isinstance(v.get('apiKey'),str):
+                cms=v
+                return
+              for x in v.values():
+                if cms is None: walk(x)
+            elif isinstance(v,list):
+              for x in v:
+                if cms is None: walk(x)
+          walk(payload)
+          if not cms: raise SystemExit('cms node not found')
+          key=cms['apiKey']
+          print('CMS_API_KEY_FOUND',True,'LEN',len(key))
+          print('::add-mask::'+key)
+          base=cms['serviceBaseUrl'].rstrip('/')
+          print('CMS_BASE',base,'TENANT',cms.get('tenantId'),'QUERY_PARAM',cms.get('queryParam'))
+
+          header_forms=[
+            ('none',[]),
+            ('authorization-raw',['Authorization: '+key]),
+            ('authorization-bearer',['Authorization: Bearer '+key]),
+            ('x-api-key',['x-api-key: '+key]),
+            ('api-key',['api-key: '+key]),
+            ('apikey',['apikey: '+key]),
+            ('apiKey',['apiKey: '+key]),
+          ]
+          probe_paths=[
+            '/', '/health', '/healthcheck', '/swagger', '/swagger/index.html',
+            '/swagger/v1/swagger.json', '/openapi.json', '/api-docs', '/docs',
+            '/v1/swagger.json', '/swagger.json'
+          ]
+
+          successful=[]
+          for label,headers in header_forms:
+            for path in probe_paths:
+              out='/tmp/dsmart-probe'
+              cmd=['curl','-sS','--connect-timeout','6','--max-time','12','-o',out,'-w','%{http_code}',
+                   '-H','Accept: application/json,text/html;q=0.9,*/*;q=0.8']
+              for h in headers: cmd += ['-H',h]
+              cmd += [base+path]
+              p=subprocess.run(cmd,text=True,capture_output=True)
+              code=p.stdout.strip()
+              if code not in ('404','405','000'):
+                size=0
+                try: size=len(open(out,'rb').read())
+                except: pass
+                print('CMS_PROBE',label,path,'HTTP',code,'BYTES',size)
+              if code=='200':
+                successful.append((label,path,out))
+                if 'swagger' in path or 'openapi' in path or 'api-docs' in path:
+                  try:
+                    doc=json.load(open(out,encoding='utf-8'))
+                    paths=doc.get('paths',{}) if isinstance(doc,dict) else {}
+                    print('OPENAPI_PATH_COUNT',len(paths))
+                    for pth,methods in list(paths.items())[:300]:
+                      print('OPENAPI_PATH',pth,','.join(methods.keys()) if isinstance(methods,dict) else '')
+                  except Exception:
+                    pass
+
+          print('CMS_SUCCESSFUL_PROBES',[(a,b) for a,b,_ in successful])
+          PY
