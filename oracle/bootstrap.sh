@@ -118,6 +118,9 @@ EOF
 chmod 600 /etc/nuvio/nuvio.env
 
 /opt/nuvio/current/oracle/update.sh
+
+# Reload EnvironmentFile values even when update.sh detects the same release.
+systemctl restart nuvio
 systemctl enable --now nuvio-update.timer
 
 echo "Oracle Nuvio bootstrap complete: https://$PUBLIC_HOST"
