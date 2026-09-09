@@ -336,6 +336,26 @@ for (const title of archiveTargets) {
 const archiveServicesWithContent = [...archiveServiceStats.values()].filter((stats) => stats.metas > 0).length;
 console.log(`[TR ARCHIVE SUMMARY] servicesWithRecentContent=${archiveServicesWithContent}/${archiveTargets.length}`);
 
+console.log('=== TÜRKİYE AUTHORITATIVE HISTORICAL PROOFS ===');
+for (const proof of [
+  { title: '🇹🇷 Exxen', month: '2025-11', folder: 'Séries', minimum: 1 },
+  { title: '🇹🇷 GAİN', month: '2026-02', folder: 'Séries', minimum: 1 },
+  { title: '🇹🇷 tabii', month: '2026-04', folder: 'Séries', minimum: 1 }
+]) {
+  const collection = trDedicated.find((entry) => entry.title === proof.title);
+  const folder = collection?.folders?.find((entry) => entry.title === proof.folder);
+  const source = folder?.sources?.find((entry) => String(entry.catalogId).endsWith(`-${proof.month}`));
+  assert(source, `${proof.title}: missing ${proof.month} archive source`);
+  const result = await request(catalogPath('tr', source), { attempts: 3 });
+  assertOracleHeaders(result.response, `${proof.title}/${proof.month}`);
+  assert(Array.isArray(result.data?.metas), `${proof.title}/${proof.month}: metas[] missing`);
+  assert(result.data.metas.length >= proof.minimum, `${proof.title}/${proof.month}: expected >= ${proof.minimum}, got ${result.data.metas.length}`);
+  for (const meta of result.data.metas.slice(0, 4)) {
+    assertMetaBasics(meta, source.type, `${proof.title}/${proof.month}`);
+  }
+  console.log(`[TR PROOF] ${proof.title} ${proof.month} metas=${result.data.metas.length}`);
+}
+
 console.log('=== ANIME STANDARD + DESKTOP ===');
 const animeStandard = standard.find((entry) => entry.title === '🌍 Anime Japon + Corée');
 const animeDesktop = desktop.find((entry) => entry.title === '🌍 Anime Japon + Corée');
