@@ -89,9 +89,62 @@ jobs:
         run: |
           set -Eeuo pipefail
           install -d -m 700 "$RUNNER_TEMP/keys"
-          printf '%b\n' "$OCI_PRIVATE_KEY" > "$RUNNER_TEMP/keys/oci_api_key.pem"
-          printf '%b\n' "$ORACLE_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          def normalize_secret(name, target, labels):
+              raw = os.environ[name].strip()
+              candidates = [raw]
+
+              if len(raw) >= 2 and raw[0] == raw[-1] == '"':
+                  try:
+                      candidates.append(json.loads(raw))
+                  except Exception:
+                      pass
+
+              expanded = []
+              for value in candidates:
+                  expanded.append(value)
+                  expanded.append(value.replace(chr(13), "").replace(chr(92) + "r", "").replace(chr(92) + "n", chr(10)))
+                  try:
+                      expanded.append(base64.b64decode(value, validate=True).decode("utf-8"))
+                  except Exception:
+                      pass
+
+              for value in expanded:
+                  value = value.replace(chr(13), "")
+                  for label in labels:
+                      begin = "-----BEGIN " + label + "-----"
+                      end = "-----END " + label + "-----"
+                      if begin not in value or end not in value:
+                          continue
+                      body = value.split(begin, 1)[1].split(end, 1)[0]
+                      body = "".join(body.split())
+                      if not body:
+                          continue
+                      normalized = begin + chr(10) + body + chr(10) + end + chr(10)
+                      Path(target).write_text(normalized, encoding="utf-8")
+                      return
+
+              raise SystemExit(name)
+
+          root = os.environ["RUNNER_TEMP"] + "/keys/"
+          normalize_secret("OCI_PRIVATE_KEY", root + "oci_api_key.pem", ["PRIVATE KEY", "RSA PRIVATE KEY"])
+          normalize_secret("ORACLE_SSH_PRIVATE_KEY", root + "oracle_ssh.pem", ["OPENSSH PRIVATE KEY", "PRIVATE KEY", "RSA PRIVATE KEY"])
+          PY
+
           chmod 600 "$RUNNER_TEMP/keys/"*.pem
+          if ! openssl pkey -in "$RUNNER_TEMP/keys/oci_api_key.pem" -noout >/dev/null 2>&1; then
+            echo "::error::OCI_PRIVATE_KEY"
+            exit 1
+          fi
+          if ! ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null 2>&1; then
+            echo "::error::ORACLE_SSH_PRIVATE_KEY"
+            exit 1
+          fi
           echo "TF_VAR_private_key_path=$RUNNER_TEMP/keys/oci_api_key.pem" >> "$GITHUB_ENV"
           echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
 
