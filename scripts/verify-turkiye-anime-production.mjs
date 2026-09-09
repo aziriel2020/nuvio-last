@@ -293,6 +293,49 @@ for (const title of requiredTurkey) {
 assert(localServicesWithContent >= 2, `Only ${localServicesWithContent} local Turkish services returned any content across Today/Tomorrow/NextWeek`);
 console.log(`[TR DYNAMIC] routes=${dynamicJobs.length}; local services with live content=${localServicesWithContent}`);
 
+console.log('=== TÜRKİYE RECENT ARCHIVES ===');
+const archiveTargets = [
+  '🇹🇷 MUBI','🇹🇷 Exxen','🇹🇷 GAİN','🇹🇷 tabii','🇹🇷 TOD','🇹🇷 puhutv',
+  '🇹🇷 TV+','🇹🇷 Tivibu','🇹🇷 D-Smart GO','🇹🇷 S Sport Plus'
+];
+const archiveMonths = [];
+{
+  const d = new Date();
+  for (let offset = 0; offset < 6; offset += 1) {
+    const month = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - offset, 1));
+    archiveMonths.push(month.toISOString().slice(0, 7));
+  }
+}
+const archiveServiceStats = new Map();
+for (const title of archiveTargets) {
+  const collection = trDedicated.find((entry) => entry.title === title);
+  assert(collection, `Archive target missing: ${title}`);
+  const stats = { routes: 0, metas: 0, nonEmptyRoutes: 0, byMonth: {} };
+  for (const month of archiveMonths) {
+    stats.byMonth[month] = { routes: 0, metas: 0 };
+    for (const folder of collection.folders || []) {
+      const source = (folder.sources || []).find((entry) => String(entry.catalogId).endsWith(`-${month}`));
+      if (!source) continue;
+      const result = await request(catalogPath('tr', source), { attempts: 3 });
+      assertOracleHeaders(result.response, `${title}/${folder.title}/${month}`);
+      assert(Array.isArray(result.data?.metas), `${title}/${folder.title}/${month}: metas[] missing`);
+      for (const meta of result.data.metas.slice(0, 3)) {
+        assertMetaBasics(meta, source.type, `${title}/${folder.title}/${month}`);
+      }
+      stats.routes += 1;
+      stats.metas += result.data.metas.length;
+      stats.byMonth[month].routes += 1;
+      stats.byMonth[month].metas += result.data.metas.length;
+      if (result.data.metas.length) stats.nonEmptyRoutes += 1;
+    }
+  }
+  archiveServiceStats.set(title, stats);
+  console.log(`[TR ARCHIVE] ${title} routes=${stats.routes} metas=${stats.metas} nonEmpty=${stats.nonEmptyRoutes} months=${JSON.stringify(stats.byMonth)}`);
+}
+
+const archiveServicesWithContent = [...archiveServiceStats.values()].filter((stats) => stats.metas > 0).length;
+console.log(`[TR ARCHIVE SUMMARY] servicesWithRecentContent=${archiveServicesWithContent}/${archiveTargets.length}`);
+
 console.log('=== ANIME STANDARD + DESKTOP ===');
 const animeStandard = standard.find((entry) => entry.title === '🌍 Anime Japon + Corée');
 const animeDesktop = desktop.find((entry) => entry.title === '🌍 Anime Japon + Corée');
@@ -371,6 +414,8 @@ console.log(JSON.stringify({
   turkeySourceLinks: turkeySources,
   turkeyDynamicRoutesChecked: dynamicJobs.length,
   localTurkishServicesWithContent: localServicesWithContent,
+  recentArchiveTurkishServicesWithContent: archiveServicesWithContent,
+  recentArchiveServiceStats: Object.fromEntries(archiveServiceStats),
   animeRollingNonEmptyChecks: animeLiveNonEmpty,
   animeArchiveSeries,
   animeArchiveMovies,
