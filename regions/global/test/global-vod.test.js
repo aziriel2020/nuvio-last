@@ -488,3 +488,28 @@ test('AniList fallback metadata rejects adult, non-JP/KR and movie entries', () 
   assert.equal(api._internals.anilistMediaMeta({ ...base, format: 'MOVIE' }), null);
 });
 
+
+
+test('Anime archive rows keep the cinematic Desktop banner design outside rolling Home periods', () => {
+  const meta = {
+    id: 'anilist:4242',
+    type: 'series',
+    name: 'Anime Archive Design',
+    poster: 'https://s1.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg',
+    background: 'https://s1.anilist.co/file/anilistcdn/media/anime/banner/test.jpg',
+    landscapePoster: 'https://s1.anilist.co/file/anilistcdn/media/anime/banner/test.jpg',
+    releaseInfo: 'Épisode 3',
+    released: '2026-08-10',
+    _calendarProvider: 'Anime Japon + Corée',
+    _calendarSource: 'anilist'
+  };
+  const [decorated] = api._internals.decorateCatalogMetas(
+    'https://global.example',
+    [meta],
+    { period: 'archive-2026-08', type: 'series', providerSlug: 'anime-asia', cardProvider: 'Anime Japon + Corée' },
+    tz
+  );
+  assert.match(decorated.banner, /desktop-content-card\.jpg/);
+  assert.match(decorated.banner, /provider=anime-asia/);
+  assert.match(decorated.banner, /design=shield3/);
+});
