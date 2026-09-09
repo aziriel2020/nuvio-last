@@ -49,3 +49,20 @@ test('all metadata requires a usable poster and matching media type', () => {
   assert.deepEqual(shape({ id: 'tt1', name: 'Title', type: 'movie', poster: 'https://example.com/a.jpg' }, 'series'), ['type']);
   assert.throws(() => config({ AUDIT_CONCURRENCY: '24' }), /Invalid audit limit/);
 });
+
+test('regional health can report fail-open HTML without poisoning later catalog probes', async () => {
+  let calls = 0;
+  const cfg = config({ AUDIT_INTERVAL_MS: '0', AUDIT_ATTEMPTS: '1' });
+  const client = createClient(cfg, async () => {
+    calls += 1;
+    if (calls === 1) return new Response('<!doctype html><h1>landing</h1>', { headers: { 'content-type': 'text/html' } });
+    return new Response('{"metas":[]}', { headers: native });
+  });
+  await assert.rejects(
+    client.get('/fr/health', { stopOnRuntimeUnavailable: false }),
+    /Dynamic runtime unavailable/
+  );
+  const catalog = await client.get('/fr/catalog/series/example.json');
+  assert.deepEqual(catalog.data, { metas: [] });
+  assert.equal(client.stopped, null);
+});

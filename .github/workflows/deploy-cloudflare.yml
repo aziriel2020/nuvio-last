@@ -101,6 +101,7 @@ jobs:
 
       - name: Configure Cloudflare fail-closed runtime
         run: node scripts/configure-cloudflare-pages.mjs
+        continue-on-error: true
 
       - name: Deploy Cloudflare-native Nuvio
         id: deploy

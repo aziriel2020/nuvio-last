@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: nuvio-production-audit
@@ -57,6 +58,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Read recent Cloudflare deploy workflow runs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/diagnose-github-actions.mjs
+        continue-on-error: true
+
       - name: Read Cloudflare runtime and quota diagnostics
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
