@@ -53,7 +53,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield';
+const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network2';
 const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
@@ -443,22 +443,22 @@ function genrePosterSvg(params = {}) {
 
 
 const PROVIDERS = [
-  { slug: 'netflix', label: 'Netflix', aliases: ['Netflix', 'Netflix Standard with Ads'], monetizationTypes: ['flatrate'] },
-  { slug: 'prime-video', label: 'Prime Video', aliases: ['Amazon Prime Video', 'Prime Video', 'Amazon Prime Video with Ads'], monetizationTypes: ['flatrate'] },
-  { slug: 'disney-plus', label: 'Disney+', aliases: ['Disney Plus', 'Disney+'], monetizationTypes: ['flatrate'] },
-  { slug: 'max', label: 'Max', aliases: ['Max', 'HBO Max', 'BluTV', 'Blu TV'], matchPrefixes: ['max', 'hbo max', 'blutv', 'blu tv'], monetizationTypes: ['flatrate'] },
-  { slug: 'apple-tv-plus', label: 'Apple TV+', aliases: ['Apple TV Plus', 'Apple TV+'], monetizationTypes: ['flatrate'] },
-  { slug: 'mubi', label: 'MUBI', aliases: ['MUBI', 'Mubi'], matchPrefixes: ['mubi'], monetizationTypes: ['flatrate'] },
-  { slug: 'exxen', label: 'Exxen', aliases: ['Exxen'], matchPrefixes: ['exxen'], monetizationTypes: ['flatrate'] },
-  { slug: 'gain', label: 'GAİN', aliases: ['GAİN', 'GAIN', 'Gain'], matchPrefixes: ['gain'], monetizationTypes: ['flatrate', 'free', 'ads'] },
-  { slug: 'tabii', label: 'tabii', aliases: ['tabii', 'Tabii'], matchPrefixes: ['tabii'], monetizationTypes: ['flatrate', 'free', 'ads'] },
-  { slug: 'tod', label: 'TOD', aliases: ['TOD', 'TOD TV', 'beIN CONNECT', 'beIN Connect'], matchPrefixes: ['tod', 'bein connect'], monetizationTypes: ['flatrate'] },
-  { slug: 'puhutv', label: 'puhutv', aliases: ['puhutv', 'Puhu TV', 'PuhuTV'], matchPrefixes: ['puhutv', 'puhu tv'], monetizationTypes: ['flatrate', 'free', 'ads'] },
-  { slug: 'tv-plus', label: 'TV+', aliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], matchPrefixes: ['turkcell tv', 'tv+'], monetizationTypes: ['flatrate'] },
-  { slug: 'tivibu', label: 'Tivibu', aliases: ['Tivibu'], matchPrefixes: ['tivibu'], monetizationTypes: ['flatrate'] },
-  { slug: 'd-smart-go', label: 'D-Smart GO', aliases: ['D-Smart GO', 'D Smart GO', 'D-Smart'], matchPrefixes: ['d-smart', 'd smart'], monetizationTypes: ['flatrate'] },
-  { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], monetizationTypes: ['flatrate'] },
-  { slug: 'crunchyroll', label: 'Crunchyroll', aliases: ['Crunchyroll', 'Crunchyroll Amazon Channel'], matchPrefixes: ['crunchyroll'], monetizationTypes: ['flatrate'] }
+  { slug: 'netflix', label: 'Netflix', aliases: ['Netflix', 'Netflix Standard with Ads'], networkAliases: ['Netflix'], monetizationTypes: ['flatrate'] },
+  { slug: 'prime-video', label: 'Prime Video', aliases: ['Amazon Prime Video', 'Prime Video', 'Amazon Prime Video with Ads'], networkAliases: ['Amazon Prime Video', 'Prime Video'], monetizationTypes: ['flatrate'] },
+  { slug: 'disney-plus', label: 'Disney+', aliases: ['Disney Plus', 'Disney+'], networkAliases: ['Disney+', 'Disney Plus'], monetizationTypes: ['flatrate'] },
+  { slug: 'max', label: 'Max', aliases: ['Max', 'HBO Max', 'BluTV', 'Blu TV'], matchPrefixes: ['max', 'hbo max', 'blutv', 'blu tv'], networkAliases: ['Max', 'HBO Max', 'BluTV', 'Blu TV'], monetizationTypes: ['flatrate'] },
+  { slug: 'apple-tv-plus', label: 'Apple TV+', aliases: ['Apple TV Plus', 'Apple TV+'], networkAliases: ['Apple TV+'], monetizationTypes: ['flatrate'] },
+  { slug: 'mubi', label: 'MUBI', aliases: ['MUBI', 'Mubi'], matchPrefixes: ['mubi'], networkAliases: ['MUBI'], monetizationTypes: ['flatrate'] },
+  { slug: 'exxen', label: 'Exxen', aliases: ['Exxen'], matchPrefixes: ['exxen'], networkAliases: ['Exxen'], monetizationTypes: ['flatrate'] },
+  { slug: 'gain', label: 'GAİN', aliases: ['GAİN', 'GAIN', 'Gain'], matchPrefixes: ['gain'], networkAliases: ['GAİN', 'GAIN', 'Gain'], monetizationTypes: ['flatrate', 'free', 'ads'] },
+  { slug: 'tabii', label: 'tabii', aliases: ['tabii', 'Tabii'], matchPrefixes: ['tabii'], networkAliases: ['tabii', 'Tabii', 'TRT'], monetizationTypes: ['flatrate', 'free', 'ads'] },
+  { slug: 'tod', label: 'TOD', aliases: ['TOD', 'TOD TV', 'beIN CONNECT', 'beIN Connect'], matchPrefixes: ['tod', 'bein connect'], networkAliases: ['TOD', 'beIN', 'beIN CONNECT'], monetizationTypes: ['flatrate'] },
+  { slug: 'puhutv', label: 'puhutv', aliases: ['puhutv', 'Puhu TV', 'PuhuTV'], matchPrefixes: ['puhutv', 'puhu tv'], networkAliases: ['puhutv', 'Puhu TV', 'PuhuTV'], monetizationTypes: ['flatrate', 'free', 'ads'] },
+  { slug: 'tv-plus', label: 'TV+', aliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], matchPrefixes: ['turkcell tv', 'tv+'], networkAliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], monetizationTypes: ['flatrate'] },
+  { slug: 'tivibu', label: 'Tivibu', aliases: ['Tivibu'], matchPrefixes: ['tivibu'], networkAliases: ['Tivibu'], monetizationTypes: ['flatrate'] },
+  { slug: 'd-smart-go', label: 'D-Smart GO', aliases: ['D-Smart GO', 'D Smart GO', 'D-Smart'], matchPrefixes: ['d-smart', 'd smart'], networkAliases: ['D-Smart', 'D Smart'], monetizationTypes: ['flatrate'] },
+  { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], networkAliases: ['S Sport', 'S Sport Plus'], monetizationTypes: ['flatrate'] },
+  { slug: 'crunchyroll', label: 'Crunchyroll', aliases: ['Crunchyroll', 'Crunchyroll Amazon Channel'], matchPrefixes: ['crunchyroll'], networkAliases: ['Crunchyroll'], monetizationTypes: ['flatrate'] }
 ];
 
 const PROVIDER_BY_SLUG = new Map(PROVIDERS.map((provider) => [provider.slug, provider]));
@@ -824,6 +824,23 @@ async function discoverGenreCandidates(catalog, providerIds, window) {
     items.push(...(payload?.results || []));
     if (page >= Number(payload?.total_pages || 1)) break;
   }
+
+  const definition = PROVIDER_BY_SLUG.get(catalog.providerSlug);
+  const networkFallback = catalog.type === 'series' && Array.isArray(definition?.networkAliases) && definition.networkAliases.length > 0;
+  if (networkFallback && providerIds.length) {
+    try {
+      const broad = await tmdbFetch(endpoint, fallbackDiscoverParams(catalog, window, [], 1, timeZone));
+      const seen = new Set(items.map((entry) => Number(entry?.id)).filter(Number.isFinite));
+      for (const entry of broad?.results || []) {
+        const id = Number(entry?.id);
+        if (!Number.isFinite(id) || seen.has(id)) continue;
+        seen.add(id);
+        items.push(entry);
+        if (items.length >= maxCandidates) break;
+      }
+    } catch (_) {}
+  }
+
   return items.slice(0, maxCandidates);
 }
 
@@ -2219,6 +2236,24 @@ function providerNameMatches(provider, value) {
   return prefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix} `));
 }
 
+function providerNetworkMatches(details, provider) {
+  if (!provider || !Array.isArray(details?.networks)) return false;
+  const aliases = new Set(
+    [...(provider.networkAliases || []), ...(provider.aliases || []), provider.label]
+      .map(normalizeProviderName)
+      .filter(Boolean)
+  );
+  const prefixes = [...(provider.networkAliases || []), ...(provider.matchPrefixes || [])]
+    .map(normalizeProviderName)
+    .filter(Boolean);
+  return details.networks.some((network) => {
+    const normalized = normalizeProviderName(network?.name);
+    if (!normalized) return false;
+    if (aliases.has(normalized)) return true;
+    return prefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix} `));
+  });
+}
+
 function hasProviderAccess(details, provider) {
   if (!provider) return false;
   const watch = details?.['watch/providers']?.results?.[DEFAULT_COUNTRY] || {};
@@ -2233,7 +2268,8 @@ function hasProviderAccess(details, provider) {
     }
   }
   if ((provider.ids || []).some((id) => activeIds.has(Number(id)))) return true;
-  return activeNames.some((name) => providerNameMatches(provider, name));
+  if (activeNames.some((name) => providerNameMatches(provider, name))) return true;
+  return providerNetworkMatches(details, provider);
 }
 
 function platformCollectionTitle(providerSlug) {
@@ -2655,11 +2691,11 @@ async function buildStreamingSeriesYearArchive({ catalog, timeZone, now = new Da
   }
   const provider = await resolveProvider(catalog.providerSlug, 'series');
   const stats = emptyStats(provider, { ...catalog, period, source: 'tmdb-season-archive' }, window, timeZone);
-  if (!provider?.ids?.length) {
+  if (!provider) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
-  let raw = await discoverCandidates({ ...catalog, period }, window, provider.ids, timeZone);
+  let raw = await discoverCandidates({ ...catalog, period }, window, provider.ids || [], timeZone);
   raw = raw.slice(0, Math.min(24, getConfig().maxCandidates));
   stats.candidates = raw.length;
   const settled = await mapLimitSettled(raw, 5, async (candidate) => {
@@ -3147,7 +3183,7 @@ async function buildStreamingSeriesCatalog({ catalog, timeZone, now = new Date()
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
-  if (!provider?.ids?.length) {
+  if (!provider) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
@@ -3200,7 +3236,7 @@ async function buildStreamingSeriesCatalog({ catalog, timeZone, now = new Date()
   // episode are still rejected.
   let tmdbCandidates = [];
   try {
-    tmdbCandidates = await discoverCandidates({ ...catalog, period }, window, provider.ids, timeZone);
+    tmdbCandidates = await discoverCandidates({ ...catalog, period }, window, provider.ids || [], timeZone);
   } catch (error) {
     stats.enrichmentErrors += 1;
   }
@@ -4300,6 +4336,7 @@ module.exports._internals = {
   resolveProviderFromDirectory,
   platformProviderDefinition,
   providerMonetizationTypes,
+  providerNetworkMatches,
   hasProviderAccess,
   platformCollectionTitle,
   regionCollectionTitle,
