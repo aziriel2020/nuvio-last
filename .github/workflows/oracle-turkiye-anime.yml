@@ -82,6 +82,32 @@ jobs:
           echo "Oracle release: $remote_sha"
           test "$remote_sha" = "$GITHUB_SHA"
 
+      - name: Diagnose Türkiye runtime locally
+        shell: bash
+        env:
+          PUBLIC_IP: "141.145.215.202"
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" 'bash -s' <<'REMOTE'
+          set -u
+          echo "=== SERVICES ==="
+          systemctl is-active nuvio || true
+          systemctl is-active caddy || true
+          echo "=== ORACLE HEALTH ==="
+          curl -sS -D /tmp/h1 -o /tmp/b1 --max-time 20 http://127.0.0.1:3000/_oracle/health || true
+          head -20 /tmp/h1 2>/dev/null || true
+          cat /tmp/b1 2>/dev/null || true
+          echo
+          echo "=== TR COLLECTIONS LOCAL ==="
+          curl -sS -D /tmp/h2 -o /tmp/b2 --max-time 30 http://127.0.0.1:3000/tr/nuvio-collections.json || true
+          head -20 /tmp/h2 2>/dev/null || true
+          echo "bytes=$(wc -c </tmp/b2 2>/dev/null || echo 0)"
+          head -c 800 /tmp/b2 2>/dev/null || true
+          echo
+          echo "=== JOURNAL ==="
+          journalctl -u nuvio -n 120 --no-pager || true
+          REMOTE
+
       - name: Verify Türkiye collections and Anime design
         shell: bash
         env:
