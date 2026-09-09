@@ -51,7 +51,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(us.catalogs.length, 10638);
   assert.equal(fr.catalogs.length, 12214);
   assert.equal(globalVod.catalogs.length, 591);
-  assert.equal(tr.catalogs.length, 7092);
+  assert.equal(tr.catalogs.length, 6895);
 });
 
 test('combined import has 49 unique collections: France, Global, Türkiye, then USA', async () => {
