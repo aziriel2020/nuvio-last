@@ -147,12 +147,12 @@ const coexistHealth = await request('/health');
 assert(coexistHealth.response.status === 200, '/health is not 200');
 assertOracleHeaders(coexistHealth.response, '/health');
 assert(coexistHealth.data?.ok === true && coexistHealth.data?.safe === true, 'Coexistence health is not safe');
-assert(coexistHealth.data?.collectionCount === 48, `/health collectionCount=${coexistHealth.data?.collectionCount}`);
-assert(coexistHealth.data?.trCollectionCount === 18, `/health trCollectionCount=${coexistHealth.data?.trCollectionCount}`);
+assert(coexistHealth.data?.collectionCount === 49, `/health collectionCount=${coexistHealth.data?.collectionCount}`);
+assert(coexistHealth.data?.trCollectionCount === 19, `/health trCollectionCount=${coexistHealth.data?.trCollectionCount}`);
 assert(Array.isArray(coexistHealth.data?.duplicateCollectionIds) && coexistHealth.data.duplicateCollectionIds.length === 0, 'Duplicate collection IDs');
 assert(Array.isArray(coexistHealth.data?.duplicateFolderKeys) && coexistHealth.data.duplicateFolderKeys.length === 0, 'Duplicate folder keys');
 assert(Array.isArray(coexistHealth.data?.duplicateCatalogKeys) && coexistHealth.data.duplicateCatalogKeys.length === 0, 'Duplicate catalog keys');
-console.log('[COEXISTENCE] 48 collections / 18 Türkiye / no collisions');
+console.log('[COEXISTENCE] 49 collections / 19 Türkiye / no collisions');
 
 console.log('=== MANIFESTS ===');
 const manifestEntries = await Promise.all(['fr','global','tr','us'].map(async (region) => {
@@ -187,10 +187,10 @@ const standard = standardResult.data;
 const desktop = desktopResult.data;
 const trDedicated = trDedicatedResult.data;
 const trRegion = trRegionResult.data;
-assert(Array.isArray(standard) && standard.length === 48, `Standard combined count=${standard?.length}`);
-assert(Array.isArray(desktop) && desktop.length === 48, `Desktop combined count=${desktop?.length}`);
-assert(Array.isArray(trDedicated) && trDedicated.length === 18, `Turkey dedicated count=${trDedicated?.length}`);
-assert(Array.isArray(trRegion) && trRegion.length === 18, `Turkey region count=${trRegion?.length}`);
+assert(Array.isArray(standard) && standard.length === 49, `Standard combined count=${standard?.length}`);
+assert(Array.isArray(desktop) && desktop.length === 49, `Desktop combined count=${desktop?.length}`);
+assert(Array.isArray(trDedicated) && trDedicated.length === 19, `Turkey dedicated count=${trDedicated?.length}`);
+assert(Array.isArray(trRegion) && trRegion.length === 19, `Turkey region count=${trRegion?.length}`);
 
 assert.deepEqual = undefined;
 const standardShape = standard.map(normalizeCollectionShape);
@@ -199,7 +199,7 @@ assert(JSON.stringify(standardShape) === JSON.stringify(desktopShape), 'Standard
 
 const trStandard = standard.filter((entry) => String(entry.title || '').startsWith('🇹🇷 '));
 const trDesktop = desktop.filter((entry) => String(entry.title || '').startsWith('🇹🇷 '));
-assert(trStandard.length === 18 && trDesktop.length === 18, 'Combined Türkiye collection count mismatch');
+assert(trStandard.length === 19 && trDesktop.length === 19, 'Combined Türkiye collection count mismatch');
 assert(
   JSON.stringify(trStandard.map(normalizeCollectionShape)) === JSON.stringify(trDedicated.map(normalizeCollectionShape)),
   'Combined standard Türkiye differs from dedicated Türkiye import'
@@ -208,12 +208,12 @@ assert(
   JSON.stringify(trDedicated.map(normalizeCollectionShape)) === JSON.stringify(trRegion.map(normalizeCollectionShape)),
   'Dedicated Türkiye import differs from /tr/nuvio-collections.json'
 );
-console.log('[IMPORTS] standard=48 desktop=48 Türkiye=18 topology identical');
+console.log('[IMPORTS] standard=49 desktop=49 Türkiye=19 topology identical');
 
 const requiredTurkey = [
   '🇹🇷 Netflix','🇹🇷 Prime Video','🇹🇷 Disney+','🇹🇷 Max','🇹🇷 Apple TV+','🇹🇷 MUBI',
   '🇹🇷 Exxen','🇹🇷 GAİN','🇹🇷 tabii','🇹🇷 TOD','🇹🇷 puhutv','🇹🇷 TV+','🇹🇷 Tivibu',
-  '🇹🇷 D-Smart GO','🇹🇷 S Sport Plus','🇹🇷 Crunchyroll + AniList','🇹🇷 Türkiye Takvim','🇹🇷 VOD Türkiye'
+  '🇹🇷 D-Smart GO','🇹🇷 S Sport Plus','🇹🇷 Bi Kanal','🇹🇷 Crunchyroll + AniList','🇹🇷 Türkiye Takvim','🇹🇷 VOD Türkiye'
 ];
 for (const title of requiredTurkey) assert(trDedicated.some((entry) => entry.title === title), `Missing ${title}`);
 
@@ -250,7 +250,7 @@ for (let index = 0; index < trStandard.length; index += 1) {
   await verifyVisual(regularFolder.coverImageUrl, `${regular.title} standard cover`, { platform: true });
   await verifyVisual(deskFolder.coverImageUrl, `${desk.title} desktop cover`, { platform: true });
 }
-console.log('[TR VISUALS] 18 standard + 18 Desktop parent covers OK');
+console.log('[TR VISUALS] 19 standard + 19 Desktop parent covers OK');
 
 console.log('=== TÜRKİYE DYNAMIC ROUTES ===');
 const dynamicJobs = [];
@@ -340,7 +340,8 @@ console.log('=== TÜRKİYE AUTHORITATIVE HISTORICAL PROOFS ===');
 for (const proof of [
   { title: '🇹🇷 Exxen', month: '2025-11', folder: 'Séries', minimum: 1 },
   { title: '🇹🇷 GAİN', month: '2026-02', folder: 'Séries', minimum: 1 },
-  { title: '🇹🇷 tabii', month: '2026-04', folder: 'Séries', minimum: 1 }
+  { title: '🇹🇷 tabii', month: '2026-04', folder: 'Séries', minimum: 1 },
+  { title: '🇹🇷 Bi Kanal', month: '2026-09', folder: 'Séries', minimum: 1 }
 ]) {
   const collection = trDedicated.find((entry) => entry.title === proof.title);
   const folder = collection?.folders?.find((entry) => entry.title === proof.folder);
