@@ -210,6 +210,12 @@ export function platformStaticAssetPath(urlLike) {
   if (info.region === 'tr' && info.provider === 'crunchyroll') {
     return `/static/assets/platform-art/global/anime-asia-${variant}.jpg`;
   }
+  // Bi Kanal is a current Turkish web service discovered through TVmaze.
+  // Reuse the neutral Türkiye calendar photo while the renderer supplies the
+  // real Bi Kanal title/category; this avoids a missing/blank parent card.
+  if (info.region === 'tr' && info.provider === 'bi-kanal') {
+    return `/static/assets/platform-art/tr/turkiye-takvim-${variant}.jpg`;
+  }
 
   return `/static/assets/platform-art/${info.region}/${info.provider}-${variant}.jpg`;
 }
