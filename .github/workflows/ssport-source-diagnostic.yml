@@ -1,10 +1,6 @@
 name: S Sport Source Diagnostic
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/ssport-source-diagnostic-run"
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
