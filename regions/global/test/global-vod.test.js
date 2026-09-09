@@ -513,3 +513,30 @@ test('Anime archive rows keep the cinematic Desktop banner design outside rollin
   assert.match(decorated.banner, /provider=anime-asia/);
   assert.match(decorated.banner, /design=shield3/);
 });
+
+
+test('regular Anime catalogue uses the same Shield cinematic card as Desktop', () => {
+  const meta = {
+    id: 'anilist:777',
+    type: 'series',
+    name: 'Standard Anime Card',
+    poster: 'https://s1.anilist.co/file/anilistcdn/media/anime/cover/large/test.jpg',
+    background: 'https://s1.anilist.co/file/anilistcdn/media/anime/banner/test.jpg',
+    landscapePoster: 'https://s1.anilist.co/file/anilistcdn/media/anime/banner/test.jpg',
+    releaseInfo: 'Épisode 8',
+    released: '2026-09-09',
+    _calendarProvider: 'Anime Japon + Corée',
+    _calendarSource: 'anilist'
+  };
+  const [decorated] = api._internals.decorateCatalogMetas(
+    'https://global.example',
+    [meta],
+    { period: 'archive-2026-09', type: 'series', providerSlug: 'anime-asia', archiveProvider: 'anime-asia', cardProvider: 'Anime Japon + Corée' },
+    tz
+  );
+  assert.equal(decorated.posterShape, 'landscape');
+  assert.match(decorated.poster, /desktop-content-card\.jpg/);
+  assert.equal(decorated.poster, decorated.landscapePoster);
+  assert.equal(decorated.poster, decorated.background);
+  assert.match(decorated.poster, /design=shield3/);
+});
