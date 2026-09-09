@@ -14,6 +14,7 @@ Environment=HOST=127.0.0.1
 Environment=NUVIO_CACHE_DIR=/var/cache/nuvio
 Environment=NUVIO_CACHE_MAX_ENTRIES=2048
 EnvironmentFile=/etc/nuvio/nuvio.env
+EnvironmentFile=-/etc/nuvio/release.env
 ExecStart=/usr/bin/node /opt/nuvio/current/oracle/server.mjs
 Restart=always
 RestartSec=3
