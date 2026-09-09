@@ -1,11 +1,6 @@
 name: Oracle Resume Verify
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/oracle-resume-verify-trigger"
   workflow_dispatch:
 
 permissions:
