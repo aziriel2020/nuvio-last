@@ -51,20 +51,20 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(us.catalogs.length, 10638);
   assert.equal(fr.catalogs.length, 12214);
   assert.equal(globalVod.catalogs.length, 591);
-  assert.equal(tr.catalogs.length, 6501);
+  assert.equal(tr.catalogs.length, 6895);
 });
 
-test('combined import has 47 unique collections: France, Global, Türkiye, then USA', async () => {
+test('combined import has 48 unique collections: France, Global, Türkiye, then USA', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 47);
+  assert.equal(collections.length, 48);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
-  assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 17);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 18);
   assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
   assert.equal(collections[0].title, '🇫🇷 Netflix');
   assert.equal(collections[13].title, '🇫🇷 VOD France');
@@ -73,8 +73,8 @@ test('combined import has 47 unique collections: France, Global, Türkiye, then 
   assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
   assert.equal(collections[17].title, '🌍 VOD Mondiale');
   assert.equal(collections[18].title, '🇹🇷 Netflix');
-  assert.equal(collections[34].title, '🇹🇷 VOD Türkiye');
-  assert.equal(collections[35].title, '🇺🇸 Netflix');
+  assert.equal(collections[35].title, '🇹🇷 VOD Türkiye');
+  assert.equal(collections[36].title, '🇺🇸 Netflix');
   assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
@@ -88,7 +88,7 @@ test('France stays first, Global is next, Türkiye follows, and USA remains last
   const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
   assert.equal(fr.length, 16);
   assert.equal(globalVod.length, 2);
-  assert.equal(tr.length, 17);
+  assert.equal(tr.length, 18);
   assert.equal(us.length, 12);
   assert(fr.every((c) => c.pinToTop === true));
   assert(globalVod.every((c) => c.pinToTop === true));
@@ -236,7 +236,7 @@ test('coexistence checker reports zero collisions', async () => {
     'com.nuvio.calendar.archives.us.coexist'
   ]);
   assert.equal(report.globalCollectionCount, 2);
-  assert.equal(report.trCollectionCount, 17);
+  assert.equal(report.trCollectionCount, 18);
 });
 
 test('USA and France Paramount+ remain distinct and both expose Series and Films', async () => {
@@ -294,7 +294,7 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 47);
+  assert.equal(collections.length, 48);
 
   const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
   const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
