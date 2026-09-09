@@ -27,6 +27,7 @@ export function config(env = process.env) {
     failures: env.AUDIT_FAILURES || '', report: env.AUDIT_REPORT || 'audit-report.json',
     cards: integer(env.AUDIT_DESKTOP_CARDS, 12, 0, 40),
     design: env.AUDIT_DESIGN || 'shield3',
+    runtime: env.AUDIT_RUNTIME || 'cloudflare-only',
     strict: !['0', 'false', 'no'].includes(String(env.AUDIT_STRICT || '1').toLowerCase())
   };
 }
@@ -90,7 +91,7 @@ export function createClient(cfg, fetcher = fetch) {
         const item = { status: response.status, ms: Date.now() - start, ray: response.headers.get('cf-ray') };
         history.push(item);
         const category = classify(response.status, body, response.headers);
-        if (category === 'runtime-unavailable' || (native && response.ok && response.headers.get('x-nuvio-origin') !== 'cloudflare-only')) {
+        if (category === 'runtime-unavailable' || (native && response.ok && response.headers.get('x-nuvio-origin') !== cfg.runtime)) {
           const runtimeError = new AuditError('Dynamic runtime unavailable: ' + url.pathname + ' returned ' + response.headers.get('content-type') + ' without native headers', 'runtime-unavailable', history);
           if (stopOnRuntimeUnavailable) stopped = runtimeError;
           throw runtimeError;

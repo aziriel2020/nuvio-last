@@ -16,6 +16,7 @@ function normalizeOrigin(value) {
 }
 
 const publicOrigin = normalizeOrigin(process.env.PUBLIC_ORIGIN || DEFAULT_PUBLIC_ORIGIN);
+const buildRuntime = process.env.NUVIO_RUNTIME || 'cloudflare-native';
 
 function call(route) {
   return new Promise((resolve, reject) => {
@@ -113,13 +114,14 @@ async function main() {
     generatedAt: new Date().toISOString(),
     publicOrigin,
     staticRoutes: emitted.map(({ route, bytes }) => ({ route, bytes })),
-    runtime: 'cloudflare-native',
+    runtime: buildRuntime,
+    usesCloudflare: buildRuntime === 'cloudflare-native',
     usesVercel: false
   };
   fs.writeFileSync(path.join(DIST, 'edge-build.json'), JSON.stringify(manifest, null, 2));
 
   const totalBytes = emitted.reduce((sum, item) => sum + item.bytes, 0);
-  console.log(`Cloudflare native build ready: ${emitted.length} static routes, ${totalBytes} bytes, origin ${publicOrigin}`);
+  console.log(`${buildRuntime} build ready: ${emitted.length} static routes, ${totalBytes} bytes, origin ${publicOrigin}`);
 }
 
 main().catch((error) => {

@@ -1,0 +1,10 @@
+[Unit]
+Description=Update Nuvio Oracle production from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/nuvio/current/oracle/update.sh
+TimeoutStartSec=20min

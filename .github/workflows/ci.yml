@@ -32,3 +32,28 @@ jobs:
         env:
           PUBLIC_ORIGIN: https://nuvio-edge-test.example
         run: npm run test:cloudflare
+
+      - name: Build portable runtime assets
+        env:
+          PUBLIC_ORIGIN: http://127.0.0.1:3317
+        run: npm run build:cloudflare
+
+      - name: Test Oracle VM runtime
+        run: npm run test:oracle
+
+      - name: Validate Oracle shell scripts
+        run: |
+          bash -n oracle/bootstrap.sh
+          bash -n oracle/update.sh
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.2
+          terraform_wrapper: false
+
+      - name: Validate Oracle Always Free Terraform
+        run: |
+          terraform -chdir=oracle/terraform fmt -check -diff -recursive
+          terraform -chdir=oracle/terraform init -backend=false
+          terraform -chdir=oracle/terraform validate
