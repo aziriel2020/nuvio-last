@@ -53,7 +53,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network4-bikanal';
+const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network5-ssport-live';
 const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
@@ -305,17 +305,26 @@ async function handleDesktopContentCard(res, url) {
   const src = optimizedCardSource(url.searchParams.get('src') || '', 'landscape');
   const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
   const type = normalizedDesktopType(url.searchParams.get('type'));
-  if (!src || !isAllowedPosterSource(src)) { res.statusCode = 400; return res.end('Invalid source'); }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6500);
   try {
-    const response = await fetch(src, {
-      signal: controller.signal,
-      headers: { Accept: 'image/jpeg,image/png,image/webp,*/*;q=0.8', 'User-Agent': `NuvioCalendar/${VERSION}` }
-    });
-    if (!response.ok) { res.statusCode = 502; return res.end('Image unavailable'); }
-    const source = Buffer.from(await response.arrayBuffer());
+    let source = null;
+    if (src && isAllowedPosterSource(src)) {
+      const response = await fetch(src, {
+        signal: controller.signal,
+        headers: { Accept: 'image/jpeg,image/png,image/webp,*/*;q=0.8', 'User-Agent': `NuvioCalendar/${VERSION}` }
+      });
+      if (!response.ok) { res.statusCode = 502; return res.end('Image unavailable'); }
+      source = Buffer.from(await response.arrayBuffer());
+    } else if (providerSlug) {
+      try {
+        source = fs.readFileSync(platformArtPath(providerSlug, 'card'));
+      } catch (_) {
+        source = null;
+      }
+    }
+    if (!source?.length) { res.statusCode = 400; return res.end('Invalid source'); }
     const asset = providerSlug ? await platformLogoAsset(providerSlug, type) : null;
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
     const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
@@ -457,7 +466,7 @@ const PROVIDERS = [
   { slug: 'tv-plus', label: 'TV+', aliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], matchPrefixes: ['turkcell tv', 'tv+'], networkAliases: ['TV+', 'Turkcell TV+', 'Turkcell TV Plus'], monetizationTypes: ['flatrate'] },
   { slug: 'tivibu', label: 'Tivibu', aliases: ['Tivibu'], matchPrefixes: ['tivibu'], networkAliases: ['Tivibu'], monetizationTypes: ['flatrate'] },
   { slug: 'd-smart-go', label: 'D-Smart GO', aliases: ['D-Smart GO', 'D Smart GO', 'D-Smart'], matchPrefixes: ['d-smart', 'd smart'], networkAliases: ['D-Smart', 'D Smart'], monetizationTypes: ['flatrate'] },
-  { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], networkAliases: ['S Sport', 'S Sport Plus'], monetizationTypes: ['flatrate'] },
+  { slug: 's-sport-plus', label: 'S Sport Plus', aliases: ['S Sport Plus', 'S Sport+', 'S Sport'], matchPrefixes: ['s sport'], networkAliases: ['S Sport', 'S Sport Plus'], seriesOnly: true, seriesTitle: 'Sports en direct', liveSports: true, monetizationTypes: ['flatrate'] },
   { slug: 'bi-kanal', label: 'Bi Kanal', aliases: ['Bi Kanal'], matchPrefixes: ['bi kanal'], networkAliases: ['Bi Kanal'], tvmazeArchive: true, seriesOnly: true, monetizationTypes: ['free', 'ads', 'flatrate'] },
   { slug: 'crunchyroll', label: 'Crunchyroll', aliases: ['Crunchyroll', 'Crunchyroll Amazon Channel'], matchPrefixes: ['crunchyroll'], networkAliases: ['Crunchyroll'], monetizationTypes: ['flatrate'] }
 ];
@@ -522,7 +531,7 @@ const PLATFORM_COLLECTIONS = Object.freeze([
   ...PROVIDERS.map((provider) => ({
     provider,
     categories: provider.seriesOnly
-      ? [{ key: 'series', type: 'series', title: 'Séries' }]
+      ? [{ key: 'series', type: 'series', title: provider.seriesTitle || 'Séries' }]
       : [
           { key: 'series', type: 'series', title: 'Séries' },
           { key: 'films', type: 'movie', title: 'Films' }
@@ -954,6 +963,7 @@ function archiveDynamicCatalogId(type, providerSlug, periodKey) {
 function archiveSourceFor(type, provider) {
   if (type === 'movie' && provider.slug === ARCHIVE_VOD_PROVIDER.slug) return 'tmdb-vod';
   if (type === 'series' && provider.slug === 'crunchyroll') return 'crunchyroll-anime-combined';
+  if (type === 'series' && provider.slug === 's-sport-plus') return 'ssport-live';
   return 'tmdb-streaming';
 }
 
@@ -1146,6 +1156,10 @@ function buildPlatformCollection(definition, entries, origin = null) {
   const folders = categories.map((category) => {
     const sourceEntries = entries
       .filter((entry) => entry.catalog.providerSlug === provider.slug && entry.catalog.type === category.type)
+      .filter((entry) => {
+        if (provider.slug !== 's-sport-plus') return true;
+        return ['today', 'tomorrow', 'nextweek'].includes(entry.catalog.archivePeriodKey);
+      })
       .sort((a, b) => {
         const aPeriod = a.catalog.archivePeriodKey;
         const bPeriod = b.catalog.archivePeriodKey;
@@ -1395,6 +1409,7 @@ const catalogCache = new MemoryCache(64);
 const detailsCache = new MemoryCache(256);
 const providerCache = new MemoryCache(32);
 const tvmazeCache = new MemoryCache(96);
+const ssportCache = new MemoryCache(16);
 const anilistCache = new MemoryCache(128);
 const mappingCache = new MemoryCache(256);
 
@@ -1722,21 +1737,23 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
     const widePoster = getConfig().calendarCards && wideSource
       ? (calendarCardUrl(origin, meta, catalog, timeZone, 'landscape', wideSource) || wideSource)
       : (meta?.landscapePoster || wideSource);
-    const desktopPoster = homeVisible
+    const isSSportLive = catalog?.source === 'ssport-live' || catalog?.providerSlug === 's-sport-plus';
+    const desktopPoster = (homeVisible || isSSportLive)
       ? desktopContentCardUrl(origin, meta, catalog, wideSource)
       : null;
+    const ssportCard = isSSportLive ? desktopContentCardUrl(origin, meta, catalog, null) : null;
 
     const copy = {
       ...meta,
-      poster: portraitPoster || originalPoster,
-      posterShape: homeVisible ? 'landscape' : (meta?.posterShape || 'poster'),
-      landscapePoster: widePoster,
+      poster: isSSportLive ? ssportCard : (portraitPoster || originalPoster),
+      posterShape: (homeVisible || isSSportLive) ? 'landscape' : (meta?.posterShape || 'poster'),
+      landscapePoster: isSSportLive ? ssportCard : widePoster,
       // NuvioDesktop landscape cards prefer `banner`. Mirror the exact same
       // approved 16:9 cinematic card there; the Shield renderer stays unchanged.
-      banner: homeVisible ? (desktopPoster || originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
+      banner: (homeVisible || isSSportLive) ? (ssportCard || desktopPoster || originalLandscape || originalBackground || originalPoster || widePoster) : (meta?.banner || null),
       // Critical Modern View targeting: when landscape-card style is active,
       // Nuvio reads/freeze-selects the backdrop. Feed it the Calendar card here.
-      background: homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground,
+      background: isSSportLive ? ssportCard : (homeVisible ? (widePoster || originalBackground || portraitPoster) : originalBackground),
       // Modern Home draws a logo/title overlay on landscape cards. A valid but
       // transparent logo freezes that overlay slot so our card artwork remains
       // the single source of truth. Detail metadata later restores the real logo.
@@ -2128,6 +2145,37 @@ async function sourceFetchJson(source, url, options = {}, maxAttempts = 2) {
         continue;
       }
       throw new SourceHttpError(source, response.status, new URL(url).pathname, message);
+    } catch (error) {
+      if (error?.name === 'AbortError' && attempt < maxAttempts) {
+        await sleep(config.retryBaseMs * (2 ** (attempt - 1)));
+        continue;
+      }
+      if (error?.name === 'AbortError') {
+        const timeoutError = new Error(`${source} timeout`);
+        timeoutError.code = `${source.toUpperCase()}_TIMEOUT`;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new Error(`${source} request failed`);
+}
+
+async function sourceFetchText(source, url, options = {}, maxAttempts = 2) {
+  const config = getConfig();
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.sourceTimeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      if (response.ok) return await response.text();
+      if (attempt < maxAttempts && retryableStatus(response.status)) {
+        await sleep(config.retryBaseMs * (2 ** (attempt - 1)));
+        continue;
+      }
+      throw new SourceHttpError(source, response.status, new URL(url).pathname);
     } catch (error) {
       if (error?.name === 'AbortError' && attempt < maxAttempts) {
         await sleep(config.retryBaseMs * (2 ** (attempt - 1)));
@@ -3921,9 +3969,216 @@ async function buildCrunchyrollAnimeCatalog({ catalog, timeZone, now = new Date(
   return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
 }
 
+
+const SSPORT_HOME = 'https://www.ssportplus.com/';
+const SSPORT_CACHE_TTL_MS = 2 * 60 * 1000;
+const SSPORT_TURKISH_MONTHS = Object.freeze({
+  ocak: 1, subat: 2, şubat: 2, mart: 3, nisan: 4, mayis: 5, mayıs: 5,
+  haziran: 6, temmuz: 7, agustos: 8, ağustos: 8, eylul: 9, eylül: 9,
+  ekim: 10, kasim: 11, kasım: 11, aralik: 12, aralık: 12
+});
+
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number(n);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : _;
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => {
+      const code = Number.parseInt(n, 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : _;
+    });
+}
+
+function htmlTextLines(htmlValue) {
+  const text = String(htmlValue || '')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<(?:br\s*\/?>|\/p\s*>|\/div\s*>|\/li\s*>|\/h[1-6]\s*>|\/section\s*>|\/article\s*>)/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+  return decodeHtmlEntities(text)
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function normalizeTurkishMonth(value) {
+  return normalizeProviderName(value).replace(/\s+/g, '');
+}
+
+function inferSSportDate(day, monthName, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
+  const month = SSPORT_TURKISH_MONTHS[normalizeTurkishMonth(monthName)];
+  if (!month) return null;
+  const today = localIsoDate(now, timeZone);
+  let year = Number(today.slice(0, 4));
+  const currentMonth = Number(today.slice(5, 7));
+  if (month < currentMonth - 6) year += 1;
+  if (month > currentMonth + 6) year -= 1;
+  const iso = `${year}-${String(month).padStart(2, '0')}-${String(Number(day)).padStart(2, '0')}`;
+  return normalizeIsoDate(iso);
+}
+
+function ssportEventTitleCandidate(lines, dateIndex) {
+  const rejected = /^(?:gelecek canlı yayınlar|s sport plus|laliga|serie a|dövüş sporları|futbol|basketbol|motor sporları|takvime ekle|hemen izle)$/i;
+  for (let index = dateIndex - 1; index >= Math.max(0, dateIndex - 6); index -= 1) {
+    const candidate = String(lines[index] || '').trim();
+    if (!candidate || candidate.length < 4) continue;
+    if (rejected.test(candidate)) continue;
+    if (/^\d{1,2}:\d{2}$/.test(candidate)) continue;
+    if (/^\d{1,2}\s+\S+\s+\S+\s+\d{1,2}:\d{2}$/.test(candidate)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+function parseSSportUpcomingHtml(htmlValue, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
+  const lines = htmlTextLines(htmlValue);
+  const start = lines.findIndex((line) => /gelecek canlı yayınlar/i.test(line));
+  const endCandidate = lines.findIndex((line, index) => index > start && /neden s sport plus/i.test(line));
+  const end = endCandidate > start ? endCandidate : lines.length;
+  const scan = start >= 0 ? lines.slice(start + 1, end) : lines;
+  const dateRe = /^(\d{1,2})\s+(Ocak|Şubat|Subat|Mart|Nisan|Mayıs|Mayis|Haziran|Temmuz|Ağustos|Agustos|Eylül|Eylul|Ekim|Kasım|Kasim|Aralık|Aralik)\s+[^\d]+\s+(\d{1,2}:\d{2})$/i;
+  const events = [];
+  const seen = new Set();
+
+  for (let index = 0; index < scan.length; index += 1) {
+    const match = scan[index].match(dateRe);
+    if (!match) continue;
+    const calendarDate = inferSSportDate(match[1], match[2], now, timeZone);
+    if (!calendarDate) continue;
+    const time = match[3].padStart(5, '0');
+    const title = ssportEventTitleCandidate(scan, index);
+    if (!title) continue;
+    const key = `${calendarDate}|${time}|${normalizeTitle(title)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push({ title, calendarDate, time });
+  }
+
+  return events.sort((a, b) =>
+    a.calendarDate.localeCompare(b.calendarDate) ||
+    a.time.localeCompare(b.time) ||
+    a.title.localeCompare(b.title, 'tr')
+  );
+}
+
+function ssportStableId(event) {
+  const input = `${event.calendarDate}|${event.time}|${normalizeTitle(event.title)}`;
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `ssport:${(hash >>> 0).toString(36)}`;
+}
+
+async function ssportUpcomingEvents(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
+  const today = localIsoDate(now, timeZone);
+  const key = `ssport:upcoming:${today}`;
+  const cached = ssportCache.get(key);
+  if (cached) return cached;
+  const html = await sourceFetchText('ssport', SSPORT_HOME, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.7',
+      'User-Agent': `NuvioCalendar/${VERSION}`
+    }
+  }, 3);
+  const events = parseSSportUpcomingHtml(html, now, timeZone);
+  return ssportCache.set(key, events, SSPORT_CACHE_TTL_MS);
+}
+
+async function buildSSportLiveCatalog({ catalog, timeZone, now = runtimeNow(), period = catalog.period, useCache = true }) {
+  const window = dateWindow(period, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: 's-sport-plus',
+    type: 'series',
+    period,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-ssport-official`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = {
+    provider: 'S Sport Plus',
+    providerSlug: 's-sport-plus',
+    source: 'ssport-live',
+    type: 'series',
+    period,
+    timezone: timeZone,
+    today: window.today,
+    start: window.start,
+    end: window.end,
+    sourceErrors: 0,
+    candidates: 0,
+    final: 0
+  };
+
+  if (window.empty || !['today', 'tomorrow', 'nextweek'].includes(String(period || ''))) {
+    const result = { metas: [], stats };
+    return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+  }
+
+  let events = [];
+  try {
+    events = await ssportUpcomingEvents(now, timeZone);
+  } catch (error) {
+    stats.sourceErrors = 1;
+    throw error;
+  }
+
+  stats.candidates = events.length;
+  const filtered = events.filter((event) =>
+    event.calendarDate >= window.start && event.calendarDate <= window.end
+  );
+
+  const metas = filtered.map((event) => {
+    const released = `${event.calendarDate}T${event.time}:00+03:00`;
+    return {
+      id: ssportStableId(event),
+      type: 'series',
+      name: event.title,
+      poster: null,
+      posterShape: 'landscape',
+      background: null,
+      landscapePoster: null,
+      banner: null,
+      description: `S Sport Plus Türkiye • canlı spor yayını\n\n${event.title}\n\nKaynak: S Sport Plus resmi yayın akışı.`,
+      releaseInfo: `${humanCalendarDate(event.calendarDate)} • ${event.time}`,
+      released,
+      status: 'Live',
+      genres: ['Sport', 'Live'],
+      country: 'TR',
+      language: 'tr',
+      behaviorHints: { hasScheduledVideos: true },
+      _calendarProvider: 'S Sport Plus',
+      _calendarSource: 'ssportplus-official',
+      _dedupeKey: `ssport:${event.calendarDate}:${event.time}:${normalizeTitle(event.title)}`,
+      _eventInstantMs: Date.parse(released),
+      _eventHasTime: true,
+      _eventMode: EVENT_MODES.STREAMING_INSTANT
+    };
+  });
+
+  stats.final = metas.length;
+  const result = { metas, stats };
+  return useCache ? catalogCache.set(key, result, Math.min(CATALOG_TTL_MS, SSPORT_CACHE_TTL_MS)) : result;
+}
+
 async function buildCatalog(options) {
   const source = options.catalog.source;
   if (source === 'combined-calendar') return buildCombinedCatalog(options);
+  if (source === 'ssport-live') return buildSSportLiveCatalog(options);
   if (source === 'crunchyroll-anime-combined') return buildCrunchyrollAnimeCatalog(options);
   if (source === 'tvmaze-broadcast') return buildTvBroadcastCatalog(options);
   if (source === 'anilist-airing') return buildAnimeCatalog(options);
@@ -4470,6 +4725,9 @@ module.exports._internals = {
   tvmazeBroadcastToMeta,
   tvmazeStreamingEpisodeToMeta,
   tvmazeProviderWindowMetas,
+  parseSSportUpcomingHtml,
+  ssportUpcomingEvents,
+  buildSSportLiveCatalog,
   webChannelMatchesProvider,
   resolveTvmazeShowToTmdb,
   anilistFetch,
@@ -4484,6 +4742,7 @@ module.exports._internals = {
   detailsCache,
   providerCache,
   tvmazeCache,
+  ssportCache,
   anilistCache,
   mappingCache,
   providerHealth,
