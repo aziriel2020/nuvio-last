@@ -42,6 +42,9 @@ jobs:
 
       - name: Validate required secrets
         shell: bash
+        env:
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
         run: |
           set -Eeuo pipefail
           required=(
@@ -58,11 +61,11 @@ jobs:
             echo "::error::Add TMDB_READ_TOKEN or TMDB_API_KEY as a GitHub secret before provisioning."
             exit 1
           fi
-          if [[ -z "${{ secrets.OCI_PRIVATE_KEY }}" ]]; then
+          if [[ -z "${OCI_PRIVATE_KEY:-}" ]]; then
             echo "::error::Missing OCI_PRIVATE_KEY GitHub secret"
             exit 1
           fi
-          if [[ -z "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" ]]; then
+          if [[ -z "${ORACLE_SSH_PRIVATE_KEY:-}" ]]; then
             echo "::error::Missing ORACLE_SSH_PRIVATE_KEY GitHub secret"
             exit 1
           fi
