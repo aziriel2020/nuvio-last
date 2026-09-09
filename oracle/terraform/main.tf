@@ -7,8 +7,6 @@ terraform {
       version = ">= 6.0.0"
     }
   }
-
-  backend "oci" {}
 }
 
 provider "oci" {
