@@ -8,6 +8,7 @@ const tf = fs.readFileSync(path.join(root, 'oracle/terraform/main.tf'), 'utf8');
 const service = fs.readFileSync(path.join(root, 'oracle/nuvio.service'), 'utf8');
 const updater = fs.readFileSync(path.join(root, 'oracle/update.sh'), 'utf8');
 const bootstrap = fs.readFileSync(path.join(root, 'oracle/bootstrap.sh'), 'utf8');
+const server = fs.readFileSync(path.join(root, 'oracle/server.mjs'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/provision-oracle.yml'), 'utf8');
 
 test('Oracle infrastructure is hard-pinned inside the Always Free profile', () => {
@@ -26,6 +27,7 @@ test('Oracle runtime has bounded resources and automatic restart', () => {
   assert.match(service, /Restart=always/);
   assert.match(service, /MemoryMax=9G/);
   assert.match(service, /NUVIO_CACHE_MAX_ENTRIES=2048/);
+  assert.match(service, /EnvironmentFile=-\/etc\/nuvio\/release\.env/);
   assert.match(service, /HOST=127\.0\.0\.1/);
   assert.match(service, /NoNewPrivileges=true/);
 });
@@ -53,4 +55,16 @@ test('Oracle provisioning verifies the free plan before apply', () => {
   assert.match(workflow, /AUDIT_RUNTIME: oracle-vm/);
   assert.match(workflow, /TMDB_READ_TOKEN/);
   assert.match(workflow, /ORACLE_SSH_PRIVATE_KEY/);
+});
+
+
+test('Oracle disk cache is release-scoped and concurrent writes are collision-safe', () => {
+  assert.match(server, /CACHE_NAMESPACE/);
+  assert.match(server, /process\.env\.NUVIO_GIT_SHA/);
+  assert.match(server, /CACHE_NAMESPACE \+ '\\n' \+ url/);
+  assert.match(server, /randomUUID\(\)/);
+  assert.match(server, /this\.writes = new Map\(\)/);
+  assert.match(server, /this\.writeEntry\(input, stored\)/);
+  assert.match(updater, /NUVIO_GIT_SHA=%s/);
+  assert.match(updater, /\/etc\/nuvio\/release\.env/);
 });
