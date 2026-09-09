@@ -101,7 +101,14 @@ jobs:
         run: |
           set -Eeuo pipefail
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
-            "set -Eeuo pipefail; systemctl is-active --quiet nuvio; systemctl is-active --quiet caddy; curl -fsS --max-time 10 http://127.0.0.1:3000/_oracle/health | jq -e --arg origin 'https://$PUBLIC_HOST' '.ok == true and .runtime == \"oracle-vm\" and .publicOrigin == \\$origin'"
+            "bash -s -- '$PUBLIC_HOST'" <<'REMOTE'
+          set -Eeuo pipefail
+          host="$1"
+          systemctl is-active --quiet nuvio
+          systemctl is-active --quiet caddy
+          curl -fsS --max-time 10 http://127.0.0.1:3000/_oracle/health |
+            jq -e --arg origin "https://$host" '.ok == true and .runtime == "oracle-vm" and .publicOrigin == $origin'
+          REMOTE
 
       - name: Ensure Caddy TLS certificate is ready
         shell: bash
