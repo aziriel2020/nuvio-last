@@ -39,6 +39,10 @@ const VERSION = '1.4.0';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
+const DSMART_MAIN_JS = 'https://www.dsmartgo.com.tr/main.js';
+const DSMART_CONFIG_URL = 'https://bfogwjgq8dbp.merlincdn.net/client/site-config';
+const DSMART_CONFIG_TTL_MS = 6 * 60 * 60 * 1000;
+const DSMART_ITEMS_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_CANDIDATES = 80;
 const DEFAULT_MAX_ITEMS = 240;
 const DEFAULT_PAGE_SIZE = 60;
@@ -53,7 +57,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network5-ssport-live';
+const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network6-dsmart-cms';
 const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
@@ -964,6 +968,7 @@ function archiveSourceFor(type, provider) {
   if (type === 'movie' && provider.slug === ARCHIVE_VOD_PROVIDER.slug) return 'tmdb-vod';
   if (type === 'series' && provider.slug === 'crunchyroll') return 'crunchyroll-anime-combined';
   if (type === 'series' && provider.slug === 's-sport-plus') return 'ssport-live';
+  if (provider.slug === 'd-smart-go') return 'dsmart-cms';
   return 'tmdb-streaming';
 }
 
@@ -1410,6 +1415,7 @@ const detailsCache = new MemoryCache(256);
 const providerCache = new MemoryCache(32);
 const tvmazeCache = new MemoryCache(96);
 const ssportCache = new MemoryCache(16);
+const dsmartCache = new MemoryCache(32);
 const anilistCache = new MemoryCache(128);
 const mappingCache = new MemoryCache(256);
 
@@ -1550,7 +1556,11 @@ function calendarTitleProfile(value, layout = 'landscape') {
 function isAllowedPosterSource(value) {
   try {
     const url = new URL(String(value || ''));
-    return url.protocol === 'https:' && ALLOWED_POSTER_HOSTS.has(url.hostname.toLowerCase());
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (
+      ALLOWED_POSTER_HOSTS.has(host) ||
+      host.endsWith('.merlincdn.net')
+    );
   } catch {
     return false;
   }
@@ -2036,10 +2046,10 @@ function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) 
     background: `${origin}/background.svg`,
     resources: [
       { name: 'catalog', types: ['movie', 'series'] },
-      { name: 'meta', types: ['movie', 'series'], idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:'] }
+      { name: 'meta', types: ['movie', 'series'], idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:', 'dsmart:'] }
     ],
     types: ['movie', 'series'],
-    idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:'],
+    idPrefixes: ['tt', 'tmdb:movie:', 'tmdb:tv:', 'dsmart:'],
     catalogs,
     behaviorHints: { configurable: false, configurationRequired: false, newEpisodeNotifications: false },
     language: 'tr'
@@ -2192,6 +2202,321 @@ async function sourceFetchText(source, url, options = {}, maxAttempts = 2) {
     }
   }
   throw new Error(`${source} request failed`);
+}
+
+
+function dsmartPublicClientCredential(mainJs) {
+  const text = String(mainJs || '');
+  const anchor = text.indexOf('url:"/client/site-config"');
+  if (anchor < 0) return null;
+  const region = text.slice(Math.max(0, anchor - 2400), anchor + 900);
+  const values = [...region.matchAll(/["']([A-Za-z0-9._-]{28,120})["']/g)]
+    .map((match) => match[1])
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  return values[0] || null;
+}
+
+function findDsmartCmsConfig(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findDsmartCmsConfig(item);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+
+  if (
+    typeof value.serviceBaseUrl === 'string' &&
+    /^https:\/\//i.test(value.serviceBaseUrl) &&
+    typeof value.apiKey === 'string' &&
+    value.apiKey.length > 10 &&
+    (Number(value.tenantId) === 957 || /merlincdn\.net/i.test(value.serviceBaseUrl))
+  ) {
+    if (
+      Number(value.tenantId) === 957 ||
+      String(value.defaultPageProfile || '').length ||
+      String(value.deeplinkUrl || '').includes('dsmart')
+    ) {
+      return value;
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    const found = findDsmartCmsConfig(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function dsmartCmsConfig() {
+  const cached = dsmartCache.get('config');
+  if (cached) return cached;
+
+  const mainJs = await sourceFetchText('dsmart-main', DSMART_MAIN_JS, {
+    headers: {
+      Accept: 'application/javascript,text/javascript,*/*;q=0.8',
+      'User-Agent': `NuvioCalendar/${VERSION}`
+    }
+  });
+  const clientCredential = dsmartPublicClientCredential(mainJs);
+  if (!clientCredential) throw new Error('D-Smart public client configuration could not be resolved');
+
+  const url = new URL(DSMART_CONFIG_URL);
+  url.searchParams.set('version', '1.0.5');
+  url.searchParams.set('platform', 'web-desktop');
+  url.searchParams.set('timestamp', String(Date.now()));
+
+  const payload = await sourceFetchJson('dsmart-config', url, {
+    headers: {
+      Authorization: `Bearer ${clientCredential}`,
+      Accept: 'application/json',
+      Origin: 'https://www.dsmartgo.com.tr',
+      Referer: 'https://www.dsmartgo.com.tr/',
+      'User-Agent': `NuvioCalendar/${VERSION}`
+    }
+  });
+  const cms = findDsmartCmsConfig(payload);
+  if (!cms) throw new Error('D-Smart CMS configuration is unavailable');
+
+  return dsmartCache.set('config', {
+    serviceBaseUrl: String(cms.serviceBaseUrl).replace(/\/$/, ''),
+    apiKey: String(cms.apiKey),
+    queryParam: String(cms.queryParam || 'web'),
+    defaultPageProfile: String(cms.defaultPageProfile || 'yetiskin')
+  }, DSMART_CONFIG_TTL_MS);
+}
+
+async function dsmartCmsRequest(pathname, options = {}) {
+  const cms = await dsmartCmsConfig();
+  const url = new URL(`/v1${pathname}`, `${cms.serviceBaseUrl}/`);
+  url.searchParams.set('mcdn-langauge-code', 'tr');
+  url.searchParams.set('platform', cms.queryParam || 'web');
+  for (const [key, value] of Object.entries(options.params || {})) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  const headers = {
+    Accept: 'application/json',
+    apiKey: cms.apiKey,
+    langCode: 'tr',
+    'User-Agent': `NuvioCalendar/${VERSION}`
+  };
+  const request = {
+    method: options.method || 'GET',
+    headers
+  };
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    request.body = JSON.stringify(options.body);
+  }
+  return sourceFetchJson('dsmart-cms', url, request, 2);
+}
+
+function dsmartImage(item, preferredType) {
+  const images = Array.isArray(item?.images) ? item.images : [];
+  const preferred = String(preferredType || '').toLowerCase();
+  const exact = images.find((entry) => String(entry?.type || '').toLowerCase() === preferred);
+  const fallback = images.find((entry) => /^https:\/\//i.test(String(entry?.url || '')));
+  const url = String(exact?.url || fallback?.url || '');
+  return /^https:\/\//i.test(url) ? url : null;
+}
+
+function dsmartItemAvailabilityInstant(item) {
+  const candidates = [item?.displayStart, item?.createdDate, item?.updatedDate];
+  for (let index = 0; index < candidates.length; index += 1) {
+    const value = candidates[index];
+    const timestamp = Date.parse(String(value || ''));
+    if (!Number.isFinite(timestamp)) continue;
+    const year = new Date(timestamp).getUTCFullYear();
+    // D-Smart uses 1969/1970 as an "always available" sentinel. In that case
+    // the catalog creation time is the reliable availability event.
+    if (index === 0 && (year < 2015 || year > 2100)) continue;
+    return new Date(timestamp).toISOString();
+  }
+  return null;
+}
+
+function dsmartItemAvailabilityDate(item, timeZone = DEFAULT_TIMEZONE) {
+  const instant = dsmartItemAvailabilityInstant(item);
+  if (!instant) return null;
+  return viewerDateTimeFromInstant(instant, timeZone)?.date || normalizeIsoDate(instant.slice(0, 10));
+}
+
+function dsmartItemToMeta(item, type, timeZone = DEFAULT_TIMEZONE, window = null) {
+  if (!item || !Number.isFinite(Number(item.id))) return null;
+  const instant = dsmartItemAvailabilityInstant(item);
+  const calendarDate = dsmartItemAvailabilityDate(item, timeZone);
+  if (!instant || !calendarDate) return null;
+  if (window && (window.empty || calendarDate < window.start || calendarDate > window.end)) return null;
+
+  const viewer = viewerDateTimeFromInstant(instant, timeZone);
+  const poster = dsmartImage(item, 'Poster') || dsmartImage(item, 'Thumbnail');
+  const background = dsmartImage(item, 'Background') || dsmartImage(item, 'Thumbnail') || poster;
+  const name = String(item.displayTitle || item.name || item.contentName || '').trim();
+  if (!name) return null;
+  const releaseInfo = viewer?.time && viewer.time !== '00:00'
+    ? `${humanCalendarDate(calendarDate)} • ${viewer.time}`
+    : humanCalendarDate(calendarDate);
+
+  return {
+    id: `dsmart:${Number(item.id)}`,
+    type: type === 'movie' ? 'movie' : 'series',
+    name,
+    poster,
+    posterShape: 'poster',
+    background,
+    landscapePoster: background,
+    description: [
+      'D-Smart GO Türkiye • resmi içerik takvimi',
+      stripHtml(item.description)
+    ].filter(Boolean).join('\n\n'),
+    releaseInfo,
+    released: instant,
+    status: 'Released',
+    country: 'TR',
+    language: 'tr',
+    behaviorHints: { hasScheduledVideos: true },
+    _calendarProvider: 'D-Smart GO',
+    _calendarSource: 'dsmart-cms',
+    _dedupeKey: `dsmart:${Number(item.id)}`,
+    _eventInstantMs: Date.parse(instant),
+    _eventHasTime: Boolean(viewer?.time),
+    _eventMode: EVENT_MODES.STREAMING_INSTANT
+  };
+}
+
+function dsmartPayloadItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload.data)) return payload.data;
+  for (const key of ['items', 'Items', 'list', 'result']) {
+    if (Array.isArray(payload[key])) return payload[key];
+    if (payload[key] && typeof payload[key] === 'object') {
+      const nested = dsmartPayloadItems(payload[key]);
+      if (nested.length) return nested;
+    }
+  }
+  return [];
+}
+
+async function dsmartCmsItems(type) {
+  const normalizedType = type === 'movie' ? 'movie' : 'series';
+  const cacheKey = `items:${normalizedType}`;
+  const cached = dsmartCache.get(cacheKey);
+  if (cached) return cached;
+
+  const cms = await dsmartCmsConfig();
+  const displayCount = 100;
+  const maxPages = 10;
+  const items = [];
+  const seen = new Set();
+
+  for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+    const payload = await dsmartCmsRequest('/item/filter/', {
+      method: 'POST',
+      body: {
+        displayCount,
+        contentTypeNames: [normalizedType === 'movie' ? 'Movie' : 'Serie'],
+        customFilters: [{
+          namespace: 'availableprofile',
+          code: cms.defaultPageProfile || 'yetiskin'
+        }],
+        pageNumber,
+        include: ['parent', 'customField']
+      }
+    });
+    const pageItems = dsmartPayloadItems(payload);
+    for (const item of pageItems) {
+      const id = Number(item?.id);
+      if (!Number.isFinite(id) || seen.has(id)) continue;
+      seen.add(id);
+      items.push(item);
+    }
+
+    const totalCount = Number(payload?.totalCount);
+    if (!pageItems.length || pageItems.length < displayCount) break;
+    if (Number.isFinite(totalCount) && items.length >= totalCount) break;
+  }
+
+  return dsmartCache.set(cacheKey, items, DSMART_ITEMS_TTL_MS);
+}
+
+async function dsmartCmsItem(id) {
+  const numericId = Number(id);
+  if (!Number.isFinite(numericId) || numericId <= 0) return null;
+  const cacheKey = `item:${numericId}`;
+  const cached = dsmartCache.get(cacheKey);
+  if (cached) return cached;
+
+  const payload = await dsmartCmsRequest(`/item/${numericId}`);
+  let item = payload;
+  if (payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) item = payload.data;
+  if (!item || typeof item !== 'object' || Number(item.id) !== numericId) {
+    const candidates = dsmartPayloadItems(payload);
+    item = candidates.find((entry) => Number(entry?.id) === numericId) || null;
+  }
+  if (!item) return null;
+  return dsmartCache.set(cacheKey, item, DETAILS_TTL_MS);
+}
+
+async function buildDSmartCatalog({ catalog, timeZone, now = runtimeNow(), period = catalog.period, useCache = true }) {
+  const window = dateWindow(period, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: 'd-smart-go',
+    type: catalog.type,
+    period,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-dsmart-native`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = {
+    provider: 'D-Smart GO',
+    providerSlug: 'd-smart-go',
+    source: 'dsmart-cms',
+    type: catalog.type,
+    period,
+    timezone: timeZone,
+    today: window.today,
+    start: window.start,
+    end: window.end,
+    sourceErrors: 0,
+    candidates: 0,
+    final: 0
+  };
+
+  if (window.empty) {
+    const result = { metas: [], stats };
+    return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+  }
+
+  let items;
+  try {
+    items = await dsmartCmsItems(catalog.type);
+  } catch (error) {
+    stats.sourceErrors = 1;
+    throw error;
+  }
+  stats.candidates = items.length;
+
+  const metas = sortAndDedupeMetas(
+    items
+      .map((item) => dsmartItemToMeta(item, catalog.type, timeZone, window))
+      .filter(Boolean)
+  ).slice(0, getConfig().maxItems);
+
+  stats.final = metas.length;
+  const result = { metas: metas.map(cleanCatalogMeta), stats };
+  return useCache ? catalogCache.set(key, result, Math.min(CATALOG_TTL_MS, DSMART_ITEMS_TTL_MS)) : result;
 }
 
 function normalizeProviderName(value) {
@@ -4246,6 +4571,7 @@ async function buildCatalog(options) {
   const source = options.catalog.source;
   if (source === 'combined-calendar') return buildCombinedCatalog(options);
   if (source === 'ssport-live') return buildSSportLiveCatalog(options);
+  if (source === 'dsmart-cms') return buildDSmartCatalog(options);
   if (source === 'crunchyroll-anime-combined') return buildCrunchyrollAnimeCatalog(options);
   if (source === 'tvmaze-broadcast') return buildTvBroadcastCatalog(options);
   if (source === 'anilist-airing') return buildAnimeCatalog(options);
@@ -4336,6 +4662,14 @@ async function resolveTmdbId(id, type) {
 }
 
 async function handleMeta(res, type, id) {
+  if (/^dsmart:\d+$/.test(String(id || ''))) {
+    const item = await dsmartCmsItem(String(id).slice('dsmart:'.length));
+    if (!item) return json(res, 404, { meta: null });
+    const meta = dsmartItemToMeta(item, type, DEFAULT_TIMEZONE, null);
+    if (!meta) return json(res, 404, { meta: null });
+    return json(res, 200, { meta: cleanCatalogMeta(meta) }, 'public, max-age=300, s-maxage=1800, stale-while-revalidate=3600');
+  }
+
   const tmdbId = await resolveTmdbId(id, type);
   if (!tmdbId) return json(res, 404, { meta: null });
   const details = await fetchDetails(type, tmdbId);
@@ -4796,6 +5130,14 @@ module.exports._internals = {
   parseSSportUpcomingHtml,
   ssportUpcomingEvents,
   buildSSportLiveCatalog,
+  dsmartPublicClientCredential,
+  findDsmartCmsConfig,
+  dsmartImage,
+  dsmartItemAvailabilityInstant,
+  dsmartItemAvailabilityDate,
+  dsmartItemToMeta,
+  dsmartPayloadItems,
+  buildDSmartCatalog,
   webChannelMatchesProvider,
   resolveTvmazeShowToTmdb,
   anilistFetch,
@@ -4811,6 +5153,7 @@ module.exports._internals = {
   providerCache,
   tvmazeCache,
   ssportCache,
+  dsmartCache,
   anilistCache,
   mappingCache,
   providerHealth,
