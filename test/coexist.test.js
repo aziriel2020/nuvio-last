@@ -51,20 +51,20 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(us.catalogs.length, 10638);
   assert.equal(fr.catalogs.length, 12214);
   assert.equal(globalVod.catalogs.length, 591);
-  assert.equal(tr.catalogs.length, 6895);
+  assert.equal(tr.catalogs.length, 7092);
 });
 
-test('combined import has 48 unique collections: France, Global, Türkiye, then USA', async () => {
+test('combined import has 49 unique collections: France, Global, Türkiye, then USA', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 48);
+  assert.equal(collections.length, 49);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
-  assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 18);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 19);
   assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
   assert.equal(collections[0].title, '🇫🇷 Netflix');
   assert.equal(collections[13].title, '🇫🇷 VOD France');
@@ -73,8 +73,8 @@ test('combined import has 48 unique collections: France, Global, Türkiye, then 
   assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
   assert.equal(collections[17].title, '🌍 VOD Mondiale');
   assert.equal(collections[18].title, '🇹🇷 Netflix');
-  assert.equal(collections[35].title, '🇹🇷 VOD Türkiye');
-  assert.equal(collections[36].title, '🇺🇸 Netflix');
+  assert.equal(collections[36].title, '🇹🇷 VOD Türkiye');
+  assert.equal(collections[37].title, '🇺🇸 Netflix');
   assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
@@ -88,7 +88,7 @@ test('France stays first, Global is next, Türkiye follows, and USA remains last
   const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
   assert.equal(fr.length, 16);
   assert.equal(globalVod.length, 2);
-  assert.equal(tr.length, 18);
+  assert.equal(tr.length, 19);
   assert.equal(us.length, 12);
   assert(fr.every((c) => c.pinToTop === true));
   assert(globalVod.every((c) => c.pinToTop === true));
@@ -236,7 +236,7 @@ test('coexistence checker reports zero collisions', async () => {
     'com.nuvio.calendar.archives.us.coexist'
   ]);
   assert.equal(report.globalCollectionCount, 2);
-  assert.equal(report.trCollectionCount, 18);
+  assert.equal(report.trCollectionCount, 19);
 });
 
 test('USA and France Paramount+ remain distinct and both expose Series and Films', async () => {
@@ -294,7 +294,7 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 48);
+  assert.equal(collections.length, 49);
 
   const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
   const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
@@ -607,14 +607,14 @@ test('desktop11 content banner carries adaptive title and subtitle metadata', ()
 });
 
 
-test('standard and Desktop combined imports expose the same 18 Türkiye parents and source IDs', () => {
+test('standard and Desktop combined imports expose the same 19 Türkiye parents and source IDs', () => {
   const req = { headers: { host: 'example.test', 'x-forwarded-proto': 'https' } };
   const standard = handler._internals.combinedCollections(req);
   const desktop = handler._internals.combinedDesktopCollections(req);
   const trStandard = standard.filter((c) => c.title.startsWith('🇹🇷 '));
   const trDesktop = desktop.filter((c) => c.title.startsWith('🇹🇷 '));
-  assert.equal(trStandard.length, 18);
-  assert.equal(trDesktop.length, 18);
+  assert.equal(trStandard.length, 19);
+  assert.equal(trDesktop.length, 19);
   assert.deepEqual(trStandard.map((c) => c.id), trDesktop.map((c) => c.id));
   for (let i = 0; i < trStandard.length; i += 1) {
     const a = trStandard[i].folders.flatMap((f) => f.sources.map((s) => `${s.type}:${s.catalogId}`));
