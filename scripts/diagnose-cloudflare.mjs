@@ -21,9 +21,32 @@ if (p) console.log('PAGES_PROJECT ' + JSON.stringify({
   canonical: { id: p.canonical_deployment?.id, url: p.canonical_deployment?.url, uses_functions: p.canonical_deployment?.uses_functions }
 }));
 const date = new Date().toISOString().slice(0, 10);
-const query = 'query($account: String!, $start: Time!) { viewer { accounts(filter: { accountTag: $account }) { workersInvocationsAdaptive(limit: 1000, filter: { datetime_geq: $start }) { dimensions { scriptName status } sum { requests errors } quantiles { cpuTimeP50 cpuTimeP99 } } } } }';
+const query = 'query($account: String!, $start: Time!) { viewer { accounts(filter: { accountTag: $account }) { pagesFunctionsInvocationsAdaptiveGroups(limit: 1000, filter: { datetime_geq: $start }) { sum { requests errors } } } } }';
 const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
   method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
   body: JSON.stringify({ query, variables: { account, start: date + 'T00:00:00Z' } }), signal: AbortSignal.timeout(20000)
 });
 console.log('WORKERS_TODAY ' + JSON.stringify(await r.json()));
+// A plain-text TMDb binding may be returned by Pages. Encrypted values are never
+// exported; when unavailable, the provider diagnosis stays explicitly pending.
+const vars = p?.deployment_configs?.production?.env_vars || {};
+const tmdbToken = process.env.TMDB_READ_TOKEN || (vars.TMDB_READ_TOKEN?.type === 'plain_text' ? vars.TMDB_READ_TOKEN.value : '');
+const tmdbKey = process.env.TMDB_API_KEY || (vars.TMDB_API_KEY?.type === 'plain_text' ? vars.TMDB_API_KEY.value : '');
+if (tmdbToken || tmdbKey) {
+  const { default: providers } = await import('../shared/providers-tr.cjs');
+  const normalize = name => String(name).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i').replace(/[^a-z0-9]+/g, ' ').trim();
+  for (const type of ['movie', 'tv']) {
+    const url = new URL('https://api.themoviedb.org/3/watch/providers/' + type);
+    url.searchParams.set('watch_region', 'TR');
+    if (!tmdbToken) url.searchParams.set('api_key', tmdbKey);
+    const response = await fetch(url, { headers: tmdbToken ? { Authorization: 'Bearer ' + tmdbToken } : {}, signal: AbortSignal.timeout(20000) });
+    if (!response.ok) { console.log('TR_PROVIDER_DIRECTORY ' + type + ' HTTP ' + response.status); continue; }
+    const directory = (await response.json()).results || [];
+    for (const provider of providers) {
+      const aliases = provider.aliases.map(normalize);
+      const prefixes = (provider.matchPrefixes || []).map(normalize);
+      const matches = directory.filter(p => aliases.includes(normalize(p.provider_name)) || prefixes.some(pre => normalize(p.provider_name) === pre || normalize(p.provider_name).startsWith(pre + ' ')));
+      console.log('TR_PROVIDER ' + JSON.stringify({ type, slug: provider.slug, matches: matches.map(p => ({ id: p.provider_id, name: p.provider_name })) }));
+    }
+  }
+} else console.log('TR_PROVIDER_DIRECTORY pending: TMDb binding is encrypted and no GitHub TMDb secret is available.');

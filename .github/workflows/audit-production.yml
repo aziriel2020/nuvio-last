@@ -58,6 +58,8 @@ jobs:
       - name: Read Cloudflare runtime and quota diagnostics
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
+          TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 7b21859ab1740325151b97717cedc0e7
           CLOUDFLARE_PROJECT_NAME: nuvio-last-aziriel2020-1343705637
