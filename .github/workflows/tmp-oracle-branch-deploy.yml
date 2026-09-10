@@ -1,5 +1,5 @@
 name: Temporary Oracle Branch Deploy + Production Audit
-# Validation attempt 9: verify native 1600x900 Shield-style Desktop JPEG cards on real Oracle production.
+# Validation attempt 10: verify native 1600x900 Shield-style Desktop JPEG cards using only real emitted catalogue URLs.
 
 on:
   push:
