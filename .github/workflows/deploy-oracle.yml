@@ -32,6 +32,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install audit dependencies
+        run: npm install --no-audit --no-fund
+
       - name: Validate production verifier syntax
         run: node --check scripts/verify-oracle-production.mjs
 
