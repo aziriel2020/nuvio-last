@@ -1,4 +1,4 @@
-name: Temporary Fix Encoded AniList Metadata
+name: Temporary Fix Shared Platform Assets
 
 on:
   push:
@@ -22,43 +22,56 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Patch encoded AniList metadata matcher and regression test
+      - name: Patch Türkiye shared JPEG asset routing and regression tests
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          runtime = Path('runtime/anime-resilience.mjs')
+          runtime = Path('runtime/router.mjs')
           text = runtime.read_text()
-          old = "return url.pathname.match(/^\\/global\\/meta\\/series\\/anilist:(\\d+)\\.json$/);"
-          new = "return url.pathname.match(/^\\/global\\/meta\\/series\\/anilist(?::|%3A)(\\d+)\\.json$/i);"
+          old = """  let match = path.match(/^\\/(fr|global|tr|us)\\/(platform-card|platform-backdrop)\\.jpg$/);
+          if (match) {
+            const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+            if (!validSlug(provider)) return null;
+            const variant = match[2] === 'platform-backdrop' ? 'backdrop' : 'card';
+            return `/static/assets/platform-art/${match[1]}/${provider}-${variant}.jpg`;
+          }
+          """
+          new = """  let match = path.match(/^\\/(fr|global|tr|us)\\/(platform-card|platform-backdrop)\\.jpg$/);
+          if (match) {
+            const region = match[1];
+            const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+            if (!validSlug(provider)) return null;
+            const variant = match[2] === 'platform-backdrop' ? 'backdrop' : 'card';
+            if (region === 'tr' && provider === 'crunchyroll') {
+              return `/static/assets/platform-art/global/anime-asia-${variant}.jpg`;
+            }
+            if (region === 'tr' && provider === 'bi-kanal') {
+              return `/static/assets/platform-art/tr/turkiye-takvim-${variant}.jpg`;
+            }
+            return `/static/assets/platform-art/${region}/${provider}-${variant}.jpg`;
+          }
+          """
           if old not in text:
-              raise SystemExit('expected metaMatch expression not found')
+              raise SystemExit('expected localAssetPath platform block not found')
           runtime.write_text(text.replace(old, new, 1))
 
           test_file = Path('test/runtime.test.js')
           tests = test_file.read_text()
-          marker = "test('Oracle runtime sources contain no legacy hosting/runtime markers', () => {"
-          block = r'''test('Anime resilience recognizes URL-encoded AniList metadata IDs', async () => {
-            const mod = await import(pathToFileURL(path.join(ROOT, 'runtime/anime-resilience.mjs')).href + `?encoded=${Date.now()}`);
-            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist%3A197715.json'), true);
-            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist%3a197715.json'), true);
-            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist:197715.json'), true);
-            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/movie/anilist%3A197715.json'), false);
-          });
-
-          '''
-          if 'Anime resilience recognizes URL-encoded AniList metadata IDs' not in tests:
-              if marker not in tests:
-                  raise SystemExit('runtime test insertion marker not found')
-              tests = tests.replace(marker, block + marker, 1)
+          needle = "  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-card.jpg?provider=exxen'), '/static/assets/platform-art/tr/exxen-card.jpg');\n"
+          extra = needle + "  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=crunchyroll'), '/static/assets/platform-art/global/anime-asia-backdrop.jpg');\n  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=bi-kanal'), '/static/assets/platform-art/tr/turkiye-takvim-backdrop.jpg');\n"
+          if 'provider=bi-kanal' not in tests:
+              if needle not in tests:
+                  raise SystemExit('runtime localAssetPath test insertion point not found')
+              tests = tests.replace(needle, extra, 1)
               test_file.write_text(tests)
           PY
       - name: Install and run runtime tests
         run: |
           npm install --no-audit --no-fund
-          node --check runtime/anime-resilience.mjs
+          node --check runtime/router.mjs
           npm run test:runtime
       - name: Commit fix to migration branch
         shell: bash
@@ -66,7 +79,7 @@ jobs:
           set -Eeuo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add runtime/anime-resilience.mjs test/runtime.test.js
+          git add runtime/router.mjs test/runtime.test.js
           git diff --cached --check
-          git commit -m "fix: route encoded AniList metadata through Oracle resilience"
+          git commit -m "fix: serve shared Türkiye platform artwork from Oracle assets"
           git push origin HEAD:migration/oracle-only-final
