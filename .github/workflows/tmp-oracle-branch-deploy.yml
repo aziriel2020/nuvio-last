@@ -1,5 +1,5 @@
 name: Temporary Oracle Branch Deploy + Production Audit
-# Validation attempt 6: encoded AniList metadata now routes through Oracle resilience; audit remains fail-closed.
+# Validation attempt 7: Türkiye shared platform JPEG routing fixed; strict public audit remains fail-closed.
 
 on:
   push:
