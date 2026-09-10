@@ -1,9 +1,18 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
 const port = Number(process.env.ORACLE_TEST_PORT || 3317);
 const origin = 'http://127.0.0.1:' + port;
 const forbidden = /pages\.dev|workers\.dev|vercel\.app|sslip\.io/i;
+
+// Keep this integration test self-contained: static JSON routes are served from
+// dist, so build them for the same local origin used by the spawned Oracle VM adapter.
+execFileSync(process.execPath, ['scripts/build-runtime.js'], {
+  cwd: process.cwd(),
+  env: { ...process.env, PUBLIC_ORIGIN: origin, NUVIO_RUNTIME: 'oracle-vm' },
+  stdio: 'inherit'
+});
+
 const child = spawn(process.execPath, ['oracle/server.mjs'], {
   cwd: process.cwd(),
   env: {
@@ -100,6 +109,8 @@ try {
   rejectLegacy(collectionBody, 'combined collections');
 
   const desktop = await retry('/nuvio-collections-desktop.json');
+  requireHeader(desktop, 'x-nuvio-origin', 'oracle-vm');
+  requireHeader(desktop, 'x-nuvio-edge', 'oracle-node');
   const desktopBody = await desktop.json();
   if (!Array.isArray(desktopBody) || desktopBody.length !== collectionBody.length) {
     throw new Error(`Oracle Desktop collections mismatch: standard=${collectionBody.length} desktop=${desktopBody?.length}`);
@@ -107,6 +118,8 @@ try {
   rejectLegacy(desktopBody, 'desktop collections');
 
   const tr = await retry('/nuvio-collections-tr.json');
+  requireHeader(tr, 'x-nuvio-origin', 'oracle-vm');
+  requireHeader(tr, 'x-nuvio-edge', 'oracle-node');
   const trBody = await tr.json();
   if (!Array.isArray(trBody) || trBody.length !== healthBody.trCollectionCount) {
     throw new Error(`Oracle Türkiye collections mismatch: health=${healthBody.trCollectionCount} json=${trBody?.length}`);
