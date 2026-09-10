@@ -1,5 +1,5 @@
 name: Temporary Oracle Branch Deploy + Production Audit
-# Validation attempt 4: release-order guard fixed; public audit remains fail-closed.
+# Validation attempt 5: strict multi-candidate AniList proof; public audit remains fail-closed.
 
 on:
   push:
@@ -7,6 +7,10 @@ on:
       - migration/oracle-only-final
     paths:
       - ".github/workflows/tmp-oracle-branch-deploy.yml"
+      - "scripts/verify-oracle-production.mjs"
+      - "oracle/**"
+      - "runtime/**"
+      - "test/oracle-config.test.mjs"
 
 permissions:
   contents: read
