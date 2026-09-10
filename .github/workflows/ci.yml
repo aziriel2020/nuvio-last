@@ -12,7 +12,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,21 +25,20 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run test suite
+      - name: Run full test suite
         run: npm test
 
-      - name: Build and test free Cloudflare edge
-        env:
-          PUBLIC_ORIGIN: https://nuvio-edge-test.example
-        run: npm run test:cloudflare
+      - name: Test neutral runtime layer
+        run: npm run test:runtime
 
-      - name: Build portable runtime assets
-        env:
-          PUBLIC_ORIGIN: http://127.0.0.1:3317
-        run: npm run build:cloudflare
-
-      - name: Test Oracle VM runtime
+      - name: Test Oracle VM integration
         run: npm run test:oracle
+
+      - name: Build final Oracle-compatible runtime assets
+        env:
+          PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+          NUVIO_RUNTIME: oracle-vm
+        run: npm run build:runtime
 
       - name: Validate Oracle shell scripts
         run: |
