@@ -1,0 +1,56 @@
+name: Temporary Oracle Runtime Migration
+
+on:
+  push:
+    branches:
+      - migration/oracle-only-final
+    paths:
+      - ".github/workflows/tmp-oracle-runtime-migration.yml"
+      - "scripts/migrate-oracle-runtime.mjs"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-oracle-runtime-migration
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/oracle-only-final
+          fetch-depth: 0
+
+      - name: Generate neutral Oracle runtime
+        run: node scripts/migrate-oracle-runtime.mjs
+
+      - name: Verify generated runtime has no legacy hosting tokens
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if grep -RniE 'cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io' runtime oracle/server.mjs; then
+            echo 'Legacy hosting token remains in Oracle runtime' >&2
+            exit 1
+          fi
+          test -s runtime/router.mjs
+          test -s runtime/index.mjs
+          test -s runtime/anime-resilience.mjs
+
+      - name: Commit generated runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git add runtime oracle/server.mjs api/index.js
+          if git diff --cached --quiet; then
+            echo 'Runtime already generated.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor: extract Oracle-neutral runtime'
+          git push origin HEAD:migration/oracle-only-final
