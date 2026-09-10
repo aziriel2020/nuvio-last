@@ -1,5 +1,5 @@
 name: Temporary Oracle Branch Deploy + Production Audit
-# Validation attempt 2: Always Free health budget fixed.
+# Validation attempt 3: final public build runs after local integration fixture; audit is fail-closed.
 
 on:
   push:
@@ -99,7 +99,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           expected="$(git rev-parse HEAD)"
-          for attempt in {1..20}; do
+          for attempt in {1..30}; do
             payload="$(curl -fsS --max-time 10 "$PUBLIC_ORIGIN/_oracle/health" || true)"
             if [[ -n "$payload" ]] && jq -e --arg sha "$expected" --arg origin "$PUBLIC_ORIGIN" \
               '.ok == true and .runtime == "oracle-vm" and .gitSha == $sha and .publicOrigin == $origin' \
@@ -113,14 +113,18 @@ jobs:
           exit 1
 
       - name: Run strict public production audit
+        shell: bash
         env:
           VERIFY_TIMEOUT_MS: 30000
-        run: node scripts/verify-oracle-production.mjs | tee "$RUNNER_TEMP/oracle-production-audit.json.log"
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-oracle-production.mjs | tee "$RUNNER_TEMP/oracle-production-audit.json.log"
 
       - name: Resume Oracle updater after successful branch validation
         if: success()
         shell: bash
         run: |
+          set -Eeuo pipefail
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
             "sudo systemctl start nuvio-update.timer && sudo systemctl is-active --quiet nuvio && sudo systemctl is-active --quiet caddy"
 
