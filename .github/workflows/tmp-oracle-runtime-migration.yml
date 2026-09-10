@@ -1,4 +1,4 @@
-name: Temporary Oracle Runtime Migration
+name: Temporary Oracle Runtime Migration + CI
 
 on:
   push:
@@ -7,6 +7,16 @@ on:
     paths:
       - ".github/workflows/tmp-oracle-runtime-migration.yml"
       - "scripts/migrate-oracle-runtime.mjs"
+      - "scripts/build-runtime.js"
+      - "scripts/test-oracle-runtime.mjs"
+      - "runtime/**"
+      - "oracle/**"
+      - "api/**"
+      - "regions/**"
+      - "assets/**"
+      - "test/**"
+      - "package.json"
+      - "package-lock.json"
 
 permissions:
   contents: write
@@ -16,15 +26,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  migrate:
+  migrate-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
       - name: Checkout migration branch
         uses: actions/checkout@v4
         with:
           ref: migration/oracle-only-final
           fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
       - name: Generate neutral Oracle runtime
         run: node scripts/migrate-oracle-runtime.mjs
@@ -33,24 +49,49 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          if grep -RniE 'cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io' runtime oracle/server.mjs; then
+          if grep -RniE 'cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io' runtime oracle/server.mjs scripts/build-runtime.js; then
             echo 'Legacy hosting token remains in Oracle runtime' >&2
             exit 1
           fi
           test -s runtime/router.mjs
           test -s runtime/index.mjs
           test -s runtime/anime-resilience.mjs
+          node --check runtime/router.mjs
+          node --check runtime/index.mjs
+          node --check runtime/anime-resilience.mjs
+          node --check oracle/server.mjs
 
-      - name: Commit generated runtime
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run complete engine suite
+        run: npm test
+
+      - name: Run neutral runtime suite
+        run: npm run test:runtime
+
+      - name: Build Oracle runtime assets
+        env:
+          PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+          NUVIO_RUNTIME: oracle-vm
+        run: npm run build:runtime
+
+      - name: Test Oracle Node adapter end-to-end
+        run: npm run test:oracle
+
+      - name: Validate Oracle updater shell
+        run: bash -n oracle/update.sh
+
+      - name: Commit generated runtime if changed
         shell: bash
         run: |
           set -Eeuo pipefail
           git add runtime oracle/server.mjs api/index.js
           if git diff --cached --quiet; then
-            echo 'Runtime already generated.'
+            echo 'Runtime already generated and validated.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'refactor: extract Oracle-neutral runtime'
+          git commit -m 'refactor: regenerate Oracle-neutral runtime'
           git push origin HEAD:migration/oracle-only-final
