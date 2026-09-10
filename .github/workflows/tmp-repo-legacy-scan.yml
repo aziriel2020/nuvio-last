@@ -22,13 +22,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          pattern='cloudflare|pages\.dev|workers\.dev|wrangler|vercel(\.app)?|sslip\.io'
           echo '=== TRACKED FILES WITH LEGACY TOKENS ==='
-          git grep -IlE 'cloudflare|pages\.dev|workers\.dev|wrangler|vercel(?:\.app)?|sslip\.io' -- . \
+          git grep -IlE "$pattern" -- . \
             ':(exclude)*.zip' ':(exclude)*.jpg' ':(exclude)*.jpeg' ':(exclude)*.png' ':(exclude)*.webp' \
             | sort | tee "$RUNNER_TEMP/legacy-files.txt" || true
           echo '=== OCCURRENCE COUNTS BY FILE ==='
           while IFS= read -r f; do
             [[ -n "$f" ]] || continue
-            c="$(grep -Eic 'cloudflare|pages\.dev|workers\.dev|wrangler|vercel(?:\.app)?|sslip\.io' "$f" || true)"
+            c="$(grep -Eic "$pattern" "$f" || true)"
             printf '%5s %s\n' "$c" "$f"
           done < "$RUNNER_TEMP/legacy-files.txt" | sort -nr
