@@ -54,7 +54,6 @@ jobs:
           set -Eeuo pipefail
           KEY="$RUNNER_TEMP/keys/oracle_ssh.pem"
           IP="141.145.215.202"
-          HOST="141-145-215-202.sslip.io"
           ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 ubuntu@"$IP" "bash -s" <<'REMOTE'
           set -Eeuo pipefail
           echo "NUVIO_SERVICE=$(systemctl is-active nuvio || true)"
@@ -72,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          ORIGIN="https://141-145-215-202.sslip.io"
+          ORIGIN="https://141-145-215-202.nip.io"
           echo "PUBLIC_HEALTH:"
           curl -fsS --retry 5 --retry-delay 2 --max-time 20 "$ORIGIN/_oracle/health"
           echo
