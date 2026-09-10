@@ -1,5 +1,5 @@
 name: Temporary Oracle Branch Deploy + Production Audit
-# Validation attempt 7: Türkiye shared platform JPEG routing fixed; strict public audit remains fail-closed.
+# Validation attempt 8: legacy hosting deployment surface removed; validate final Oracle-only tree fail-closed.
 
 on:
   push:
