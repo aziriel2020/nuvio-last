@@ -108,6 +108,14 @@ test('runtime router serves repository artwork and retains Shield Desktop v3 ren
   assert.match(svg, /desktop-provider/);
 });
 
+test('Anime resilience recognizes URL-encoded AniList metadata IDs', async () => {
+  const mod = await import(pathToFileURL(path.join(ROOT, 'runtime/anime-resilience.mjs')).href + `?encoded=${Date.now()}`);
+  assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist%3A197715.json'), true);
+  assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist%3a197715.json'), true);
+  assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist:197715.json'), true);
+  assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/movie/anilist%3A197715.json'), false);
+});
+
 test('Oracle runtime sources contain no legacy hosting/runtime markers', () => {
   const files = [
     'runtime/index.mjs',

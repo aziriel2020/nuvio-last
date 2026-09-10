@@ -79,7 +79,7 @@ function catalogMatch(urlLike) {
 
 function metaMatch(urlLike) {
   const url = urlLike instanceof URL ? urlLike : new URL(String(urlLike));
-  return url.pathname.match(/^\/global\/meta\/series\/anilist:(\d+)\.json$/);
+  return url.pathname.match(/^\/global\/meta\/series\/anilist(?::|%3A)(\d+)\.json$/i);
 }
 
 export function isGlobalAnimeResilienceRequest(urlLike) {
