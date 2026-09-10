@@ -33,17 +33,20 @@ child.stderr.on('data', chunk => { logs += chunk; process.stderr.write(chunk); }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function retry(pathname, attempts = 40) {
+// /health builds the complete four-region coexistence map. That is intentionally
+// heavier than /_oracle/health, especially on the Always Free VM, so use a bounded
+// but realistic per-request budget instead of a runner-class 3 s assumption.
+async function retry(pathname, attempts = 8, timeoutMs = 20_000) {
   let last;
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const response = await fetch(origin + pathname, { signal: AbortSignal.timeout(3000) });
+      const response = await fetch(origin + pathname, { signal: AbortSignal.timeout(timeoutMs) });
       if (response.ok) return response;
       last = new Error(pathname + ' HTTP ' + response.status);
     } catch (error) {
       last = error;
     }
-    await sleep(250);
+    await sleep(500);
   }
   throw last || new Error('Oracle runtime unavailable');
 }
@@ -84,7 +87,7 @@ function findFirstOracleVisual(value) {
 }
 
 try {
-  const oracleHealth = await retry('/_oracle/health');
+  const oracleHealth = await retry('/_oracle/health', 5, 5_000);
   requireHeader(oracleHealth, 'x-nuvio-origin', 'oracle-vm');
   requireHeader(oracleHealth, 'x-nuvio-edge', 'oracle-node');
   const oracleHealthBody = await oracleHealth.json();
