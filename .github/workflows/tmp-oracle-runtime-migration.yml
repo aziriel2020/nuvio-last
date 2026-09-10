@@ -40,7 +40,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Generate neutral Oracle runtime
         run: node scripts/migrate-oracle-runtime.mjs
@@ -62,7 +61,14 @@ jobs:
           node --check oracle/server.mjs
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Run complete engine suite
         run: npm test
