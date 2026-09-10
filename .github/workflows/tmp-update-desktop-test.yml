@@ -1,0 +1,34 @@
+name: Temporary Align Desktop Revision Test
+on:
+  push:
+    branches: [migration/oracle-only-final]
+    paths: [".github/workflows/tmp-update-desktop-test.yml"]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/oracle-only-final
+          fetch-depth: 0
+      - name: Update Desktop revision assertion
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('test/coexist.test.js')
+          s=p.read_text()
+          if "'desktop10'" not in s:
+              raise SystemExit('desktop10 assertion not found')
+          s=s.replace("'desktop10'", "'desktop12-shield-jpeg'")
+          s=s.replace('desktop10 import uses adaptive cinematic routes with labels', 'desktop12 Shield JPEG import uses adaptive cinematic routes with labels')
+          p.write_text(s)
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add test/coexist.test.js
+          git commit -m "test: expect corrected Desktop Shield JPEG revision"
+          git push origin HEAD:migration/oracle-only-final
