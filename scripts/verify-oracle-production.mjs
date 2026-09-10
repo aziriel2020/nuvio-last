@@ -139,10 +139,10 @@ async function verifyVisual(urlValue, label) {
   const type = String(result.response.headers.get('content-type') || '').toLowerCase();
   assert(type.startsWith('image/'), `${label}: invalid Content-Type ${type}`);
   assert(result.bytes.byteLength > 1000, `${label}: empty/tiny image (${result.bytes.byteLength} bytes)`);
-  if (/\/desktop-(?:content|folder|genre)-card\.jpg$/.test(url.pathname)) {
-    assert(type.startsWith('image/jpeg'), `${label}: Desktop card must be a native JPEG, got ${type}`);
-    assert(result.response.headers.get('x-nuvio-card-renderer') === 'shield-desktop-jpeg-v4', `${label}: Desktop renderer marker missing`);
-    assert(result.response.headers.get('x-nuvio-desktop-format') === '1600x900', `${label}: Desktop format marker missing`);
+  if (/\/(?:desktop|shield)-(?:content|folder|genre)-card\.jpg$/.test(url.pathname)) {
+    assert(type.startsWith('image/jpeg'), `${label}: cinematic card must be a native JPEG, got ${type}`);
+    assert(result.response.headers.get('x-nuvio-card-renderer') === 'shield-desktop-jpeg-v4', `${label}: cinematic renderer marker missing`);
+    assert(result.response.headers.get('x-nuvio-desktop-format') === '1600x900', `${label}: cinematic format marker missing`);
     assert(result.bytes[0] === 0xff && result.bytes[1] === 0xd8, `${label}: invalid JPEG signature`);
     const metadata = await sharp(result.bytes).metadata();
     assert(metadata.format === 'jpeg' && metadata.width === 1600 && metadata.height === 900, `${label}: expected 1600x900 JPEG, got ${metadata.format} ${metadata.width}x${metadata.height}`);
@@ -218,6 +218,7 @@ assert(Array.isArray(health.data?.duplicateCatalogKeys) && health.data.duplicate
 
 const requiredJsonPaths = [
   '/nuvio-collections-fr-global-tr-usa.json',
+  '/nuvio-collections-shield.json',
   '/nuvio-collections-desktop.json',
   '/nuvio-collections-tr.json',
   '/fr/nuvio-collections.json',
@@ -241,6 +242,17 @@ const standard = payloads['/nuvio-collections-fr-global-tr-usa.json'];
 const desktop = payloads['/nuvio-collections-desktop.json'];
 const tr = payloads['/nuvio-collections-tr.json'];
 assert(Array.isArray(standard) && standard.length > 0, 'standard collection import empty');
+const shieldAlias = payloads['/nuvio-collections-shield.json'];
+assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Shield count ${shieldAlias?.length} != standard ${standard.length}`);
+const shieldVisualUrls = flattenStrings(standard).filter((value) => {
+  try { return /\/shield-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+});
+assert(shieldVisualUrls.length > 0, 'Shield collection import has no native cinematic card URLs');
+for (const value of shieldVisualUrls) {
+  const visualUrl = new URL(value);
+  assert(visualUrl.origin === ORIGIN, `Shield collection visual escaped Oracle: ${value}`);
+  assert(visualUrl.searchParams.get('v')?.includes('shield13-cinematic-jpeg'), `Shield collection visual has stale renderer revision: ${value}`);
+}
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
 const desktopVisualUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/desktop-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }

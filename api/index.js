@@ -44,7 +44,11 @@ function sendHtml(res, body) {
 async function delegate(req, res, prefix, handler) {
   const originalUrl = req.url;
   const originalHeaders = req.headers;
-  const stripped = originalUrl.slice(prefix.length) || '/';
+  let stripped = originalUrl.slice(prefix.length) || '/';
+  stripped = stripped
+    .replace(/^\/shield-folder-card\.jpg(?=\?|$)/, '/desktop-folder-card.jpg')
+    .replace(/^\/shield-content-card\.jpg(?=\?|$)/, '/desktop-content-card.jpg')
+    .replace(/^\/shield-genre-card\.jpg(?=\?|$)/, '/desktop-genre-card.jpg');
   req.url = stripped.startsWith('/') ? stripped : `/${stripped}`;
   req.headers = { ...originalHeaders, 'x-nuvio-base-path': prefix };
   try {
@@ -103,6 +107,61 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
   return value;
 }
 
+const SHIELD_VISUAL_REV = 'shield13-cinematic-jpeg';
+
+function shieldCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
+  const value = String(url || '');
+  const typeContext = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
+  const type = typeContext.includes('film') ? 'movie' : 'series';
+
+  if (value.includes('/platform-category-card.svg') || value.includes('/platform-card.jpg')) {
+    const next = value
+      .replace('/platform-category-card.svg', '/shield-folder-card.jpg')
+      .replace('/platform-card.jpg', '/shield-folder-card.jpg');
+    const cleaned = cleanVisualQuery(next, ['category', 'v']);
+    const extra = new URLSearchParams({ type, v: SHIELD_VISUAL_REV, title: folder?.title || '', label: collectionTitle || '' });
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
+  }
+
+  if (value.includes('/genre-folder-art.svg') || value.includes('/genre-card.jpg')) {
+    const next = value
+      .replace('/genre-folder-art.svg', '/shield-genre-card.jpg')
+      .replace('/genre-card.jpg', '/shield-genre-card.jpg');
+    const colorMatch = value.match(/[?&]color=([^&]+)/);
+    const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
+    const extra = new URLSearchParams({ type, v: SHIELD_VISUAL_REV, title: folder?.title || '', label: collectionTitle || '' });
+    if (colorMatch) {
+      let color = colorMatch[1];
+      try { color = decodeURIComponent(color); } catch {}
+      extra.set('color', color);
+    }
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
+  }
+
+  if (variant === 'backdrop' && value.includes('/platform-backdrop.svg')) {
+    const cleaned = cleanVisualQuery(value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'), ['type', 'v']);
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + `v=${SHIELD_VISUAL_REV}`;
+  }
+
+  return value;
+}
+
+function shieldizeCollectionArt(collection) {
+  const folders = (collection.folders || []).map((folder) => ({
+    ...folder,
+    coverImageUrl: shieldCollectionVisualUrl(folder.coverImageUrl, folder, 'card', collection.title),
+    focusGifUrl: null,
+    focusGifEnabled: false,
+    hideTitle: true,
+    heroBackdropUrl: shieldCollectionVisualUrl(folder.heroBackdropUrl, folder, 'backdrop', collection.title)
+  }));
+  return {
+    ...collection,
+    backdropImageUrl: shieldCollectionVisualUrl(collection.backdropImageUrl, null, 'backdrop', collection.title),
+    folders
+  };
+}
+
 function desktopizeCollectionArt(collection) {
   const folders = (collection.folders || []).map((folder) => ({
     ...folder,
@@ -121,10 +180,14 @@ function desktopizeCollectionArt(collection) {
 }
 
 function combinedDesktopCollections(req) {
-  return combinedCollections(req).map(desktopizeCollectionArt);
+  return combinedRawCollections(req).map(desktopizeCollectionArt);
 }
 
 function combinedCollections(req) {
+  return combinedRawCollections(req).map(shieldizeCollectionArt);
+}
+
+function combinedRawCollections(req) {
   const origin = originFromRequest(req);
   const nowUs = usHandler._internals.runtimeNow();
   const nowFr = frHandler._internals.runtimeNow();
@@ -203,7 +266,7 @@ module.exports = async function handler(req, res) {
     return sendJson(res, report.safe ? 200 : 500, { ok: report.safe, ...report }, 'no-store');
   }
   if (path === '/coexistence-check.json') return sendJson(res, 200, coexistenceReport(req), 'no-store');
-  if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
+  if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-shield.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
     return sendJson(res, 200, combinedCollections(req), LARGE_JSON_CACHE);
   }
   if (path === '/nuvio-collections-desktop.json') {
@@ -218,7 +281,7 @@ module.exports = async function handler(req, res) {
         globalHandler._internals.runtimeNow(),
         globalHandler._internals.requestTimeZone(req),
         `${origin}/global`
-      ),
+      ).map(shieldizeCollectionArt),
       LARGE_JSON_CACHE
     );
   }
@@ -231,7 +294,7 @@ module.exports = async function handler(req, res) {
         trHandler._internals.runtimeNow(),
         trHandler._internals.requestTimeZone(req),
         `${origin}/tr`
-      ),
+      ).map(shieldizeCollectionArt),
       LARGE_JSON_CACHE
     );
   }
@@ -246,6 +309,7 @@ module.exports = async function handler(req, res) {
       globalCollections: `${origin}/nuvio-collections-global.json`,
       turkeyCollections: `${origin}/nuvio-collections-tr.json`,
       combinedCollections: `${origin}/nuvio-collections-fr-global-tr-usa.json`,
+      shieldCollections: `${origin}/nuvio-collections-shield.json`,
       desktopCollections: `${origin}/nuvio-collections-desktop.json`,
       check: `${origin}/coexistence-check.json`
     }, 'no-store');
@@ -262,7 +326,10 @@ module.exports._internals = {
   originFromRequest,
   publicOriginFromRequest,
   combinedCollections,
+  combinedRawCollections,
   combinedDesktopCollections,
+  shieldizeCollectionArt,
+  shieldCollectionVisualUrl,
   desktopizeCollectionArt,
   coexistenceReport,
   delegate,
