@@ -1,5 +1,5 @@
 name: Temporary Oracle Branch Deploy + Production Audit
-# Validation attempt 3: final public build runs after local integration fixture; audit is fail-closed.
+# Validation attempt 4: release-order guard fixed; public audit remains fail-closed.
 
 on:
   push:
