@@ -1,0 +1,34 @@
+name: Temporary Legacy Hosting Scan
+
+on:
+  push:
+    branches:
+      - migration/oracle-only-final
+    paths:
+      - ".github/workflows/tmp-repo-legacy-scan.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/oracle-only-final
+      - name: Scan tracked text files for legacy hosting references
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo '=== TRACKED FILES WITH LEGACY TOKENS ==='
+          git grep -IlE 'cloudflare|pages\.dev|workers\.dev|wrangler|vercel(?:\.app)?|sslip\.io' -- . \
+            ':(exclude)*.zip' ':(exclude)*.jpg' ':(exclude)*.jpeg' ':(exclude)*.png' ':(exclude)*.webp' \
+            | sort | tee "$RUNNER_TEMP/legacy-files.txt" || true
+          echo '=== OCCURRENCE COUNTS BY FILE ==='
+          while IFS= read -r f; do
+            [[ -n "$f" ]] || continue
+            c="$(grep -Eic 'cloudflare|pages\.dev|workers\.dev|wrangler|vercel(?:\.app)?|sslip\.io' "$f" || true)"
+            printf '%5s %s\n' "$c" "$f"
+          done < "$RUNNER_TEMP/legacy-files.txt" | sort -nr
