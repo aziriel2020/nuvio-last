@@ -28,5 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install audit dependencies
+        run: npm install --no-audit --no-fund
       - name: Verify Oracle production
         run: node scripts/verify-oracle-production.mjs
