@@ -97,6 +97,8 @@ test('Türkiye collections preserve the current service set and rolling periods'
 test('runtime router serves repository artwork and retains Shield Desktop v3 renderer', async () => {
   const router = await import(pathToFileURL(path.join(ROOT, 'runtime/router.mjs')).href + `?t=${Date.now()}`);
   assert.equal(router.localAssetPath('https://oracle.example/tr/platform-card.jpg?provider=exxen'), '/static/assets/platform-art/tr/exxen-card.jpg');
+  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=crunchyroll'), '/static/assets/platform-art/global/anime-asia-backdrop.jpg');
+  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=bi-kanal'), '/static/assets/platform-art/tr/turkiye-takvim-backdrop.jpg');
   assert.equal(router.platformStaticAssetPath('https://oracle.example/tr/desktop-folder-card.jpg?provider=tod&type=series'), '/static/assets/platform-art/tr/tod-card.jpg');
   assert.equal(router.platformStaticAssetPath('https://oracle.example/tr/desktop-folder-card.jpg?provider=crunchyroll&type=series'), '/static/assets/platform-art/global/anime-asia-card.jpg');
   assert.equal(router.localAssetPath('https://oracle.example/fr/platform-card.jpg?provider=../bad'), null);

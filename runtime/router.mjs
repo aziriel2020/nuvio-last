@@ -75,6 +75,8 @@ export function localAssetPath(input) {
     const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
     if (!validSlug(provider)) return null;
     const variant = match[2] === 'platform-backdrop' ? 'backdrop' : 'card';
+    if (match[1] === 'tr' && provider === 'crunchyroll') return `/static/assets/platform-art/global/anime-asia-${variant}.jpg`;
+    if (match[1] === 'tr' && provider === 'bi-kanal') return `/static/assets/platform-art/tr/turkiye-takvim-${variant}.jpg`;
     return `/static/assets/platform-art/${match[1]}/${provider}-${variant}.jpg`;
   }
 
