@@ -32,13 +32,27 @@ test('Oracle runtime has bounded resources and automatic restart', () => {
   assert.match(service, /NoNewPrivileges=true/);
 });
 
-test('Oracle releases are tested before switch and roll back after failed health', () => {
+test('Oracle release tests run before the final public build and atomic switch', () => {
   const testIndex = updater.indexOf('npm test');
-  const buildIndex = updater.indexOf('npm run build:cloudflare');
+  const runtimeTestIndex = updater.indexOf('npm run test:runtime');
+  const oracleTestIndex = updater.indexOf('npm run test:oracle');
+  const buildIndex = updater.indexOf('npm run build:runtime');
+  const originGuardIndex = updater.indexOf('Final Oracle build origin verified:');
   const switchIndex = updater.indexOf('mv -Tf "$BASE/current.new" "$CURRENT"');
-  assert.ok(testIndex >= 0 && buildIndex > testIndex && switchIndex > buildIndex);
+  assert.ok(
+    testIndex >= 0 &&
+    runtimeTestIndex > testIndex &&
+    oracleTestIndex > runtimeTestIndex &&
+    buildIndex > oracleTestIndex &&
+    originGuardIndex > buildIndex &&
+    switchIndex > originGuardIndex,
+    'Oracle test fixture must run before the final production-origin build and switch'
+  );
+  assert.ok(updater.includes('127.0.0.1'), 'local integration fixture guard must be present');
+  assert.ok(updater.includes('pages') && updater.includes('workers') && updater.includes('vercel') && updater.includes('sslip'), 'legacy-host final-build guard must be present');
   assert.match(updater, /Rolling back to/);
   assert.match(updater, /systemctl restart nuvio/);
+  assert.doesNotMatch(updater, /build:cloudflare|test:cloudflare|wrangler/i);
 });
 
 test('Oracle bootstrap exposes only SSH, HTTP and HTTPS', () => {
@@ -57,7 +71,6 @@ test('Oracle provisioning verifies the free plan before apply', () => {
   assert.match(workflow, /ORACLE_SSH_PRIVATE_KEY/);
 });
 
-
 test('Oracle disk cache is release-scoped and concurrent writes are collision-safe', () => {
   assert.match(server, /CACHE_NAMESPACE/);
   assert.match(server, /process\.env\.NUVIO_GIT_SHA/);
@@ -67,4 +80,11 @@ test('Oracle disk cache is release-scoped and concurrent writes are collision-sa
   assert.match(server, /this\.writeEntry\(input, stored\)/);
   assert.match(updater, /NUVIO_GIT_SHA=%s/);
   assert.match(updater, /\/etc\/nuvio\/release\.env/);
+});
+
+test('Oracle runtime imports only the neutral runtime layer and repository-local assets', () => {
+  assert.match(server, /\.\.\/runtime\/index\.mjs/);
+  assert.match(server, /pathname\.startsWith\('\/static\/assets\/'\)/);
+  assert.match(server, /path\.join\(ROOT, 'assets'\)/);
+  assert.doesNotMatch(server, /cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io/i);
 });

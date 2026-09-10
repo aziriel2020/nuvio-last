@@ -1,56 +1,26 @@
-name: Audit Production Catalogs
+name: Audit Oracle Production
 
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: Safe checks or full inventory (about 45000 Function requests)
-        type: choice
-        options: [safe, full]
-        default: safe
-      regions:
-        description: Comma separated regions
-        default: fr,global,tr,us
-      providers:
-        description: Optional comma separated provider slugs
-        default: ''
-      years:
-        description: Optional comma separated archive years
-        default: ''
-  pull_request:
-    branches: [main]
   workflow_run:
-    workflows: ["Deploy Cloudflare Pages"]
+    workflows: ["Deploy Oracle Production"]
     types: [completed]
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: nuvio-production-audit
+  group: oracle-production-audit
   cancel-in-progress: false
 
 jobs:
   audit:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    timeout-minutes: 20
     env:
-      PUBLIC_ORIGIN: https://nuvio-last-aziriel2020-1343705637.pages.dev
-      AUDIT_MODE: ${{ github.event_name == 'workflow_run' && 'full' || inputs.mode || 'safe' }}
-      AUDIT_REGIONS: ${{ inputs.regions || 'fr,global,tr,us' }}
-      AUDIT_PROVIDERS: ${{ inputs.providers || '' }}
-      AUDIT_YEARS: ${{ inputs.years || '' }}
-      AUDIT_STRICT: '1'
-      AUDIT_CONCURRENCY: '4'
-      AUDIT_ATTEMPTS: '3'
-      AUDIT_REQUEST_BUDGET: ${{ github.event_name == 'workflow_run' && '90000' || '6000' }}
-      AUDIT_META_SAMPLES: ${{ github.event_name == 'workflow_run' && '1' || '2' }}
-      AUDIT_INTERVAL_MS: '100'
-      AUDIT_DESIGN: ${{ github.event_name == 'pull_request' && 'desktop11' || 'shield3' }}
-      AUDIT_REPORT: reports/catalog-audit.json
+      PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+      VERIFY_TIMEOUT_MS: 30000
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,26 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Read recent Cloudflare deploy workflow runs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/diagnose-github-actions.mjs
-        continue-on-error: true
-
-      - name: Read Cloudflare runtime and quota diagnostics
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 7b21859ab1740325151b97717cedc0e7
-          CLOUDFLARE_PROJECT_NAME: nuvio-last-aziriel2020-1343705637
-        run: node scripts/diagnose-cloudflare.mjs
-        continue-on-error: true
-      - run: node scripts/audit-production-catalogs.mjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: production-catalog-audit-${{ github.run_id }}
-          path: reports/
-          retention-days: 14
+      - name: Install audit dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify Oracle production
+        run: node scripts/verify-oracle-production.mjs

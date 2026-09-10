@@ -47,10 +47,15 @@ run_nuvio() {
   sudo -u nuvio -H bash -lc "cd '$TARGET' && $*"
 }
 
-echo "Preparing Nuvio release $SHORT"
+echo "Preparing Nuvio Oracle release $SHORT"
 run_nuvio "if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi"
 run_nuvio "npm test"
-run_nuvio "npm run test:cloudflare"
+run_nuvio "npm run test:runtime"
+
+# The Oracle integration test deliberately builds a local 127.0.0.1 fixture.
+# Run it BEFORE the final production build so that fixture can never become the
+# static payload switched into production.
+run_nuvio "npm run test:oracle"
 
 if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   if [[ -z "${PUBLIC_HOST:-}" ]]; then
@@ -60,7 +65,35 @@ if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   PUBLIC_ORIGIN="https://$PUBLIC_HOST"
 fi
 
-run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:cloudflare"
+# This MUST be the last build before the atomic switch. It rewrites every static
+# Nuvio JSON/manifests URL to the real Oracle public origin.
+run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:runtime"
+
+# Fail closed if the final static release contains any test/legacy hosting origin.
+run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' node - <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const dist = path.resolve('dist');
+const forbidden = /(?:127\\.0\\.0\\.1:3317|pages\\.dev|workers\\.dev|vercel\\.app|sslip\\.io)/i;
+function walk(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    return entry.isDirectory() ? walk(full) : [full];
+  });
+}
+const jsonFiles = walk(dist).filter((file) => file.endsWith('.json'));
+if (!jsonFiles.length) throw new Error('Final Oracle dist contains no JSON files');
+for (const file of jsonFiles) {
+  const text = fs.readFileSync(file, 'utf8');
+  if (forbidden.test(text)) throw new Error('Forbidden origin in final build: ' + path.relative(dist, file));
+}
+const install = JSON.parse(fs.readFileSync(path.join(dist, 'install.json'), 'utf8'));
+if (!String(install.combinedCollections || '').startsWith(process.env.PUBLIC_ORIGIN + '/')) {
+  throw new Error('Final Oracle build origin mismatch: ' + install.combinedCollections);
+}
+console.log('Final Oracle build origin verified:', process.env.PUBLIC_ORIGIN);
+NODE"
 
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
 install -d -m 0755 /etc/nuvio

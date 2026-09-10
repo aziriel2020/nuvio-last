@@ -9,7 +9,7 @@
 Ne supprime pas les Collections existantes avant l’import : les IDs identiques servent à les mettre à jour.
 
 ## Türkiye v1.4.0
-- Addon: `https://nuvio-last.vercel.app/tr/manifest.json`
-- Import Türkiye: `https://nuvio-last.vercel.app/nuvio-collections-tr.json`
+- Addon: `https://141-145-215-202.nip.io/tr/manifest.json`
+- Import Türkiye: `https://141-145-215-202.nip.io/nuvio-collections-tr.json`
 - IDs `calendar-archives-tr-*` et addon `com.nuvio.calendar.archives.tr.coexist` sont isolés de FR/Global/US.
 - Marché forcé TR, langue tr-TR, fuseau Europe/Istanbul.

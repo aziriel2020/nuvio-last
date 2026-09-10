@@ -563,7 +563,7 @@ test('desktop final renderer produces a real JPEG with accented readable text', 
 });
 
 
-test('desktop10 import uses adaptive cinematic routes with labels', async () => {
+test('desktop12 Shield JPEG import uses adaptive cinematic routes with labels', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
   const collections = JSON.parse(response.text);
@@ -573,7 +573,7 @@ test('desktop10 import uses adaptive cinematic routes with labels', async () => 
   assert(folder);
   const url = new URL(folder.coverImageUrl);
   assert.equal(url.pathname, '/fr/desktop-folder-card.jpg');
-  assert.equal(url.searchParams.get('v'), 'desktop10');
+  assert.equal(url.searchParams.get('v'), 'desktop12-shield-jpeg');
   assert.equal(url.searchParams.get('title'), 'Séries');
   assert.match(url.searchParams.get('label') || '', /Netflix/);
 });

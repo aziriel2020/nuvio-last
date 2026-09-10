@@ -1,6 +1,0 @@
-{
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "nuvio-last-aziriel2020-1343705637",
-  "pages_build_output_dir": "./dist",
-  "compatibility_date": "2026-09-08"
-}

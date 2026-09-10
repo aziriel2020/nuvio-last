@@ -6,12 +6,13 @@
   "scripts": {
     "start": "node local-server.js",
     "test": "node scripts/test-all.js",
-    "build:cloudflare": "node scripts/build-cloudflare.js",
-    "test:cloudflare": "node --test test/cloudflare.test.js",
-    "build:cloudflare-worker": "node scripts/build-cloudflare-worker.js",
+    "build:runtime": "node scripts/build-runtime.js",
+    "build:oracle": "npm run build:runtime",
+    "test:runtime": "node --test test/runtime.test.js",
     "audit:catalogs": "node scripts/audit-production-catalogs.mjs",
     "start:oracle": "node oracle/server.mjs",
-    "test:oracle": "node scripts/test-oracle-runtime.mjs"
+    "test:oracle": "node scripts/test-oracle-runtime.mjs",
+    "verify:oracle:production": "node scripts/verify-oracle-production.mjs"
   },
   "engines": {
     "node": ">=20"
