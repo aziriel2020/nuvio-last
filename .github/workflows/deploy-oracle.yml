@@ -1,0 +1,143 @@
+name: Deploy Oracle Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_BRANCH: main
+      PUBLIC_IP: 141.145.215.202
+      PUBLIC_HOST: 141-145-215-202.nip.io
+      PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+    steps:
+      - name: Checkout exact production revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate production verifier syntax
+        run: node --check scripts/verify-oracle-production.mjs
+
+      - name: Install Oracle SSH key
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ["ORACLE_SSH_PRIVATE_KEY"].strip()
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          p=Path(os.environ["RUNNER_TEMP"]+"/keys/oracle_ssh.pem")
+                          p.write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("ORACLE_SSH_PRIVATE_KEY is not a usable private key")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+
+      - name: Snapshot current Oracle release and pause updater
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@"$PUBLIC_IP" \
+            "sudo bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          readlink -f /opt/nuvio/current > /var/tmp/nuvio-pre-main-release
+          systemctl stop nuvio-update.timer || true
+          systemctl is-active --quiet nuvio
+          systemctl is-active --quiet caddy
+          REMOTE
+
+      - name: Deploy main on existing Oracle VM
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@"$PUBLIC_IP" \
+            "sudo PUBLIC_HOST='$PUBLIC_HOST' PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_BRANCH='$TARGET_BRANCH' bash -s" < oracle/update.sh
+
+      - name: Verify exact main SHA is publicly served
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          expected="$GITHUB_SHA"
+          for attempt in {1..30}; do
+            payload="$(curl -fsS --max-time 10 "$PUBLIC_ORIGIN/_oracle/health" || true)"
+            if [[ -n "$payload" ]] && jq -e --arg sha "$expected" --arg origin "$PUBLIC_ORIGIN" \
+              '.ok == true and .runtime == "oracle-vm" and .gitSha == $sha and .publicOrigin == $origin' \
+              <<<"$payload" >/dev/null; then
+              echo "Oracle is publicly serving $expected"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Expected main SHA is not publicly served" >&2
+          exit 1
+
+      - name: Run strict Oracle production audit
+        shell: bash
+        env:
+          VERIFY_TIMEOUT_MS: 30000
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-oracle-production.mjs | tee "$RUNNER_TEMP/oracle-production-audit.json.log"
+
+      - name: Resume updater after successful deployment
+        if: success()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+            "sudo systemctl start nuvio-update.timer && sudo systemctl is-active --quiet nuvio && sudo systemctl is-active --quiet caddy"
+
+      - name: Roll back failed production deployment
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" "sudo bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          previous="$(cat /var/tmp/nuvio-pre-main-release 2>/dev/null || true)"
+          if [[ -n "$previous" && -d "$previous" ]]; then
+            ln -sfn "$previous" /opt/nuvio/current.rollback
+            mv -Tf /opt/nuvio/current.rollback /opt/nuvio/current
+            systemctl daemon-reload
+            systemctl restart nuvio
+            systemctl reload caddy 2>/dev/null || systemctl restart caddy
+          fi
+          systemctl start nuvio-update.timer || true
+          REMOTE
