@@ -32,15 +32,27 @@ test('Oracle runtime has bounded resources and automatic restart', () => {
   assert.match(service, /NoNewPrivileges=true/);
 });
 
-test('Oracle releases are tested and runtime-built before switch, with rollback after failed health', () => {
+test('Oracle release tests run before the final public build and atomic switch', () => {
   const testIndex = updater.indexOf('npm test');
   const runtimeTestIndex = updater.indexOf('npm run test:runtime');
+  const oracleTestIndex = updater.indexOf('npm run test:oracle');
   const buildIndex = updater.indexOf('npm run build:runtime');
+  const originGuardIndex = updater.indexOf('Final Oracle build origin verified:');
   const switchIndex = updater.indexOf('mv -Tf "$BASE/current.new" "$CURRENT"');
-  assert.ok(testIndex >= 0 && runtimeTestIndex > testIndex && buildIndex > runtimeTestIndex && switchIndex > buildIndex);
+  assert.ok(
+    testIndex >= 0 &&
+    runtimeTestIndex > testIndex &&
+    oracleTestIndex > runtimeTestIndex &&
+    buildIndex > oracleTestIndex &&
+    originGuardIndex > buildIndex &&
+    switchIndex > originGuardIndex,
+    'Oracle test fixture must run before the final production-origin build and switch'
+  );
+  assert.match(updater, /127\\\.0\\\.0\\\.1:3317/);
+  assert.match(updater, /pages\\\.dev\|workers\\\.dev\|vercel\\\.app\|sslip\\\.io/);
   assert.match(updater, /Rolling back to/);
   assert.match(updater, /systemctl restart nuvio/);
-  assert.doesNotMatch(updater, /cloudflare|wrangler/i);
+  assert.doesNotMatch(updater, /build:cloudflare|test:cloudflare|wrangler/i);
 });
 
 test('Oracle bootstrap exposes only SSH, HTTP and HTTPS', () => {
