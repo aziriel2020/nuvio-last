@@ -94,13 +94,6 @@ export function localAssetPath(input) {
     return `/static/assets/collection-art/${file}`;
   }
 
-  match = path.match(/^\/(fr|tr|us)\/desktop-genre-card\.jpg$/);
-  if (match) {
-    const genre = String(url.searchParams.get('genre') || '').trim().toLowerCase();
-    if (!validSlug(genre)) return null;
-    return `/static/assets/genre-art/shared/${genre}-card.jpg`;
-  }
-
   match = path.match(/^\/(fr|tr|us)\/genre-poster\.png$/);
   if (match) {
     const genre = String(url.searchParams.get('genre') || '').trim().toLowerCase();
@@ -621,10 +614,8 @@ async function dynamicResponse(request, env, ctx) {
   }
 
   let response;
-  if (/^\/(fr|global|tr|us)\/(?:platform-category-card\.svg|platform-backdrop\.svg|desktop-folder-card\.jpg)$/.test(url.pathname)) {
+  if (/^\/(fr|global|tr|us)\/(?:platform-category-card\.svg|platform-backdrop\.svg)$/.test(url.pathname)) {
     response = await servePlatformVisual(request, env, url);
-  } else if (/^\/(fr|global|tr|us)\/desktop-content-card\.jpg$/.test(url.pathname)) {
-    response = await serveDesktopContentCard(request, env, url);
   } else if (/^\/(fr|tr|us)\/genre-folder-art\.svg$/.test(url.pathname)) {
     response = await serveGenreFolderArt(request, env, url);
   } else if (url.pathname.startsWith('/internal/')) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
+import sharp from 'sharp';
 
 const port = Number(process.env.ORACLE_TEST_PORT || 3317);
 const origin = 'http://127.0.0.1:' + port;
@@ -59,6 +60,13 @@ function requireHeader(response, name, value) {
 function rejectLegacy(value, label) {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   if (forbidden.test(text)) throw new Error(label + ' contains a forbidden legacy origin');
+}
+
+function flattenDesktopStrings(value, out = []) {
+  if (typeof value === 'string') out.push(value);
+  else if (Array.isArray(value)) value.forEach((entry) => flattenDesktopStrings(entry, out));
+  else if (value && typeof value === 'object') Object.values(value).forEach((entry) => flattenDesktopStrings(entry, out));
+  return out;
 }
 
 function findFirstOracleVisual(value) {
@@ -138,18 +146,27 @@ try {
     rejectLegacy(manifest, `${region} manifest`);
   }
 
-  const card = await retry('/fr/desktop-content-card.jpg?v=oracle-test-desktop11&design=shield3&type=series&provider=netflix&label=Netflix&title=Oracle%20Runtime&append=S01E01');
-  requireHeader(card, 'x-nuvio-origin', 'oracle-vm');
-  requireHeader(card, 'x-nuvio-edge', 'oracle-node');
-  if (!String(card.headers.get('content-type') || '').includes('image/svg+xml')) {
-    throw new Error('Oracle desktop renderer did not return SVG');
-  }
-  if (card.headers.get('x-nuvio-card-renderer') !== 'calendar-overlay-v2') {
-    throw new Error('Oracle desktop renderer compatibility header changed');
-  }
-  const svg = await card.text();
-  for (const token of ['data-renderer="shield-desktop-v3"', 'desktop-title', 'desktop-subtitle', 'desktop-provider']) {
-    if (!svg.includes(token)) throw new Error('Oracle desktop SVG missing ' + token);
+  const desktopStrings = flattenDesktopStrings(desktopBody);
+  const desktopFolderVisual = desktopStrings.find((value) => /\/desktop-folder-card\.jpg(?:\?|$)/i.test(value));
+  const desktopGenreVisual = desktopStrings.find((value) => /\/desktop-genre-card\.jpg(?:\?|$)/i.test(value));
+  if (!desktopFolderVisual) throw new Error('Desktop collection has no desktop-folder-card.jpg visual');
+  if (!desktopGenreVisual) throw new Error('Desktop collection has no desktop-genre-card.jpg visual');
+
+  for (const [label, visual] of [['folder', desktopFolderVisual], ['genre', desktopGenreVisual]]) {
+    const u = new URL(visual);
+    if (u.origin !== origin) throw new Error(`Desktop ${label} visual escaped Oracle origin: ${visual}`);
+    if (!u.searchParams.get('v')?.includes('desktop12-shield-jpeg')) throw new Error(`Desktop ${label} visual has stale revision`);
+    const card = await retry(u.pathname + u.search);
+    requireHeader(card, 'x-nuvio-origin', 'oracle-vm');
+    requireHeader(card, 'x-nuvio-edge', 'oracle-node');
+    requireHeader(card, 'x-nuvio-card-renderer', 'shield-desktop-jpeg-v4');
+    requireHeader(card, 'x-nuvio-desktop-format', '1600x900');
+    const contentType = String(card.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.startsWith('image/jpeg')) throw new Error(`Desktop ${label} is not JPEG: ${contentType}`);
+    const bytes = Buffer.from(await card.arrayBuffer());
+    if (bytes.length < 10000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new Error(`Desktop ${label} JPEG payload invalid`);
+    const meta = await sharp(bytes).metadata();
+    if (meta.format !== 'jpeg' || meta.width !== 1600 || meta.height !== 900) throw new Error(`Desktop ${label} expected 1600x900 JPEG, got ${meta.format} ${meta.width}x${meta.height}`);
   }
 
   const visual = findFirstOracleVisual(desktopBody) || findFirstOracleVisual(collectionBody);

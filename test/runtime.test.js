@@ -102,6 +102,7 @@ test('runtime router serves repository artwork and retains Shield Desktop v3 ren
   assert.equal(router.platformStaticAssetPath('https://oracle.example/tr/desktop-folder-card.jpg?provider=tod&type=series'), '/static/assets/platform-art/tr/tod-card.jpg');
   assert.equal(router.platformStaticAssetPath('https://oracle.example/tr/desktop-folder-card.jpg?provider=crunchyroll&type=series'), '/static/assets/platform-art/global/anime-asia-card.jpg');
   assert.equal(router.localAssetPath('https://oracle.example/fr/platform-card.jpg?provider=../bad'), null);
+  assert.equal(router.localAssetPath('https://oracle.example/fr/desktop-genre-card.jpg?genre=action&type=movie'), null, 'Desktop genre JPG must use native regional JPEG renderer');
 
   const svg = router.desktopContentCardSvg('https://oracle.example/global/desktop-content-card.jpg?title=Oracle%20Runtime&append=S01E01&label=Anime%20JP%2FKR&provider=anime-asia&type=series');
   assert.match(svg, /data-renderer="shield-desktop-v3"/);

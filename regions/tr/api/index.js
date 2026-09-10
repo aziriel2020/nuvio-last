@@ -76,6 +76,9 @@ function platformArtPath(providerSlug, variant = 'card') {
   if (providerSlug === 'crunchyroll') {
     return path.resolve(__dirname, '../../../assets/platform-art/global', `anime-asia-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`);
   }
+  if (providerSlug === 'bi-kanal') {
+    return path.resolve(__dirname, '../../../assets/platform-art/tr', `turkiye-takvim-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`);
+  }
   return path.join(PLATFORM_ART_DIR, file);
 }
 function platformPhotoDataUri(providerSlug, variant = 'card') { return localVisualDataUri(platformArtPath(providerSlug, variant)); }
@@ -252,6 +255,8 @@ function sendDesktopCinematicJpeg(res, data) {
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');
+  res.setHeader('X-Nuvio-Desktop-Format', '1600x900');
   res.end(data);
 }
 

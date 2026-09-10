@@ -77,7 +77,7 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
       .replace('/platform-category-card.svg', '/desktop-folder-card.jpg')
       .replace('/platform-card.jpg', '/desktop-folder-card.jpg');
     const cleaned = cleanVisualQuery(next, ['category', 'v']);
-    const extra = new URLSearchParams({ type, v: 'desktop10', title: folder?.title || '', label: collectionTitle || '' });
+    const extra = new URLSearchParams({ type, v: 'desktop12-shield-jpeg', title: folder?.title || '', label: collectionTitle || '' });
     return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
   }
 
@@ -87,7 +87,7 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
       .replace('/genre-card.jpg', '/desktop-genre-card.jpg');
     const colorMatch = value.match(/[?&]color=([^&]+)/);
     const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
-    const extra = new URLSearchParams({ type, v: 'desktop10', title: folder?.title || '', label: collectionTitle || '' });
+    const extra = new URLSearchParams({ type, v: 'desktop12-shield-jpeg', title: folder?.title || '', label: collectionTitle || '' });
     if (colorMatch) {
       let color = colorMatch[1];
       try { color = decodeURIComponent(color); } catch {}
