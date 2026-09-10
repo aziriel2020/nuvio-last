@@ -1,0 +1,72 @@
+name: Temporary Fix Encoded AniList Metadata
+
+on:
+  push:
+    branches:
+      - migration/oracle-only-final
+    paths:
+      - ".github/workflows/tmp-fix-anime-encoded-meta.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/oracle-only-final
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Patch encoded AniList metadata matcher and regression test
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runtime = Path('runtime/anime-resilience.mjs')
+          text = runtime.read_text()
+          old = "return url.pathname.match(/^\\/global\\/meta\\/series\\/anilist:(\\d+)\\.json$/);"
+          new = "return url.pathname.match(/^\\/global\\/meta\\/series\\/anilist(?::|%3A)(\\d+)\\.json$/i);"
+          if old not in text:
+              raise SystemExit('expected metaMatch expression not found')
+          runtime.write_text(text.replace(old, new, 1))
+
+          test_file = Path('test/runtime.test.js')
+          tests = test_file.read_text()
+          marker = "test('Oracle runtime sources contain no legacy hosting/runtime markers', () => {"
+          block = r'''test('Anime resilience recognizes URL-encoded AniList metadata IDs', async () => {
+            const mod = await import(pathToFileURL(path.join(ROOT, 'runtime/anime-resilience.mjs')).href + `?encoded=${Date.now()}`);
+            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist%3A197715.json'), true);
+            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist%3a197715.json'), true);
+            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/series/anilist:197715.json'), true);
+            assert.equal(mod.isGlobalAnimeResilienceRequest('https://oracle.example/global/meta/movie/anilist%3A197715.json'), false);
+          });
+
+          '''
+          if 'Anime resilience recognizes URL-encoded AniList metadata IDs' not in tests:
+              if marker not in tests:
+                  raise SystemExit('runtime test insertion marker not found')
+              tests = tests.replace(marker, block + marker, 1)
+              test_file.write_text(tests)
+          PY
+      - name: Install and run runtime tests
+        run: |
+          npm install --no-audit --no-fund
+          node --check runtime/anime-resilience.mjs
+          npm run test:runtime
+      - name: Commit fix to migration branch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime/anime-resilience.mjs test/runtime.test.js
+          git diff --cached --check
+          git commit -m "fix: route encoded AniList metadata through Oracle resilience"
+          git push origin HEAD:migration/oracle-only-final
