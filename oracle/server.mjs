@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import worker from '../cloudflare/worker-entry.mjs';
+import runtime from '../runtime/index.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -174,13 +174,22 @@ function mime(file) {
   }[ext] || 'application/octet-stream';
 }
 
-function safeDistPath(urlLike) {
+function safeRuntimePath(urlLike) {
   const url = urlLike instanceof URL ? urlLike : new URL(String(urlLike));
   let pathname = decodeURIComponent(url.pathname);
-  if (pathname === '/') pathname = '/index.html';
-  const relative = pathname.replace(/^\/+/, '');
-  const resolved = path.resolve(DIST, relative);
-  if (resolved !== DIST && !resolved.startsWith(DIST + path.sep)) return null;
+
+  let base = DIST;
+  let relative;
+  if (pathname.startsWith('/static/assets/')) {
+    base = path.join(ROOT, 'assets');
+    relative = pathname.slice('/static/assets/'.length);
+  } else {
+    if (pathname === '/') pathname = '/index.html';
+    relative = pathname.replace(/^\/+/, '');
+  }
+
+  const resolved = path.resolve(base, relative);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) return null;
   return resolved;
 }
 
@@ -188,7 +197,7 @@ const assetBinding = {
   async fetch(input) {
     try {
       const request = input instanceof Request ? input : new Request(String(input));
-      const file = safeDistPath(request.url);
+      const file = safeRuntimePath(request.url);
       if (!file) return new Response('Not found', { status: 404 });
       const stat = await fs.stat(file);
       if (!stat.isFile()) return new Response('Not found', { status: 404 });
@@ -292,7 +301,7 @@ async function handle(req, res) {
       }
     };
 
-    const response = await worker.fetch(request, envBindings(), ctx);
+    const response = await runtime.fetch(request, envBindings(), ctx);
     const body = req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
     const headers = Object.fromEntries(response.headers.entries());
 
