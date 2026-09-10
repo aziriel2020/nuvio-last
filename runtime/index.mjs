@@ -5,7 +5,7 @@ import {
   recoverGlobalAnimeResponse
 } from './anime-resilience.mjs';
 
-export * from './worker.mjs';
+export * from './router.mjs';
 
 const STATIC_EXACT_PATHS = new Set([
   '/',
@@ -79,9 +79,9 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Advanced runtime mode: every request enters this Worker (Worker-first v2).
+    // Advanced runtime mode: every request enters this Worker (runtime-first v2).
     // Static build artifacts are deliberately handed to the runtime ASSETS binding here;
-    // all runtime routes stay inside Nuvio's Oracle worker.
+    // all runtime routes stay inside Nuvio's Oracle runtime.
     if (['GET', 'HEAD'].includes(request.method) && isStaticRuntimeAsset(url.pathname)) {
       return staticRuntimeAsset(request, env);
     }
