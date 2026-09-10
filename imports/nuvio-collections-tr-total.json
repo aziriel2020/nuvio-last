@@ -2,7 +2,7 @@
   {
     "id": "calendar-archives-tr-netflix",
     "title": "🇹🇷 Netflix",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=netflix&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=netflix&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -11,14 +11,14 @@
       {
         "id": "archives-fr-netflix-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=netflix&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=netflix&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=netflix&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=netflix&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=netflix&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=netflix&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -2194,14 +2194,14 @@
       {
         "id": "archives-fr-netflix-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=netflix&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=netflix&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=netflix&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=netflix&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=netflix&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=netflix&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -4379,7 +4379,7 @@
   {
     "id": "calendar-archives-tr-prime-video",
     "title": "🇹🇷 Prime Video",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=prime-video&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=prime-video&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -4388,14 +4388,14 @@
       {
         "id": "archives-fr-prime-video-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=prime-video&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=prime-video&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=prime-video&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=prime-video&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=prime-video&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=prime-video&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -6571,14 +6571,14 @@
       {
         "id": "archives-fr-prime-video-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=prime-video&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=prime-video&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=prime-video&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=prime-video&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=prime-video&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=prime-video&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -8756,7 +8756,7 @@
   {
     "id": "calendar-archives-tr-disney-plus",
     "title": "🇹🇷 Disney+",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=disney-plus&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=disney-plus&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -8765,14 +8765,14 @@
       {
         "id": "archives-fr-disney-plus-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=disney-plus&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=disney-plus&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=disney-plus&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=disney-plus&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=disney-plus&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=disney-plus&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -10948,14 +10948,14 @@
       {
         "id": "archives-fr-disney-plus-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=disney-plus&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=disney-plus&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=disney-plus&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=disney-plus&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=disney-plus&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=disney-plus&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -13133,7 +13133,7 @@
   {
     "id": "calendar-archives-tr-max",
     "title": "🇹🇷 Max",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=max&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=max&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -13142,14 +13142,14 @@
       {
         "id": "archives-fr-max-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=max&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=max&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=max&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=max&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=max&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=max&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -15325,14 +15325,14 @@
       {
         "id": "archives-fr-max-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=max&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=max&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=max&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=max&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=max&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=max&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -17510,7 +17510,7 @@
   {
     "id": "calendar-archives-tr-apple-tv-plus",
     "title": "🇹🇷 Apple TV+",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=apple-tv-plus&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=apple-tv-plus&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -17519,14 +17519,14 @@
       {
         "id": "archives-fr-apple-tv-plus-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=apple-tv-plus&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=apple-tv-plus&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=apple-tv-plus&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=apple-tv-plus&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=apple-tv-plus&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=apple-tv-plus&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -19702,14 +19702,14 @@
       {
         "id": "archives-fr-apple-tv-plus-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=apple-tv-plus&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=apple-tv-plus&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=apple-tv-plus&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=apple-tv-plus&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=apple-tv-plus&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=apple-tv-plus&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -21887,7 +21887,7 @@
   {
     "id": "calendar-archives-tr-mubi",
     "title": "🇹🇷 MUBI",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=mubi&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=mubi&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -21896,14 +21896,14 @@
       {
         "id": "archives-fr-mubi-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=mubi&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=mubi&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=mubi&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=mubi&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=mubi&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=mubi&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -24079,14 +24079,14 @@
       {
         "id": "archives-fr-mubi-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=mubi&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=mubi&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=mubi&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=mubi&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=mubi&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=mubi&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -26264,7 +26264,7 @@
   {
     "id": "calendar-archives-tr-exxen",
     "title": "🇹🇷 Exxen",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=exxen&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=exxen&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -26273,14 +26273,14 @@
       {
         "id": "archives-fr-exxen-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=exxen&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=exxen&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=exxen&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=exxen&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=exxen&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=exxen&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -28456,14 +28456,14 @@
       {
         "id": "archives-fr-exxen-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=exxen&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=exxen&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=exxen&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=exxen&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=exxen&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=exxen&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -30641,7 +30641,7 @@
   {
     "id": "calendar-archives-tr-gain",
     "title": "🇹🇷 GAİN",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=gain&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=gain&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -30650,14 +30650,14 @@
       {
         "id": "archives-fr-gain-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=gain&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=gain&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=gain&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=gain&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=gain&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=gain&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -32833,14 +32833,14 @@
       {
         "id": "archives-fr-gain-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=gain&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=gain&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=gain&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=gain&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=gain&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=gain&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -35018,7 +35018,7 @@
   {
     "id": "calendar-archives-tr-tabii",
     "title": "🇹🇷 tabii",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tabii&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tabii&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -35027,14 +35027,14 @@
       {
         "id": "archives-fr-tabii-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tabii&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tabii&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tabii&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tabii&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tabii&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tabii&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -37210,14 +37210,14 @@
       {
         "id": "archives-fr-tabii-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tabii&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tabii&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tabii&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tabii&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tabii&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tabii&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -39395,7 +39395,7 @@
   {
     "id": "calendar-archives-tr-tod",
     "title": "🇹🇷 TOD",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tod&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tod&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -39404,14 +39404,14 @@
       {
         "id": "archives-fr-tod-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tod&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tod&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tod&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tod&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tod&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tod&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -41587,14 +41587,14 @@
       {
         "id": "archives-fr-tod-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tod&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tod&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tod&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tod&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tod&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tod&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -43772,7 +43772,7 @@
   {
     "id": "calendar-archives-tr-puhutv",
     "title": "🇹🇷 puhutv",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=puhutv&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=puhutv&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -43781,14 +43781,14 @@
       {
         "id": "archives-fr-puhutv-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=puhutv&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=puhutv&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=puhutv&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=puhutv&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=puhutv&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=puhutv&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -45964,14 +45964,14 @@
       {
         "id": "archives-fr-puhutv-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=puhutv&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=puhutv&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=puhutv&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=puhutv&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=puhutv&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=puhutv&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -48149,7 +48149,7 @@
   {
     "id": "calendar-archives-tr-tv-plus",
     "title": "🇹🇷 TV+",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tv-plus&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tv-plus&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -48158,14 +48158,14 @@
       {
         "id": "archives-fr-tv-plus-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tv-plus&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tv-plus&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tv-plus&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tv-plus&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tv-plus&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tv-plus&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -50341,14 +50341,14 @@
       {
         "id": "archives-fr-tv-plus-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tv-plus&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tv-plus&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tv-plus&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tv-plus&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tv-plus&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tv-plus&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -52526,7 +52526,7 @@
   {
     "id": "calendar-archives-tr-tivibu",
     "title": "🇹🇷 Tivibu",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tivibu&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tivibu&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -52535,14 +52535,14 @@
       {
         "id": "archives-fr-tivibu-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tivibu&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tivibu&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tivibu&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tivibu&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tivibu&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tivibu&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -54718,14 +54718,14 @@
       {
         "id": "archives-fr-tivibu-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=tivibu&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=tivibu&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=tivibu&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=tivibu&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=tivibu&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=tivibu&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -56903,7 +56903,7 @@
   {
     "id": "calendar-archives-tr-d-smart-go",
     "title": "🇹🇷 D-Smart GO",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=d-smart-go&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=d-smart-go&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -56912,14 +56912,14 @@
       {
         "id": "archives-fr-d-smart-go-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=d-smart-go&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=d-smart-go&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=d-smart-go&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=d-smart-go&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=d-smart-go&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=d-smart-go&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -59095,14 +59095,14 @@
       {
         "id": "archives-fr-d-smart-go-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=d-smart-go&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=d-smart-go&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=d-smart-go&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=d-smart-go&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=d-smart-go&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=d-smart-go&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -61280,7 +61280,7 @@
   {
     "id": "calendar-archives-tr-s-sport-plus",
     "title": "🇹🇷 S Sport Plus",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=s-sport-plus&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=s-sport-plus&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -61289,14 +61289,14 @@
       {
         "id": "archives-fr-s-sport-plus-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=s-sport-plus&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=s-sport-plus&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=s-sport-plus&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=s-sport-plus&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=s-sport-plus&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=s-sport-plus&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -63472,14 +63472,14 @@
       {
         "id": "archives-fr-s-sport-plus-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=s-sport-plus&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=s-sport-plus&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=s-sport-plus&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=s-sport-plus&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=s-sport-plus&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=s-sport-plus&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -65657,7 +65657,7 @@
   {
     "id": "calendar-archives-tr-turkiye-takvim",
     "title": "🇹🇷 Türkiye Takvim",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=turkiye-takvim&type=series&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=turkiye-takvim&type=series&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -65666,14 +65666,14 @@
       {
         "id": "archives-fr-turkiye-takvim-series",
         "title": "Séries",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=turkiye-takvim&category=series&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=turkiye-takvim&category=series&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "📺",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=turkiye-takvim&type=series&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=turkiye-takvim&type=series&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=turkiye-takvim&type=series&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=turkiye-takvim&type=series&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -67849,14 +67849,14 @@
       {
         "id": "archives-fr-turkiye-takvim-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=turkiye-takvim&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=turkiye-takvim&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=turkiye-takvim&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=turkiye-takvim&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=turkiye-takvim&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=turkiye-takvim&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",
@@ -70034,7 +70034,7 @@
   {
     "id": "calendar-archives-tr-vod-tr",
     "title": "🇹🇷 VOD Türkiye",
-    "backdropImageUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=vod-tr&type=movie&v=coex-tr140-cinematic",
+    "backdropImageUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=vod-tr&type=movie&v=coex-tr140-cinematic",
     "pinToTop": true,
     "focusGlowEnabled": true,
     "viewMode": "FOLLOW_LAYOUT",
@@ -70043,14 +70043,14 @@
       {
         "id": "archives-fr-vod-tr-films",
         "title": "Films",
-        "coverImageUrl": "https://nuvio-last.vercel.app/tr/platform-category-card.svg?provider=vod-tr&category=films&v=coex-tr140-cinematic",
+        "coverImageUrl": "https://141-145-215-202.nip.io/tr/platform-category-card.svg?provider=vod-tr&category=films&v=coex-tr140-cinematic",
         "focusGifEnabled": false,
         "coverEmoji": "🎬",
         "tileShape": "LANDSCAPE",
         "hideTitle": true,
-        "heroBackdropUrl": "https://nuvio-last.vercel.app/tr/platform-backdrop.svg?provider=vod-tr&type=movie&v=coex-tr140-cinematic",
+        "heroBackdropUrl": "https://141-145-215-202.nip.io/tr/platform-backdrop.svg?provider=vod-tr&type=movie&v=coex-tr140-cinematic",
         "heroVideoUrl": null,
-        "titleLogoUrl": "https://nuvio-last.vercel.app/tr/platform-logo?provider=vod-tr&type=movie&v=coex-tr140-cinematic",
+        "titleLogoUrl": "https://141-145-215-202.nip.io/tr/platform-logo?provider=vod-tr&type=movie&v=coex-tr140-cinematic",
         "sources": [
           {
             "provider": "addon",

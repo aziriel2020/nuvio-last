@@ -61,8 +61,8 @@ function fallbackFetch(url) {
   return Promise.resolve(json({ ok: false, error: 'not found' }, 404));
 }
 
-test('Cloudflare resilience keeps JP AniList content when the primary runtime soft-fails empty', async () => {
-  const resilience = await import('../../../cloudflare/anilist-resilience.mjs');
+test('Oracle runtime resilience keeps JP AniList content when the primary runtime soft-fails empty', async () => {
+  const resilience = await import('../../../runtime/anime-resilience.mjs');
   const request = new Request('https://edge.example/global/catalog/series/archives-global-v1-series-anime-asia-today.json');
   const baseResponse = json({ metas: [], stats: { anilistFallbacks: 0 } });
   const response = await resilience.recoverGlobalAnimeResponse(request, baseResponse, {
@@ -91,8 +91,8 @@ test('Cloudflare resilience keeps JP AniList content when the primary runtime so
   assert.equal(response.headers.get('x-nuvio-anime-source'), 'anilist-cache-tsuzuki');
 });
 
-test('Cloudflare resilience meta route reconstructs anilist:<id> from cached full AniList metadata', async () => {
-  const resilience = await import('../../../cloudflare/anilist-resilience.mjs');
+test('Oracle runtime resilience meta route reconstructs anilist:<id> from cached full AniList metadata', async () => {
+  const resilience = await import('../../../runtime/anime-resilience.mjs');
   const request = new Request('https://edge.example/global/meta/series/anilist:777.json');
   const baseResponse = json({ error: 'AniList unavailable' }, 502);
   const response = await resilience.recoverGlobalAnimeResponse(request, baseResponse, {
@@ -109,11 +109,11 @@ test('Cloudflare resilience meta route reconstructs anilist:<id> from cached ful
   assert.equal(payload.meta.country, 'Japon');
   assert.equal(payload.meta.runtime, '24 min');
   assert.equal(payload.meta.imdbRating, '8.2');
-  assert.equal(response.headers.get('x-nuvio-origin'), 'cloudflare-only');
+  assert.equal(response.headers.get('x-nuvio-origin'), 'oracle-vm');
 });
 
-test('Cloudflare resilience never overrides a non-empty AniList-authoritative catalog', async () => {
-  const resilience = await import('../../../cloudflare/anilist-resilience.mjs');
+test('Oracle runtime resilience never overrides a non-empty AniList-authoritative catalog', async () => {
+  const resilience = await import('../../../runtime/anime-resilience.mjs');
   const request = new Request('https://edge.example/global/catalog/series/archives-global-v1-series-anime-asia-today.json');
   const baseResponse = json({ metas: [{ id: 'tmdb:series:123' }] });
   let calls = 0;
