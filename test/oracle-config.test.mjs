@@ -32,13 +32,15 @@ test('Oracle runtime has bounded resources and automatic restart', () => {
   assert.match(service, /NoNewPrivileges=true/);
 });
 
-test('Oracle releases are tested before switch and roll back after failed health', () => {
+test('Oracle releases are tested and runtime-built before switch, with rollback after failed health', () => {
   const testIndex = updater.indexOf('npm test');
-  const buildIndex = updater.indexOf('npm run build:cloudflare');
+  const runtimeTestIndex = updater.indexOf('npm run test:runtime');
+  const buildIndex = updater.indexOf('npm run build:runtime');
   const switchIndex = updater.indexOf('mv -Tf "$BASE/current.new" "$CURRENT"');
-  assert.ok(testIndex >= 0 && buildIndex > testIndex && switchIndex > buildIndex);
+  assert.ok(testIndex >= 0 && runtimeTestIndex > testIndex && buildIndex > runtimeTestIndex && switchIndex > buildIndex);
   assert.match(updater, /Rolling back to/);
   assert.match(updater, /systemctl restart nuvio/);
+  assert.doesNotMatch(updater, /cloudflare|wrangler/i);
 });
 
 test('Oracle bootstrap exposes only SSH, HTTP and HTTPS', () => {
@@ -57,7 +59,6 @@ test('Oracle provisioning verifies the free plan before apply', () => {
   assert.match(workflow, /ORACLE_SSH_PRIVATE_KEY/);
 });
 
-
 test('Oracle disk cache is release-scoped and concurrent writes are collision-safe', () => {
   assert.match(server, /CACHE_NAMESPACE/);
   assert.match(server, /process\.env\.NUVIO_GIT_SHA/);
@@ -67,4 +68,11 @@ test('Oracle disk cache is release-scoped and concurrent writes are collision-sa
   assert.match(server, /this\.writeEntry\(input, stored\)/);
   assert.match(updater, /NUVIO_GIT_SHA=%s/);
   assert.match(updater, /\/etc\/nuvio\/release\.env/);
+});
+
+test('Oracle runtime imports only the neutral runtime layer and repository-local assets', () => {
+  assert.match(server, /\.\.\/runtime\/index\.mjs/);
+  assert.match(server, /pathname\.startsWith\('\/static\/assets\/'\)/);
+  assert.match(server, /path\.join\(ROOT, 'assets'\)/);
+  assert.doesNotMatch(server, /cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io/i);
 });
