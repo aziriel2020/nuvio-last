@@ -172,6 +172,31 @@ async function fetchMeta(region, meta, label) {
   return result.data.meta;
 }
 
+async function fetchFirstWorkingMeta(region, metas, label, maxCandidates = 8) {
+  const candidates = [];
+  const seen = new Set();
+  for (const meta of metas) {
+    const key = `${meta?.type || ''}:${meta?.id || ''}`;
+    if (!meta?.id || seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(meta);
+    if (candidates.length >= maxCandidates) break;
+  }
+  assert(candidates.length > 0, `${label}: no metadata candidates discovered`);
+  const failures = [];
+  for (const candidate of candidates) {
+    try {
+      const resolved = await fetchMeta(region, candidate, label);
+      return { candidate, resolved, tried: failures.length + 1 };
+    } catch (error) {
+      const message = String(error?.message || error);
+      failures.push(`${candidate.id}: ${message}`);
+      console.warn(`[meta-probe-soft-fail] ${label} ${candidate.id}: ${message}`);
+    }
+  }
+  throw new Error(`${label}: no metadata candidate resolved after ${candidates.length} candidates: ${failures.join(' | ')}`);
+}
+
 console.log(`Auditing ${ORIGIN}`);
 
 const oracleHealth = await request('/_oracle/health');
@@ -263,15 +288,44 @@ const dsmartSource = recentArchiveSource(dsmart) || rollingSource(dsmart, 'today
 const dsmartMetas = await fetchCatalog('tr', dsmartSource, 'D-Smart GO', false);
 if (dsmartMetas[0]) await fetchMeta('tr', dsmartMetas[0], 'D-Smart GO');
 
-// Anime JP/KR: validate both media families and the resilience-compatible meta route.
+// Anime JP/KR: both media families must route correctly. Metadata validation is
+// fail-closed across multiple genuine AniList IDs so one temporarily unavailable
+// title cannot become a false negative while a systemic AniList failure still fails.
 const anime = standard.find((c) => /Anime Japon \+ Corée/.test(String(c.title || '')));
 assert(anime, 'Anime Japon + Corée collection missing');
 const animeSeriesSource = rollingSource(anime, 'today', 'series') || recentArchiveSource(anime, 'series');
 const animeMovieSource = rollingSource(anime, 'today', 'movie') || recentArchiveSource(anime, 'movie');
 const animeSeriesMetas = await fetchCatalog('global', animeSeriesSource, 'Anime Séries');
 const animeMovieMetas = await fetchCatalog('global', animeMovieSource, 'Anime Films');
-const animeMetaCandidate = animeSeriesMetas.find((m) => String(m.id || '').startsWith('anilist:')) || animeSeriesMetas[0] || animeMovieMetas[0];
-if (animeMetaCandidate) await fetchMeta('global', animeMetaCandidate, 'Anime');
+let animeCandidatePool = [...animeSeriesMetas, ...animeMovieMetas];
+let animeAniListCandidates = animeCandidatePool.filter((m) => String(m?.id || '').startsWith('anilist:'));
+
+if (animeAniListCandidates.length < 2) {
+  const extraSources = [
+    rollingSource(anime, 'yesterday', 'series'),
+    rollingSource(anime, 'lastweek', 'series'),
+    recentArchiveSource(anime, 'series'),
+    rollingSource(anime, 'yesterday', 'movie'),
+    rollingSource(anime, 'lastweek', 'movie'),
+    recentArchiveSource(anime, 'movie')
+  ].filter(Boolean);
+  const seenSource = new Set([animeSeriesSource?.catalogId, animeMovieSource?.catalogId]);
+  for (const source of extraSources) {
+    if (seenSource.has(source.catalogId)) continue;
+    seenSource.add(source.catalogId);
+    try {
+      const metas = await fetchCatalog('global', source, `Anime fallback ${source.type}/${source.catalogId}`);
+      animeCandidatePool.push(...metas);
+      animeAniListCandidates = animeCandidatePool.filter((m) => String(m?.id || '').startsWith('anilist:'));
+      if (animeAniListCandidates.length >= 8) break;
+    } catch (error) {
+      console.warn(`[anime-catalog-probe-soft-fail] ${source.catalogId}: ${String(error?.message || error)}`);
+    }
+  }
+}
+
+assert(animeAniListCandidates.length > 0, 'Anime catalogs exposed no AniList metadata IDs across current/recent windows');
+const animeMetaProbe = await fetchFirstWorkingMeta('global', animeAniListCandidates, 'Anime AniList', 8);
 
 // Today/Tomorrow are live routes, not frozen static data.
 for (const suffix of ['today', 'tomorrow']) {
@@ -337,7 +391,10 @@ const summary = {
     filmsChecked: true,
     seriesMetas: animeSeriesMetas.length,
     filmMetas: animeMovieMetas.length,
-    metaRouteChecked: Boolean(animeMetaCandidate)
+    anilistCandidates: animeAniListCandidates.length,
+    metaRouteChecked: true,
+    resolvedMetaId: animeMetaProbe.candidate.id,
+    candidatesTried: animeMetaProbe.tried
   },
   assets: {
     collectionVisualUrlsChecked: visualUrls.size,
