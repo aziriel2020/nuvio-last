@@ -1,0 +1,114 @@
+name: Temporary Fix Desktop Native JPEG Renderer V2
+
+on:
+  push:
+    branches: [migration/oracle-only-final]
+    paths: [".github/workflows/tmp-fix-desktop-jpeg-v2.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/oracle-only-final
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply safe Desktop JPEG routing patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          router = Path('runtime/router.mjs')
+          s = router.read_text()
+
+          genre = """  match = path.match(/^\\/(fr|tr|us)\\/desktop-genre-card\\.jpg$/);\n  if (match) {\n    const genre = String(url.searchParams.get('genre') || '').trim().toLowerCase();\n    if (!validSlug(genre)) return null;\n    return `/static/assets/genre-art/shared/${genre}-card.jpg`;\n  }\n\n"""
+          if genre not in s:
+              raise SystemExit('desktop genre raw asset interception not found')
+          s = s.replace(genre, '', 1)
+
+          old = """  if (/^\\/(fr|global|tr|us)\\/(?:platform-category-card\\.svg|platform-backdrop\\.svg|desktop-folder-card\\.jpg)$/.test(url.pathname)) {\n    response = await servePlatformVisual(request, env, url);\n  } else if (/^\\/(fr|global|tr|us)\\/desktop-content-card\\.jpg$/.test(url.pathname)) {\n    response = await serveDesktopContentCard(request, env, url);\n  } else if (/^\\/(fr|tr|us)\\/genre-folder-art\\.svg$/.test(url.pathname)) {\n"""
+          new = """  if (/^\\/(fr|global|tr|us)\\/(?:platform-category-card\\.svg|platform-backdrop\\.svg)$/.test(url.pathname)) {\n    response = await servePlatformVisual(request, env, url);\n  } else if (/^\\/(fr|tr|us)\\/genre-folder-art\\.svg$/.test(url.pathname)) {\n"""
+          if old not in s:
+              raise SystemExit('Desktop dynamic interception block not found')
+          router.write_text(s.replace(old, new, 1))
+
+          header_needle = "  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');\n  res.end(data);"
+          header_repl = "  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');\n  res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');\n  res.setHeader('X-Nuvio-Desktop-Format', '1600x900');\n  res.end(data);"
+          for rel in ['regions/fr/api/index.js','regions/global/api/index.js','regions/tr/api/index.js','regions/us/api/index.js']:
+              p = Path(rel); text = p.read_text()
+              if header_needle not in text:
+                  raise SystemExit(f'Desktop JPEG response marker missing: {rel}')
+              p.write_text(text.replace(header_needle, header_repl, 1))
+
+          tr = Path('regions/tr/api/index.js'); text = tr.read_text()
+          crunchy = """  if (providerSlug === 'crunchyroll') {\n    return path.resolve(__dirname, '../../../assets/platform-art/global', `anime-asia-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`);\n  }\n"""
+          if "providerSlug === 'bi-kanal'" not in text:
+              if crunchy not in text: raise SystemExit('Türkiye shared art marker missing')
+              text = text.replace(crunchy, crunchy + """  if (providerSlug === 'bi-kanal') {\n    return path.resolve(__dirname, '../../../assets/platform-art/tr', `turkiye-takvim-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`);\n  }\n""", 1)
+              tr.write_text(text)
+
+          api = Path('api/index.js'); text = api.read_text()
+          if text.count("v: 'desktop10'") != 2:
+              raise SystemExit('Expected exactly two desktop10 collection URL revisions')
+          api.write_text(text.replace("v: 'desktop10'", "v: 'desktop12-shield-jpeg'"))
+
+          rt = Path('test/runtime.test.js'); text = rt.read_text()
+          marker = "  assert.equal(router.localAssetPath('https://oracle.example/fr/platform-card.jpg?provider=../bad'), null);\n"
+          if 'Desktop genre JPG must use native regional JPEG renderer' not in text:
+              if marker not in text: raise SystemExit('runtime assertion insertion marker missing')
+              text = text.replace(marker, marker + "  assert.equal(router.localAssetPath('https://oracle.example/fr/desktop-genre-card.jpg?genre=action&type=movie'), null, 'Desktop genre JPG must use native regional JPEG renderer');\n", 1)
+          rt.write_text(text)
+
+          ot = Path('scripts/test-oracle-runtime.mjs'); text = ot.read_text()
+          if "import sharp from 'sharp';" not in text:
+              text = text.replace("import { execFileSync, spawn } from 'node:child_process';\n", "import { execFileSync, spawn } from 'node:child_process';\nimport sharp from 'sharp';\n", 1)
+          if 'function flattenDesktopStrings' not in text:
+              marker = 'function findFirstOracleVisual(value) {\n'
+              helper = """function flattenDesktopStrings(value, out = []) {\n  if (typeof value === 'string') out.push(value);\n  else if (Array.isArray(value)) value.forEach((entry) => flattenDesktopStrings(entry, out));\n  else if (value && typeof value === 'object') Object.values(value).forEach((entry) => flattenDesktopStrings(entry, out));\n  return out;\n}\n\n"""
+              if marker not in text: raise SystemExit('Oracle helper marker missing')
+              text = text.replace(marker, helper + marker, 1)
+
+          start = text.find("  const card = await retry('/fr/desktop-content-card.jpg?")
+          end_marker = "\n  const visual = findFirstOracleVisual(desktopBody) || findFirstOracleVisual(collectionBody);"
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('Old Oracle Desktop SVG assertion block not found')
+          check = """  const desktopStrings = flattenDesktopStrings(desktopBody);\n  const desktopFolderVisual = desktopStrings.find((value) => /\\/desktop-folder-card\\.jpg(?:\\?|$)/i.test(value));\n  const desktopGenreVisual = desktopStrings.find((value) => /\\/desktop-genre-card\\.jpg(?:\\?|$)/i.test(value));\n  if (!desktopFolderVisual) throw new Error('Desktop collection has no desktop-folder-card.jpg visual');\n  if (!desktopGenreVisual) throw new Error('Desktop collection has no desktop-genre-card.jpg visual');\n\n  for (const [label, visual] of [['folder', desktopFolderVisual], ['genre', desktopGenreVisual]]) {\n    const u = new URL(visual);\n    if (u.origin !== origin) throw new Error(`Desktop ${label} visual escaped Oracle origin: ${visual}`);\n    if (!u.searchParams.get('v')?.includes('desktop12-shield-jpeg')) throw new Error(`Desktop ${label} visual has stale revision`);\n    const card = await retry(u.pathname + u.search);\n    requireHeader(card, 'x-nuvio-origin', 'oracle-vm');\n    requireHeader(card, 'x-nuvio-edge', 'oracle-node');\n    requireHeader(card, 'x-nuvio-card-renderer', 'shield-desktop-jpeg-v4');\n    requireHeader(card, 'x-nuvio-desktop-format', '1600x900');\n    const contentType = String(card.headers.get('content-type') || '').toLowerCase();\n    if (!contentType.startsWith('image/jpeg')) throw new Error(`Desktop ${label} is not JPEG: ${contentType}`);\n    const bytes = Buffer.from(await card.arrayBuffer());\n    if (bytes.length < 10000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new Error(`Desktop ${label} JPEG payload invalid`);\n    const meta = await sharp(bytes).metadata();\n    if (meta.format !== 'jpeg' || meta.width !== 1600 || meta.height !== 900) throw new Error(`Desktop ${label} expected 1600x900 JPEG, got ${meta.format} ${meta.width}x${meta.height}`);\n  }\n"""
+          text = text[:start] + check + text[end:]
+          ot.write_text(text)
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Full business tests
+        run: npm test
+      - name: Runtime tests
+        run: npm run test:runtime
+      - name: Oracle integration and real Desktop JPEG verification
+        run: npm run test:oracle
+      - name: Static checks
+        run: |
+          set -Eeuo pipefail
+          node --check runtime/router.mjs
+          node --check scripts/test-oracle-runtime.mjs
+          grep -q "desktop12-shield-jpeg" api/index.js
+          git diff --check
+      - name: Commit corrected Desktop renderer
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime/router.mjs api/index.js regions/fr/api/index.js regions/global/api/index.js regions/tr/api/index.js regions/us/api/index.js test/runtime.test.js scripts/test-oracle-runtime.mjs
+          git diff --cached --check
+          git commit -m "fix: render Nuvio Desktop collections as native Shield-style JPEG cards"
+          git push origin HEAD:migration/oracle-only-final
