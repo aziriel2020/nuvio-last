@@ -19,8 +19,6 @@ fi
 
 mkdir -p "$RELEASES"
 
-# update.sh runs as root while the source checkout belongs to the nuvio account.
-# Trust only this exact repository path so Git 2.35+ does not reject it.
 git config --global --add safe.directory "$SOURCE"
 
 if [[ ! -d "$SOURCE/.git" ]]; then
@@ -47,10 +45,10 @@ run_nuvio() {
   sudo -u nuvio -H bash -lc "cd '$TARGET' && $*"
 }
 
-echo "Preparing Nuvio release $SHORT"
+echo "Preparing Nuvio Oracle release $SHORT"
 run_nuvio "if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi"
 run_nuvio "npm test"
-run_nuvio "npm run test:cloudflare"
+run_nuvio "npm run test:runtime"
 
 if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   if [[ -z "${PUBLIC_HOST:-}" ]]; then
@@ -60,7 +58,8 @@ if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   PUBLIC_ORIGIN="https://$PUBLIC_HOST"
 fi
 
-run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:cloudflare"
+run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:runtime"
+run_nuvio "npm run test:oracle"
 
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
 install -d -m 0755 /etc/nuvio
