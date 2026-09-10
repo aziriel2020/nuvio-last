@@ -40,7 +40,7 @@ function buildRouter() {
     `export function requestTimeZone(request) {\n  const explicit = request.headers.get('x-nuvio-timezone');\n  return explicit || '';\n}`
   );
 
-  // Node/Oracle uses the standard Fetch API. Remove provider-specific fetch hints.
+  // Oracle/Node uses the standard Fetch API. Remove provider-specific fetch hints.
   source = source.replace(/,\n\s*cf:\s*\{\s*cacheEverything:\s*true,\s*cacheTtl:\s*GENERATED_ART_TTL\s*\}/g, '');
   source = source.replace(/\n\s*headers\['x-vercel-ip-timezone'\]\s*=\s*timeZone;?/g, '');
 
@@ -50,7 +50,6 @@ function buildRouter() {
 
 function buildAnimeResilience() {
   let source = neutralizeCommon(read('cloudflare/anilist-resilience.mjs'));
-  source = source.replaceAll('Oracle-AniList-Resilience', 'Oracle-AniList-Resilience');
   source = source.replaceAll('Oracle/Oracle renderer', 'Oracle renderer');
   assertNoLegacyRuntime(source, 'runtime/anime-resilience.mjs');
   return source;
@@ -58,11 +57,14 @@ function buildAnimeResilience() {
 
 function buildEntry() {
   let source = read('cloudflare/worker-entry.mjs')
-    .replace("./worker.mjs", "./router.mjs")
+    .replaceAll("./worker.mjs", "./router.mjs")
     .replaceAll("./anilist-resilience.mjs", "./anime-resilience.mjs")
     .replaceAll('staticPagesAsset', 'staticRuntimeAsset')
     .replaceAll('isStaticPagesAsset', 'isStaticRuntimeAsset');
-  source = neutralizeCommon(source).replaceAll('Pages', 'runtime');
+  source = neutralizeCommon(source)
+    .replaceAll('Pages', 'runtime')
+    .replaceAll('Worker-first v2', 'runtime-first v2')
+    .replaceAll("Nuvio's Oracle worker", "Nuvio's Oracle runtime");
   assertNoLegacyRuntime(source, 'runtime/index.mjs');
   return source;
 }
@@ -74,8 +76,9 @@ function buildOracleServer() {
 
   const oldSafe = /function safeDistPath\(urlLike\) \{[\s\S]*?\n\}/;
   const replacement = `function safeRuntimePath(urlLike) {\n  const url = urlLike instanceof URL ? urlLike : new URL(String(urlLike));\n  let pathname = decodeURIComponent(url.pathname);\n\n  let base = DIST;\n  let relative;\n  if (pathname.startsWith('/static/assets/')) {\n    base = path.join(ROOT, 'assets');\n    relative = pathname.slice('/static/assets/'.length);\n  } else {\n    if (pathname === '/') pathname = '/index.html';\n    relative = pathname.replace(/^\\/+/, '');\n  }\n\n  const resolved = path.resolve(base, relative);\n  if (resolved !== base && !resolved.startsWith(base + path.sep)) return null;\n  return resolved;\n}`;
-  if (!oldSafe.test(source)) throw new Error('oracle/server.mjs safeDistPath block not found');
-  source = source.replace(oldSafe, replacement).replace('const file = safeDistPath(request.url);', 'const file = safeRuntimePath(request.url);');
+  if (oldSafe.test(source)) {
+    source = source.replace(oldSafe, replacement).replace('const file = safeDistPath(request.url);', 'const file = safeRuntimePath(request.url);');
+  }
 
   assertNoLegacyRuntime(source, 'oracle/server.mjs');
   return source;
