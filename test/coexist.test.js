@@ -289,6 +289,58 @@ test('health endpoint is green when all regions coexist safely', async () => {
 });
 
 
+test('Shield import uses dedicated cinematic raster covers while preserving TV title behavior', async () => {
+  const response = await call('/nuvio-collections-shield.json');
+  assert.equal(response.statusCode, 200);
+  assertCdnCache(response, 86400);
+  const collections = JSON.parse(response.text);
+  assert.equal(collections.length, 49);
+
+  const targets = [
+    collections.find((c) => c.title === '🇫🇷 Netflix'),
+    collections.find((c) => c.title === '🌍 VOD Mondiale'),
+    collections.find((c) => c.title === '🇹🇷 Netflix'),
+    collections.find((c) => c.title === '🇺🇸 Netflix'),
+  ];
+  for (const collection of targets) {
+    assert(collection);
+    assert.match(collection.backdropImageUrl, /\/platform-backdrop\.jpg\?provider=/);
+    for (const folder of collection.folders) {
+      assert.equal(folder.hideTitle, true);
+      assert.equal(folder.focusGifEnabled, false);
+      assert.equal(folder.focusGifUrl, null);
+      assert.match(folder.coverImageUrl, /\/shield-folder-card\.jpg\?provider=/);
+      assert.match(folder.coverImageUrl, /[?&]v=shield13-cinematic-jpeg/);
+      assert.match(folder.coverImageUrl, /[?&]title=/);
+      assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
+    }
+  }
+
+  const frGenres = collections.find((c) => c.title === '🇫🇷 Genres · Films');
+  assert(frGenres?.folders?.length > 0);
+  assert.match(frGenres.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=/);
+  assert.match(frGenres.folders[0].coverImageUrl, /[?&]v=shield13-cinematic-jpeg/);
+});
+
+test('Shield cinematic aliases resolve to native 1600x900 JPEG renderers in every region', async () => {
+  const urls = [
+    '/fr/shield-folder-card.jpg?provider=netflix&type=series&title=S%C3%A9ries&label=Netflix&v=shield13-cinematic-jpeg',
+    '/global/shield-folder-card.jpg?provider=vod-global&type=movie&title=Films&label=VOD%20Mondiale&v=shield13-cinematic-jpeg',
+    '/tr/shield-folder-card.jpg?provider=netflix&type=series&title=Diziler&label=Netflix&v=shield13-cinematic-jpeg',
+    '/us/shield-folder-card.jpg?provider=netflix&type=movie&title=Films&label=Netflix&v=shield13-cinematic-jpeg',
+  ];
+  for (const url of urls) {
+    const response = await call(url);
+    assert.equal(response.statusCode, 200, url);
+    assert.match(response.headers['content-type'], /image\/jpeg/, url);
+    assert.equal(response.headers['x-nuvio-card-renderer'], 'shield-desktop-jpeg-v4', url);
+    assert.equal(response.headers['x-nuvio-desktop-format'], '1600x900', url);
+    assert.equal(response.body[0], 0xff, url);
+    assert.equal(response.body[1], 0xd8, url);
+    assert(response.body.length > 1000, url);
+  }
+});
+
 test('desktop import uses dedicated cinematic raster covers with native folder titles', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
