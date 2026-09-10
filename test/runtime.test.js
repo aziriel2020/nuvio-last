@@ -82,12 +82,16 @@ test('Türkiye collections preserve the current service set and rolling periods'
   }
   assert(!text.includes('blutv'), 'BluTV must remain aliased to Max');
 
-  const folderIds = tr.flatMap((collection) => (collection.folders || []).map((folder) => String(folder.id || '').toLowerCase()));
-  const joined = folderIds.join('\n');
+  const catalogIds = tr.flatMap((collection) =>
+    (collection.folders || []).flatMap((folder) =>
+      (folder.sources || []).map((source) => String(source.catalogId || '').toLowerCase())
+    )
+  );
+  const joined = catalogIds.join('\n');
   for (const period of ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']) {
     assert(joined.includes(period), `rolling period missing: ${period}`);
   }
-  assert(/20\d{2}-\d{2}/.test(joined), 'monthly archive folders missing');
+  assert(/20\d{2}-\d{2}/.test(joined), 'monthly archive sources missing');
 });
 
 test('runtime router serves repository artwork and retains Shield Desktop v3 renderer', async () => {
