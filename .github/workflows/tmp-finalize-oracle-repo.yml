@@ -35,8 +35,6 @@ jobs:
           root = Path('.')
           oracle = 'https://141-145-215-202.nip.io'
 
-          # The resilience behavior is now runtime-neutral; keep its business tests,
-          # but point them at the neutral Oracle runtime implementation.
           test = Path('regions/global/test/anilist-resilience.test.js')
           text = test.read_text()
           text = text.replace("../../../cloudflare/anilist-resilience.mjs", "../../../runtime/anime-resilience.mjs")
@@ -44,8 +42,6 @@ jobs:
           text = text.replace("response.headers.get('x-nuvio-origin'), 'cloudflare-only'", "response.headers.get('x-nuvio-origin'), 'oracle-vm'")
           test.write_text(text)
 
-          # Old generated imports/docs may still contain former public deployment
-          # origins. Rewrite only URL hostnames; code-level deny lists remain intact.
           url_re = re.compile(r'https://[^\s\"\'<>]+?(?:pages\.dev|workers\.dev|vercel\.app|sslip\.io)', re.I)
           for path in list(root.rglob('*.json')) + list(root.rglob('*.html')) + list(root.rglob('*.md')):
               if '.git' in path.parts or 'node_modules' in path.parts:
@@ -58,7 +54,6 @@ jobs:
               if updated != current:
                   path.write_text(updated)
 
-          # Vercel local-state ignores are obsolete now that Vercel is not a target.
           for path in [Path('.gitignore'), *root.glob('regions/*/.gitignore')]:
               if not path.exists():
                   continue
@@ -67,7 +62,7 @@ jobs:
               path.write_text('\n'.join(lines).rstrip() + '\n')
           PY
 
-          git rm -r --ignore-unmatch \
+          git rm -rf --ignore-unmatch \
             cloudflare \
             .github/workflows/deploy-cloudflare.yml \
             wrangler.jsonc \
@@ -85,8 +80,7 @@ jobs:
             .github/workflows/tmp-repo-legacy-scan.yml \
             .github/workflows/tmp-fix-anime-encoded-meta.yml
 
-          # This one-shot cleanup workflow removes itself from the resulting tree.
-          git rm --ignore-unmatch .github/workflows/tmp-finalize-oracle-repo.yml
+          git rm -f --ignore-unmatch .github/workflows/tmp-finalize-oracle-repo.yml
 
           echo '=== obsolete deployment files remaining ==='
           for f in wrangler.jsonc regions/fr/vercel.json regions/global/vercel.json regions/tr/vercel.json regions/us/vercel.json .github/workflows/deploy-cloudflare.yml; do
