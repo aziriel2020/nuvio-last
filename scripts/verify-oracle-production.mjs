@@ -361,11 +361,27 @@ assert(visualUrls.size > 0, 'No Oracle-owned collection visuals discovered');
 await mapLimit([...visualUrls], 6, (url, index) => verifyVisual(url, `collection visual #${index + 1}`));
 
 // Explicit renderer routes requested for the migration contract.
+// Content-card validation must use a URL actually emitted by a live catalog so
+// its source artwork is real; a fabricated source-less URL is intentionally invalid.
+const liveDesktopContentVisual = flattenStrings([
+  ...animeSeriesMetas,
+  ...animeMovieMetas,
+  ...trCatalogResults.flatMap((row) => row.metas || [])
+]).find((value) => {
+  try {
+    const u = new URL(value);
+    return u.origin === ORIGIN && /\/desktop-content-card\.jpg$/.test(u.pathname) && Boolean(u.searchParams.get('src'));
+  } catch {
+    return false;
+  }
+});
+assert(liveDesktopContentVisual, 'No emitted Desktop content-card URL with a real source was discovered');
+
 const explicitVisuals = [
   '/tr/platform-category-card.svg?provider=exxen&category=series',
   '/tr/platform-backdrop.svg?provider=exxen&type=series',
   '/tr/desktop-folder-card.jpg?provider=exxen&type=series&title=Exxen',
-  '/global/desktop-content-card.jpg?v=oracle-final&design=shield3&type=series&provider=anime-asia&label=Anime%20JP%2FKR&title=Oracle%20Anime&append=VALIDATION',
+  liveDesktopContentVisual,
   '/fr/genre-folder-art.svg?genre=action&variant=card&type=movie&label=Action',
   '/static/assets/platform-art/tr/exxen-card.jpg',
   '/static/assets/platform-art/tr/d-smart-go-backdrop.jpg',
