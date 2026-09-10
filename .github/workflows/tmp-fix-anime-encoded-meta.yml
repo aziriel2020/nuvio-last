@@ -31,42 +31,22 @@ jobs:
 
           runtime = Path('runtime/router.mjs')
           text = runtime.read_text()
-          old = """  let match = path.match(/^\\/(fr|global|tr|us)\\/(platform-card|platform-backdrop)\\.jpg$/);
-          if (match) {
-            const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
-            if (!validSlug(provider)) return null;
-            const variant = match[2] === 'platform-backdrop' ? 'backdrop' : 'card';
-            return `/static/assets/platform-art/${match[1]}/${provider}-${variant}.jpg`;
-          }
-          """
-          new = """  let match = path.match(/^\\/(fr|global|tr|us)\\/(platform-card|platform-backdrop)\\.jpg$/);
-          if (match) {
-            const region = match[1];
-            const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
-            if (!validSlug(provider)) return null;
-            const variant = match[2] === 'platform-backdrop' ? 'backdrop' : 'card';
-            if (region === 'tr' && provider === 'crunchyroll') {
-              return `/static/assets/platform-art/global/anime-asia-${variant}.jpg`;
-            }
-            if (region === 'tr' && provider === 'bi-kanal') {
-              return `/static/assets/platform-art/tr/turkiye-takvim-${variant}.jpg`;
-            }
-            return `/static/assets/platform-art/${region}/${provider}-${variant}.jpg`;
-          }
-          """
-          if old not in text:
-              raise SystemExit('expected localAssetPath platform block not found')
-          runtime.write_text(text.replace(old, new, 1))
+          needle = "return `/static/assets/platform-art/${match[1]}/${provider}-${variant}.jpg`;"
+          replacement = """if (match[1] === 'tr' && provider === 'crunchyroll') return `/static/assets/platform-art/global/anime-asia-${variant}.jpg`;
+              if (match[1] === 'tr' && provider === 'bi-kanal') return `/static/assets/platform-art/tr/turkiye-takvim-${variant}.jpg`;
+              return `/static/assets/platform-art/${match[1]}/${provider}-${variant}.jpg`;"""
+          if needle not in text:
+              raise SystemExit('expected generic platform asset return not found')
+          runtime.write_text(text.replace(needle, replacement, 1))
 
           test_file = Path('test/runtime.test.js')
           tests = test_file.read_text()
-          needle = "  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-card.jpg?provider=exxen'), '/static/assets/platform-art/tr/exxen-card.jpg');\n"
-          extra = needle + "  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=crunchyroll'), '/static/assets/platform-art/global/anime-asia-backdrop.jpg');\n  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=bi-kanal'), '/static/assets/platform-art/tr/turkiye-takvim-backdrop.jpg');\n"
-          if 'provider=bi-kanal' not in tests:
-              if needle not in tests:
-                  raise SystemExit('runtime localAssetPath test insertion point not found')
-              tests = tests.replace(needle, extra, 1)
-              test_file.write_text(tests)
+          anchor = "  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-card.jpg?provider=exxen'), '/static/assets/platform-art/tr/exxen-card.jpg');\n"
+          additions = anchor + "  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=crunchyroll'), '/static/assets/platform-art/global/anime-asia-backdrop.jpg');\n  assert.equal(router.localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=bi-kanal'), '/static/assets/platform-art/tr/turkiye-takvim-backdrop.jpg');\n"
+          if "localAssetPath('https://oracle.example/tr/platform-backdrop.jpg?provider=bi-kanal')" not in tests:
+              if anchor not in tests:
+                  raise SystemExit('runtime localAssetPath test anchor not found')
+              test_file.write_text(tests.replace(anchor, additions, 1))
           PY
       - name: Install and run runtime tests
         run: |
