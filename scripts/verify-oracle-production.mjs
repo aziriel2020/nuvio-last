@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import sharp from 'sharp';
 
 const ORIGIN = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip.io').origin;
 const TIMEOUT_MS = Math.max(5000, Number(process.env.VERIFY_TIMEOUT_MS || 25000));
@@ -138,9 +139,13 @@ async function verifyVisual(urlValue, label) {
   const type = String(result.response.headers.get('content-type') || '').toLowerCase();
   assert(type.startsWith('image/'), `${label}: invalid Content-Type ${type}`);
   assert(result.bytes.byteLength > 1000, `${label}: empty/tiny image (${result.bytes.byteLength} bytes)`);
-  if (url.pathname.endsWith('/desktop-content-card.jpg') && type.includes('svg')) {
-    assert(result.response.headers.get('x-nuvio-card-renderer') === 'calendar-overlay-v2', `${label}: unexpected content renderer`);
-    assert(result.text.includes('data-renderer="shield-desktop-v3"'), `${label}: Shield Desktop v3 marker missing`);
+  if (/\/desktop-(?:content|folder|genre)-card\.jpg$/.test(url.pathname)) {
+    assert(type.startsWith('image/jpeg'), `${label}: Desktop card must be a native JPEG, got ${type}`);
+    assert(result.response.headers.get('x-nuvio-card-renderer') === 'shield-desktop-jpeg-v4', `${label}: Desktop renderer marker missing`);
+    assert(result.response.headers.get('x-nuvio-desktop-format') === '1600x900', `${label}: Desktop format marker missing`);
+    assert(result.bytes[0] === 0xff && result.bytes[1] === 0xd8, `${label}: invalid JPEG signature`);
+    const metadata = await sharp(result.bytes).metadata();
+    assert(metadata.format === 'jpeg' && metadata.width === 1600 && metadata.height === 900, `${label}: expected 1600x900 JPEG, got ${metadata.format} ${metadata.width}x${metadata.height}`);
   }
   if (/platform-(?:category-card|backdrop)\.svg$/.test(url.pathname)) {
     assert(result.response.headers.get('x-nuvio-visual-renderer') === 'platform-assets-v2', `${label}: platform renderer marker missing`);
@@ -237,6 +242,15 @@ const desktop = payloads['/nuvio-collections-desktop.json'];
 const tr = payloads['/nuvio-collections-tr.json'];
 assert(Array.isArray(standard) && standard.length > 0, 'standard collection import empty');
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
+const desktopVisualUrls = flattenStrings(desktop).filter((value) => {
+  try { return /\/desktop-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+});
+assert(desktopVisualUrls.length > 0, 'Desktop collection import has no native Desktop card URLs');
+for (const value of desktopVisualUrls) {
+  const visualUrl = new URL(value);
+  assert(visualUrl.origin === ORIGIN, `Desktop collection visual escaped Oracle: ${value}`);
+  assert(visualUrl.searchParams.get('v')?.includes('desktop12-shield-jpeg'), `Desktop collection visual has stale renderer revision: ${value}`);
+}
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
 assert(health.data.trCollectionCount === tr.length, `health trCollectionCount ${health.data.trCollectionCount} != ${tr.length}`);
