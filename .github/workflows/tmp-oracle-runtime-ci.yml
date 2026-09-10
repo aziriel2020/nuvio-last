@@ -1,0 +1,68 @@
+name: Temporary Oracle Runtime CI
+
+on:
+  push:
+    branches:
+      - migration/oracle-only-final
+    paths-ignore:
+      - "**/*.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tmp-oracle-runtime-ci
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/oracle-only-final
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax check neutral runtime
+        run: |
+          node --check runtime/router.mjs
+          node --check runtime/index.mjs
+          node --check runtime/anime-resilience.mjs
+          node --check oracle/server.mjs
+
+      - name: Run complete engine suite
+        run: npm test
+
+      - name: Run neutral runtime suite
+        run: npm run test:runtime
+
+      - name: Build Oracle runtime assets
+        env:
+          PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+          NUVIO_RUNTIME: oracle-vm
+        run: npm run build:runtime
+
+      - name: Test Oracle Node adapter end-to-end
+        run: npm run test:oracle
+
+      - name: Scan Oracle runtime for legacy hosting
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if grep -RniE 'cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io' runtime oracle/server.mjs scripts/build-runtime.js; then
+            echo 'Legacy hosting dependency remains in Oracle runtime' >&2
+            exit 1
+          fi
+
+      - name: Validate updater shell
+        run: bash -n oracle/update.sh
