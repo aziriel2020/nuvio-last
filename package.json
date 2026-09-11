@@ -12,7 +12,8 @@
     "audit:catalogs": "node scripts/audit-production-catalogs.mjs",
     "start:oracle": "node oracle/server.mjs",
     "test:oracle": "node scripts/test-oracle-runtime.mjs",
-    "verify:oracle:production": "node scripts/verify-oracle-production.mjs"
+    "verify:oracle:production": "node scripts/verify-oracle-production.mjs",
+    "generate:covers": "node scripts/generate-platform-covers.js"
   },
   "engines": {
     "node": ">=20"
