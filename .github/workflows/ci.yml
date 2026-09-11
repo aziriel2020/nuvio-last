@@ -49,10 +49,14 @@ jobs:
             if (manifest.backgroundPolicy?.horizontalMirroring !== false) throw new Error('mirroring leaked');
             if (manifest.backgroundPolicy?.exactApprovedCardSource !== true) throw new Error('approved-card source policy missing');
             if (!Array.isArray(manifest.approvedCardFallbacks) || manifest.approvedCardFallbacks.length !== 0) throw new Error('approved-card fallback detected: ' + JSON.stringify(manifest.approvedCardFallbacks));
+            if (JSON.stringify(manifest.explicitDerivedSources || []) !== JSON.stringify(['tr/bi-kanal'])) {
+              throw new Error('unexpected derived service set: ' + JSON.stringify(manifest.explicitDerivedSources));
+            }
             for (const item of manifest.results || []) {
-              if (item.sourceMode !== 'approved-board-exact' || item.sourceKind !== 'approved-card' || !String(item.sourceFile || '').endsWith('-card.jpg')) {
-                throw new Error('service escaped approved card source: ' + JSON.stringify(item));
-              }
+              const biKanal = item.region === 'tr' && item.provider === 'bi-kanal';
+              const validExact = item.sourceMode === 'approved-board-exact' && item.sourceKind === 'approved-card' && String(item.sourceFile || '').endsWith('-card.jpg') && item.derived !== true;
+              const validBiKanal = biKanal && item.sourceMode === 'approved-board-exact' && item.sourceKind === 'approved-derived-bi-kanal' && item.sourceFile === 'assets/genre-art/shared/news-card.jpg' && item.derived === true;
+              if (!validExact && !validBiKanal) throw new Error('service escaped approved source contract: ' + JSON.stringify(item));
             }
             for (const item of manifest.genres || []) {
               if (item.sourceMode !== 'approved-board-exact' || item.sourceKind !== 'approved-card' || !String(item.sourceFile || '').endsWith('-card.jpg')) {
