@@ -71,6 +71,8 @@ function cleanVisualQuery(url, removeKeys) {
     .replace(/[?&]+$/, '');
 }
 
+const DESKTOP_VISUAL_REV = 'desktop13-real-content';
+
 function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const value = String(url || '');
   const typeContext = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
@@ -81,7 +83,7 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
       .replace('/platform-category-card.svg', '/desktop-folder-card.jpg')
       .replace('/platform-card.jpg', '/desktop-folder-card.jpg');
     const cleaned = cleanVisualQuery(next, ['category', 'v']);
-    const extra = new URLSearchParams({ type, v: 'desktop12-shield-jpeg', title: folder?.title || '', label: collectionTitle || '' });
+    const extra = new URLSearchParams({ type, v: DESKTOP_VISUAL_REV, title: folder?.title || '', label: collectionTitle || '' });
     return cleaned + (cleaned.includes('?') ? '&' : '?') + extra.toString();
   }
 
@@ -91,7 +93,7 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
       .replace('/genre-card.jpg', '/desktop-genre-card.jpg');
     const colorMatch = value.match(/[?&]color=([^&]+)/);
     const cleaned = cleanVisualQuery(next, ['variant', 'label', 'type', 'icon', 'v', 'color']);
-    const extra = new URLSearchParams({ type, v: 'desktop12-shield-jpeg', title: folder?.title || '', label: collectionTitle || '' });
+    const extra = new URLSearchParams({ type, v: DESKTOP_VISUAL_REV, title: folder?.title || '', label: collectionTitle || '' });
     if (colorMatch) {
       let color = colorMatch[1];
       try { color = decodeURIComponent(color); } catch {}
@@ -101,13 +103,14 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
   }
 
   if (variant === 'backdrop' && value.includes('/platform-backdrop.svg')) {
-    return cleanVisualQuery(value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'), ['type', 'v']);
+    const cleaned = cleanVisualQuery(value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'), ['v']);
+    return cleaned + (cleaned.includes('?') ? '&' : '?') + `v=${DESKTOP_VISUAL_REV}`;
   }
 
   return value;
 }
 
-const SHIELD_VISUAL_REV = 'shield13-cinematic-jpeg';
+const SHIELD_VISUAL_REV = 'shield14-real-content';
 
 function shieldCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const value = String(url || '');
@@ -139,7 +142,7 @@ function shieldCollectionVisualUrl(url, folder = null, variant = 'card', collect
   }
 
   if (variant === 'backdrop' && value.includes('/platform-backdrop.svg')) {
-    const cleaned = cleanVisualQuery(value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'), ['type', 'v']);
+    const cleaned = cleanVisualQuery(value.replace('/platform-backdrop.svg', '/platform-backdrop.jpg'), ['v']);
     return cleaned + (cleaned.includes('?') ? '&' : '?') + `v=${SHIELD_VISUAL_REV}`;
   }
 
