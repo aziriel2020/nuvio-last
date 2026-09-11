@@ -515,6 +515,7 @@ for (const value of originalPremiumUrls) {
   if (!premiumDigestGroups.has(digest)) premiumDigestGroups.set(digest, []);
   premiumDigestGroups.get(digest).push(value);
 }
+const toleratedDuplicateCount = originalPremiumDigests.length - premiumDigestGroups.size;
 const crossIdentityDuplicateGroups = [...premiumDigestGroups.entries()]
   .map(([digest, urls]) => ({
     digest,
@@ -611,7 +612,8 @@ const summary = {
     generatedGenreShieldUrls: generatedGenreShieldUrls.length,
     generatedDesktopUrls: generatedDesktopVisualUrls.length,
     generatedGenreDesktopUrls: generatedGenreDesktopUrls.length,
-    pixelDuplicateCount: duplicateDigestCount,
+    pixelDuplicateCount: toleratedDuplicateCount,
+    crossIdentityDuplicateGroups: crossIdentityDuplicateGroups.length,
     totalVisualBytes: stats.visualBytes
   },
   antiLegacyScan: {
