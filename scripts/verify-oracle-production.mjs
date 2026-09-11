@@ -150,6 +150,16 @@ async function verifyVisual(urlValue, label) {
   if (/platform-(?:category-card|backdrop)\.svg$/.test(url.pathname)) {
     assert(result.response.headers.get('x-nuvio-visual-renderer') === 'platform-assets-v2', `${label}: platform renderer marker missing`);
   }
+  if (/\/static\/assets\/generated-covers\/.+-(?:shield|desktop)\.jpg$/.test(url.pathname)) {
+    assert(type.startsWith('image/jpeg'), `${label}: generated cover must be JPEG, got ${type}`);
+    const metadata = await sharp(result.bytes).metadata();
+    assert(metadata.format === 'jpeg' && metadata.width === 1600 && metadata.height === 900, `${label}: generated cover expected 1600x900, got ${metadata.format} ${metadata.width}x${metadata.height}`);
+  }
+  if (/\/static\/assets\/generated-covers\/.+-hero\.jpg$/.test(url.pathname) || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg$/.test(url.pathname)) {
+    assert(type.startsWith('image/jpeg'), `${label}: generated hero must be JPEG, got ${type}`);
+    const metadata = await sharp(result.bytes).metadata();
+    assert(metadata.format === 'jpeg' && metadata.width === 1920 && metadata.height === 1080, `${label}: generated hero expected 1920x1080, got ${metadata.format} ${metadata.width}x${metadata.height}`);
+  }
   return {
     type,
     bytes: result.bytes.byteLength,
@@ -249,35 +259,56 @@ const tr = payloads['/nuvio-collections-tr.json'];
 assert(Array.isArray(standard) && standard.length > 0, 'standard collection import empty');
 const shieldAlias = payloads['/nuvio-collections-shield.json'];
 assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Shield count ${shieldAlias?.length} != standard ${standard.length}`);
-const shieldVisualUrls = flattenStrings(standard).filter((value) => {
+const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
+stats.json += 1;
+const generatedManifest = generatedManifestResult.data;
+assert(generatedManifest?.revision === 'generated-v1', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
+assert(Number(generatedManifest?.platformParents || 0) >= 40, `generated cover platform parent count too small: ${generatedManifest?.platformParents}`);
+assert(Number(generatedManifest?.generatedFiles || 0) >= 100, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
+
+const generatedShieldVisualUrls = flattenStrings(standard).filter((value) => {
+  try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-shield\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+});
+assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield covers in collection payload: ${generatedShieldVisualUrls.length}`);
+for (const value of generatedShieldVisualUrls) {
+  const visualUrl = new URL(value);
+  assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v1', `generated Shield cover has stale revision: ${value}`);
+}
+
+const legacyShieldVisualUrls = flattenStrings(standard).filter((value) => {
   try { return /\/shield-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
-assert(shieldVisualUrls.length > 0, 'Shield collection import has no native cinematic card URLs');
-for (const value of shieldVisualUrls) {
+for (const value of legacyShieldVisualUrls) {
   const visualUrl = new URL(value);
-  assert(visualUrl.origin === ORIGIN, `Shield collection visual escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v')?.includes('shield14-real-content'), `Shield collection visual has stale renderer revision: ${value}`);
+  assert(visualUrl.origin === ORIGIN, `Shield fallback visual escaped Oracle: ${value}`);
 }
+
 const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
-assert(frNetflixReal, 'France Netflix collection missing for real-content visual verification');
+assert(frNetflixReal, 'France Netflix collection missing for generated-cover verification');
 const frNetflixSeriesReal = (frNetflixReal.folders || []).find((folder) => /séries|series/i.test(String(folder.title || ''))) || frNetflixReal.folders?.[0];
-assert(frNetflixSeriesReal?.coverImageUrl, 'France Netflix real-content card missing');
-const netflixCardProbe = await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix real-content Shield card');
-assert(netflixCardProbe.backgroundSource === 'tmdb-cinematic', `Netflix Shield card is not using real TMDb cinematic content: ${netflixCardProbe.backgroundSource}`);
-assert(frNetflixSeriesReal?.heroBackdropUrl, 'France Netflix real-content hero missing');
-const netflixHeroProbe = await verifyVisual(frNetflixSeriesReal.heroBackdropUrl, 'France Netflix real-content hero');
-assert(netflixHeroProbe.backgroundSource === 'tmdb-cinematic', `Netflix Shield hero is not using real TMDb cinematic content: ${netflixHeroProbe.backgroundSource}`);
-assert(netflixHeroProbe.backgroundFormat === '1920x1080', `Netflix Shield hero format mismatch: ${netflixHeroProbe.backgroundFormat}`);
+assert(frNetflixSeriesReal?.coverImageUrl, 'France Netflix generated card missing');
+assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-shield\.jpg$/.test(new URL(frNetflixSeriesReal.coverImageUrl).pathname), `France Netflix Shield is not using generated asset: ${frNetflixSeriesReal.coverImageUrl}`);
+await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix generated Shield card');
+assert(frNetflixSeriesReal?.heroBackdropUrl, 'France Netflix generated hero missing');
+assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-hero\.jpg$/.test(new URL(frNetflixSeriesReal.heroBackdropUrl).pathname), `France Netflix hero is not using generated asset: ${frNetflixSeriesReal.heroBackdropUrl}`);
+await verifyVisual(frNetflixSeriesReal.heroBackdropUrl, 'France Netflix generated hero');
+
+const netflixManifest = (generatedManifest.results || []).find((item) => item.region === 'fr' && item.provider === 'netflix');
+assert(netflixManifest, 'generated cover manifest missing France Netflix');
+const netflixImportedBackdrops = (netflixManifest.sources || []).flatMap((entry) => entry.imported || []).filter((entry) => entry.backdropPath);
+assert(netflixImportedBackdrops.length >= 2, `France Netflix generated cover did not import enough real TMDb backdrops: ${netflixImportedBackdrops.length}`);
 
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
-const desktopVisualUrls = flattenStrings(desktop).filter((value) => {
-  try { return /\/desktop-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+const generatedDesktopVisualUrls = flattenStrings(desktop).filter((value) => {
+  try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
-assert(desktopVisualUrls.length > 0, 'Desktop collection import has no native Desktop card URLs');
-for (const value of desktopVisualUrls) {
+assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop covers in collection payload: ${generatedDesktopVisualUrls.length}`);
+for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
-  assert(visualUrl.origin === ORIGIN, `Desktop collection visual escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v')?.includes('desktop13-real-content'), `Desktop collection visual has stale renderer revision: ${value}`);
+  assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v1', `generated Desktop cover has stale revision: ${value}`);
 }
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
@@ -457,6 +488,11 @@ const summary = {
   assets: {
     collectionVisualUrlsChecked: visualUrls.size,
     explicitVisualsChecked: explicitVisuals.length,
+    generatedCoverRevision: generatedManifest.revision,
+    generatedCoverFiles: generatedManifest.generatedFiles,
+    generatedPlatformParents: generatedManifest.platformParents,
+    generatedShieldUrls: generatedShieldVisualUrls.length,
+    generatedDesktopUrls: generatedDesktopVisualUrls.length,
     totalVisualBytes: stats.visualBytes
   },
   antiLegacyScan: {
