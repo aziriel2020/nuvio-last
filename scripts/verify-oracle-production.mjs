@@ -262,7 +262,7 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v1', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v2', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
 assert(Number(generatedManifest?.platformParents || 0) >= 40, `generated cover platform parent count too small: ${generatedManifest?.platformParents}`);
 assert(Number(generatedManifest?.generatedFiles || 0) >= 100, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
@@ -274,7 +274,7 @@ assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield covers 
 for (const value of generatedShieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v1', `generated Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v2', `generated Shield cover has stale revision: ${value}`);
 }
 
 const legacyShieldVisualUrls = flattenStrings(standard).filter((value) => {
@@ -308,7 +308,7 @@ assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop cover
 for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v1', `generated Desktop cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v2', `generated Desktop cover has stale revision: ${value}`);
 }
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
