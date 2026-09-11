@@ -310,24 +310,27 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
       assert.equal(folder.focusGifEnabled, false);
       assert.equal(folder.focusGifUrl, null);
       assert.match(folder.coverImageUrl, /\/shield-folder-card\.jpg\?provider=/);
-      assert.match(folder.coverImageUrl, /[?&]v=shield13-cinematic-jpeg/);
+      assert.match(folder.coverImageUrl, /[?&]v=shield14-real-content/);
       assert.match(folder.coverImageUrl, /[?&]title=/);
       assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
+      const heroUrl = new URL(folder.heroBackdropUrl);
+      assert(heroUrl.searchParams.get('type'), 'real-content backdrop type missing');
+      assert.match(heroUrl.searchParams.get('v') || '', /real-content/, 'real-content backdrop revision missing');
     }
   }
 
   const frGenres = collections.find((c) => c.title === '🇫🇷 Genres · Films');
   assert(frGenres?.folders?.length > 0);
   assert.match(frGenres.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=/);
-  assert.match(frGenres.folders[0].coverImageUrl, /[?&]v=shield13-cinematic-jpeg/);
+  assert.match(frGenres.folders[0].coverImageUrl, /[?&]v=shield14-real-content/);
 });
 
 test('Shield cinematic aliases resolve to native 1600x900 JPEG renderers in every region', async () => {
   const urls = [
-    '/fr/shield-folder-card.jpg?provider=netflix&type=series&title=S%C3%A9ries&label=Netflix&v=shield13-cinematic-jpeg',
-    '/global/shield-folder-card.jpg?provider=vod-global&type=movie&title=Films&label=VOD%20Mondiale&v=shield13-cinematic-jpeg',
-    '/tr/shield-folder-card.jpg?provider=netflix&type=series&title=Diziler&label=Netflix&v=shield13-cinematic-jpeg',
-    '/us/shield-folder-card.jpg?provider=netflix&type=movie&title=Films&label=Netflix&v=shield13-cinematic-jpeg',
+    '/fr/shield-folder-card.jpg?provider=netflix&type=series&title=S%C3%A9ries&label=Netflix&v=shield14-real-content',
+    '/global/shield-folder-card.jpg?provider=vod-global&type=movie&title=Films&label=VOD%20Mondiale&v=shield14-real-content',
+    '/tr/shield-folder-card.jpg?provider=netflix&type=series&title=Diziler&label=Netflix&v=shield14-real-content',
+    '/us/shield-folder-card.jpg?provider=netflix&type=movie&title=Films&label=Netflix&v=shield14-real-content',
   ];
   for (const url of urls) {
     const response = await call(url);
@@ -625,7 +628,7 @@ test('desktop12 Shield JPEG import uses adaptive cinematic routes with labels', 
   assert(folder);
   const url = new URL(folder.coverImageUrl);
   assert.equal(url.pathname, '/fr/desktop-folder-card.jpg');
-  assert.equal(url.searchParams.get('v'), 'desktop12-shield-jpeg');
+  assert.equal(url.searchParams.get('v'), 'desktop13-real-content');
   assert.equal(url.searchParams.get('title'), 'Séries');
   assert.match(url.searchParams.get('label') || '', /Netflix/);
 });
