@@ -5,12 +5,13 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const sharp = require('sharp');
+const opentype = require('opentype.js');
 
 const rootHandler = require('../api/index.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT_ROOT = path.join(ROOT, 'assets', 'generated-covers');
-const REVISION = 'generated-v1';
+const REVISION = 'generated-v2';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w1280';
 
 const REGION_APIS = {
@@ -37,6 +38,56 @@ function xml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+
+const FONT_CACHE = { bold: null };
+
+function boldFont() {
+  if (FONT_CACHE.bold) return FONT_CACHE.bold;
+  const fontPath = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf');
+  FONT_CACHE.bold = opentype.loadSync(fontPath);
+  return FONT_CACHE.bold;
+}
+
+function normalizedText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function fitText(text, maxWidth, preferredSize, minSize = 22) {
+  const value = normalizedText(text);
+  if (!value) return { text: '', size: preferredSize };
+  const font = boldFont();
+  let size = preferredSize;
+  while (size > minSize && font.getAdvanceWidth(value, size, { kerning: true }) > maxWidth) size -= 2;
+  if (font.getAdvanceWidth(value, size, { kerning: true }) <= maxWidth) return { text: value, size };
+  let clipped = value;
+  while (clipped.length > 3) {
+    clipped = clipped.slice(0, -1).trimEnd();
+    const candidate = clipped + '…';
+    if (font.getAdvanceWidth(candidate, size, { kerning: true }) <= maxWidth) return { text: candidate, size };
+  }
+  return { text: value.slice(0, 1) + '…', size };
+}
+
+function pathText(text, x, baselineY, maxWidth, preferredSize, options = {}) {
+  const fitted = fitText(text, maxWidth, preferredSize, options.minSize || 22);
+  if (!fitted.text) return '';
+  const font = boldFont();
+  const pathData = font.getPath(fitted.text, x, baselineY, fitted.size, { kerning: true }).toPathData(2);
+  const fill = options.fill || '#ffffff';
+  const opacity = options.opacity == null ? 1 : Number(options.opacity);
+  return `<path d="${pathData}" fill="${fill}" opacity="${opacity}"/>`;
+}
+
+function centeredPathText(text, centerX, baselineY, maxWidth, preferredSize, options = {}) {
+  const fitted = fitText(text, maxWidth, preferredSize, options.minSize || 20);
+  if (!fitted.text) return '';
+  const font = boldFont();
+  const width = font.getAdvanceWidth(fitted.text, fitted.size, { kerning: true });
+  const pathData = font.getPath(fitted.text, centerX - width / 2, baselineY, fitted.size, { kerning: true }).toPathData(2);
+  const fill = options.fill || '#ffffff';
+  return `<path d="${pathData}" fill="${fill}"/>`;
 }
 
 function normalizeType(value) {
@@ -87,7 +138,7 @@ async function downloadImage(url) {
       signal: controller.signal,
       headers: {
         Accept: 'image/jpeg,image/webp,*/*;q=0.8',
-        'User-Agent': 'NuvioGeneratedCovers/1.0'
+        'User-Agent': 'NuvioGeneratedCovers/2.0'
       }
     });
     if (!response.ok) return null;
@@ -238,33 +289,31 @@ async function panel(buffer, width, height, mode) {
 }
 
 function overlaySvg(width, height, opts) {
-  const {
-    accent,
-    providerLabel,
-    category,
-    mode,
-    region
-  } = opts;
-
+  const { accent, providerLabel, category, mode, region } = opts;
   const shield = mode === 'shield';
-  const titleSize = shield ? 94 : 78;
-  const categoryY = shield ? height - 150 : height - 165;
-  const subY = shield ? height - 82 : height - 98;
+  const titleSize = shield ? 96 : 86;
+  const categoryY = shield ? 748 : 742;
+  const subY = shield ? 825 : 820;
+  const footerY = 866;
   const footer = shield ? 'NUVIO · CINEMATIC COLLECTION' : 'NUVIO DESKTOP · CINEMATIC';
   const logoBoxWidth = 340;
+
+  const categoryPath = pathText(category, 108, categoryY, 1010, titleSize, { minSize: 50, fill: '#ffffff' });
+  const providerPath = pathText(providerLabel.toUpperCase(), 110, subY, 790, 40, { minSize: 28, fill: accent });
+  const footerPath = pathText(`${footer} · ${region.toUpperCase()}`, 110, footerY, 920, 22, { minSize: 18, fill: '#d5dbe6', opacity: .78 });
 
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>
       <linearGradient id="left" x1="0" x2="1">
-        <stop offset="0%" stop-color="#02040a" stop-opacity=".88"/>
-        <stop offset="36%" stop-color="#02040a" stop-opacity=".50"/>
+        <stop offset="0%" stop-color="#02040a" stop-opacity=".90"/>
+        <stop offset="36%" stop-color="#02040a" stop-opacity=".52"/>
         <stop offset="68%" stop-color="#02040a" stop-opacity=".12"/>
         <stop offset="100%" stop-color="#02040a" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="42%" stop-color="#02040a" stop-opacity="0"/>
-        <stop offset="74%" stop-color="#02040a" stop-opacity=".58"/>
-        <stop offset="100%" stop-color="#02040a" stop-opacity=".96"/>
+        <stop offset="40%" stop-color="#02040a" stop-opacity="0"/>
+        <stop offset="70%" stop-color="#02040a" stop-opacity=".60"/>
+        <stop offset="100%" stop-color="#02040a" stop-opacity=".98"/>
       </linearGradient>
       <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="#02040a" stop-opacity=".44"/>
@@ -274,11 +323,11 @@ function overlaySvg(width, height, opts) {
     <rect width="${width}" height="${height}" fill="url(#left)"/>
     <rect width="${width}" height="${height}" fill="url(#bottom)"/>
     <rect width="${width}" height="190" fill="url(#top)"/>
-    <rect x="72" y="${categoryY - titleSize + 8}" width="12" height="${titleSize + 82}" rx="6" fill="${accent}"/>
-    <text x="108" y="${categoryY}" fill="#fff" font-family="DejaVu Sans,Arial,sans-serif" font-size="${titleSize}" font-weight="900">${xml(category)}</text>
-    <text x="110" y="${subY}" fill="${accent}" font-family="DejaVu Sans,Arial,sans-serif" font-size="33" font-weight="900" letter-spacing="2">${xml(providerLabel.toUpperCase())}</text>
-    <text x="110" y="${height - 38}" fill="#d5dbe6" fill-opacity=".72" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="3">${xml(footer)} · ${xml(region.toUpperCase())}</text>
-    <rect x="${width - logoBoxWidth - 44}" y="34" width="${logoBoxWidth}" height="118" rx="25" fill="#02050a" fill-opacity=".78" stroke="${accent}" stroke-opacity=".80" stroke-width="4"/>
+    <rect x="72" y="650" width="12" height="178" rx="6" fill="${accent}"/>
+    ${categoryPath}
+    ${providerPath}
+    ${footerPath}
+    <rect x="${width - logoBoxWidth - 44}" y="34" width="${logoBoxWidth}" height="118" rx="25" fill="#02050a" fill-opacity=".82" stroke="${accent}" stroke-opacity=".86" stroke-width="4"/>
   </svg>`);
 }
 
@@ -312,7 +361,8 @@ async function composeCover(sources, logoBuffer, opts) {
       });
     } catch {}
   } else {
-    const labelSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><text x="1386" y="111" text-anchor="middle" fill="#fff" font-family="DejaVu Sans,Arial,sans-serif" font-size="34" font-weight="900">${xml(opts.providerLabel.toUpperCase())}</text></svg>`);
+    const providerFallback = centeredPathText(opts.providerLabel.toUpperCase(), 1386, 111, 300, 34, { minSize: 25, fill: '#ffffff' });
+    const labelSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">${providerFallback}</svg>`);
     composites.push({ input: labelSvg, left: 0, top: 0 });
   }
 
@@ -331,6 +381,8 @@ async function composeHero(sources, logoBuffer, opts) {
     .toBuffer();
   const middle = await panel(sources[1].buffer, 980, height, 'middle');
   const right = await panel(sources[2].buffer, 860, height, 'right');
+  const heroProviderPath = pathText(opts.providerLabel, 132, 830, 850, 76, { minSize: 48, fill: '#ffffff' });
+  const heroCategoryPath = pathText(opts.category.toUpperCase(), 134, 900, 700, 36, { minSize: 28, fill: opts.accent });
   const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     <defs>
       <linearGradient id="g" x1="0" x2="1">
@@ -347,8 +399,8 @@ async function composeHero(sources, logoBuffer, opts) {
     <rect width="${width}" height="${height}" fill="url(#g)"/>
     <rect width="${width}" height="${height}" fill="url(#b)"/>
     <rect x="92" y="738" width="12" height="205" rx="6" fill="${opts.accent}"/>
-    <text x="132" y="830" fill="#fff" font-family="DejaVu Sans,Arial,sans-serif" font-size="74" font-weight="900">${xml(opts.providerLabel)}</text>
-    <text x="134" y="900" fill="${opts.accent}" font-family="DejaVu Sans,Arial,sans-serif" font-size="32" font-weight="900" letter-spacing="4">${xml(opts.category.toUpperCase())}</text>
+    ${heroProviderPath}
+    ${heroCategoryPath}
   </svg>`);
 
   const composites = [
