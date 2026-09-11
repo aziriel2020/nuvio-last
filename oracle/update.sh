@@ -57,6 +57,21 @@ run_nuvio "npm run test:runtime"
 # static payload switched into production.
 run_nuvio "npm run test:oracle"
 
+# Generated collection covers are immutable release assets. Reuse the previous
+# generated set when its manifest revision is still current; the generator will
+# invalidate and rebuild automatically when its revision changes.
+if [[ -n "$PREVIOUS" && -d "$PREVIOUS/assets/generated-covers" && ! -d "$TARGET/assets/generated-covers" ]]; then
+  cp -a "$PREVIOUS/assets/generated-covers" "$TARGET/assets/generated-covers"
+  chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
+fi
+
+echo "Generating/validating Nuvio cinematic collection covers"
+(
+  cd "$TARGET"
+  npm run generate:covers
+)
+chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
+
 if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   if [[ -z "${PUBLIC_HOST:-}" ]]; then
     echo "PUBLIC_ORIGIN or PUBLIC_HOST must be configured in $ENV_FILE" >&2

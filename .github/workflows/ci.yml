@@ -28,6 +28,9 @@ jobs:
       - name: Run full test suite
         run: npm test
 
+      - name: Validate generated-cover pipeline syntax
+        run: node --check scripts/generate-platform-covers.js
+
       - name: Test neutral runtime layer
         run: npm run test:runtime
 

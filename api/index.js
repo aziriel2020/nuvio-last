@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const usHandler = require('../regions/us/api/index');
 const frHandler = require('../regions/fr/api/index');
 const globalHandler = require('../regions/global/api/index');
@@ -60,6 +63,29 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
+const GENERATED_COVER_REV = 'generated-v1';
+const GENERATED_COVER_ROOT = path.resolve(__dirname, '../assets/generated-covers');
+
+function generatedCoverStaticUrl(urlValue, folder = null, variant = 'card', mode = 'shield', collectionTitle = '') {
+  const value = String(urlValue || '');
+  if (!value) return null;
+  let url;
+  try { url = new URL(value); } catch (_) { return null; }
+  const region = url.pathname.match(/^\/(fr|global|tr|us)\//)?.[1];
+  const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  if (!region || !/^[a-z0-9-]+$/.test(provider)) return null;
+
+  const context = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
+  const type = context.includes('film') ? 'movie' : 'series';
+  const file = variant === 'backdrop'
+    ? (folder ? `${type}-hero.jpg` : 'hero.jpg')
+    : `${type}-${mode === 'desktop' ? 'desktop' : 'shield'}.jpg`;
+  const local = path.join(GENERATED_COVER_ROOT, region, provider, file);
+  if (!fs.existsSync(local)) return null;
+
+  return `${url.origin}/static/assets/generated-covers/${region}/${provider}/${file}?v=${GENERATED_COVER_REV}`;
+}
+
 function cleanVisualQuery(url, removeKeys) {
   let value = String(url || '');
   for (const key of removeKeys) {
@@ -74,6 +100,8 @@ function cleanVisualQuery(url, removeKeys) {
 const DESKTOP_VISUAL_REV = 'desktop13-real-content';
 
 function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
+  const generated = generatedCoverStaticUrl(url, folder, variant, 'desktop', collectionTitle);
+  if (generated) return generated;
   const value = String(url || '');
   const typeContext = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
   const type = typeContext.includes('film') ? 'movie' : 'series';
@@ -113,6 +141,8 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
 const SHIELD_VISUAL_REV = 'shield14-real-content';
 
 function shieldCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
+  const generated = generatedCoverStaticUrl(url, folder, variant, 'shield', collectionTitle);
+  if (generated) return generated;
   const value = String(url || '');
   const typeContext = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
   const type = typeContext.includes('film') ? 'movie' : 'series';
@@ -333,6 +363,7 @@ module.exports._internals = {
   combinedDesktopCollections,
   shieldizeCollectionArt,
   shieldCollectionVisualUrl,
+  generatedCoverStaticUrl,
   desktopizeCollectionArt,
   coexistenceReport,
   delegate,
