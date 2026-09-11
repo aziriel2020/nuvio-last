@@ -54,7 +54,7 @@ export function edgeTtl(input) {
   if (path.includes('/meta/')) return META_TTL;
 
   if (
-    /\/(?:calendar-card\.svg|desktop-content-card\.jpg|desktop-folder-card\.jpg|desktop-genre-card\.jpg|platform-category-card\.svg|platform-backdrop\.svg|platform-logo|archive-year-card\.svg|genre-folder-art\.svg|genre-poster\.png)$/.test(path)
+    /\/(?:calendar-card\.svg|desktop-content-card\.jpg|desktop-folder-card\.jpg|desktop-genre-card\.jpg|shield-folder-card\.jpg|shield-genre-card\.jpg|platform-card\.jpg|platform-backdrop\.jpg|platform-category-card\.svg|platform-backdrop\.svg|platform-logo|archive-year-card\.svg|genre-folder-art\.svg|genre-poster\.png)$/.test(path)
   ) {
     return GENERATED_ART_TTL;
   }
@@ -72,6 +72,8 @@ export function localAssetPath(input) {
 
   let match = path.match(/^\/(fr|global|tr|us)\/(platform-card|platform-backdrop)\.jpg$/);
   if (match) {
+    const revision = String(url.searchParams.get('v') || '');
+    if (/real-content/i.test(revision)) return null;
     const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
     if (!validSlug(provider)) return null;
     const variant = match[2] === 'platform-backdrop' ? 'backdrop' : 'card';
