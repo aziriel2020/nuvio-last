@@ -283,6 +283,7 @@ assert(Number(generatedManifest?.platformParents || 0) >= 40, `generated cover p
 assert(Number(generatedManifest?.genreIdentities || 0) >= 20, `generated genre identity count too small: ${generatedManifest?.genreIdentities}`);
 assert(Number(generatedManifest?.generatedFiles || 0) >= 180, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
 assert(Array.isArray(generatedManifest?.approvedCardFallbacks) && generatedManifest.approvedCardFallbacks.length === 0, `approved card fallbacks detected: ${JSON.stringify(generatedManifest?.approvedCardFallbacks)}`);
+assert(JSON.stringify(generatedManifest?.explicitDerivedSources || []) === JSON.stringify(['tr/bi-kanal']), `unexpected derived source set: ${JSON.stringify(generatedManifest?.explicitDerivedSources)}`);
 assert(generatedManifest?.designProfile?.shield?.target === '83-inch-tv-distance', `Shield TV design profile missing: ${JSON.stringify(generatedManifest?.designProfile?.shield || null)}`);
 assert(generatedManifest?.designProfile?.shield?.layout === 'approved-board-platform-card', `Shield approved-board layout missing: ${generatedManifest?.designProfile?.shield?.layout}`);
 assert(Number(generatedManifest?.designProfile?.shield?.logoWidthPx || 0) >= 520, `Shield logo target too small: ${generatedManifest?.designProfile?.shield?.logoWidthPx}`);
@@ -294,12 +295,20 @@ assert(generatedManifest?.designProfile?.hero?.noGeneratedSecondaryScene === tru
 const serviceResults = (generatedManifest.results || []).filter((item) => item?.sourceMode === 'approved-board-exact');
 assert(serviceResults.length === generatedManifest.platformParents, `not every service uses approved-board-exact source: ${serviceResults.length}/${generatedManifest.platformParents}`);
 for (const item of serviceResults) {
-  assert(/-card\.jpg$/.test(String(item.sourceFile || '')), `service is not sourced from approved *-card.jpg: ${item.region}/${item.provider} -> ${item.sourceFile}`);
-  assert(item.sourceKind === 'approved-card', `service fell back from approved card: ${item.region}/${item.provider}`);
+  const biKanal = item.region === 'tr' && item.provider === 'bi-kanal';
+  if (biKanal) {
+    assert(item.sourceKind === 'approved-derived-bi-kanal', 'Bi Kanal derived source marker missing');
+    assert(item.sourceFile === 'assets/genre-art/shared/news-card.jpg', `Bi Kanal unexpected source: ${item.sourceFile}`);
+    assert(item.derived === true, 'Bi Kanal derived flag missing');
+  } else {
+    assert(/-card\.jpg$/.test(String(item.sourceFile || '')), `service is not sourced from approved *-card.jpg: ${item.region}/${item.provider} -> ${item.sourceFile}`);
+    assert(item.sourceKind === 'approved-card', `service fell back from approved card: ${item.region}/${item.provider}`);
+    assert(item.derived !== true, `approved service unexpectedly marked derived: ${item.region}/${item.provider}`);
+  }
   assert(Array.isArray(item.sources) && item.sources.length > 0, `service source set missing for ${item.region}/${item.provider}`);
   for (const source of item.sources) {
-    assert(source.sourceKind === 'approved-card', `service media source is not approved-card for ${item.region}/${item.provider}/${source.type}`);
-    assert(source.sourceFile === item.sourceFile, `service media type changed approved background for ${item.region}/${item.provider}/${source.type}`);
+    assert(source.sourceFile === item.sourceFile, `service media type changed visual source for ${item.region}/${item.provider}/${source.type}`);
+    assert(source.sourceKind === item.sourceKind, `service media source kind changed for ${item.region}/${item.provider}/${source.type}`);
   }
 }
 const genreResults = (generatedManifest.genres || []).filter((item) => item?.sourceMode === 'approved-board-exact');
@@ -552,6 +561,7 @@ const summary = {
     artDirection: generatedManifest.artDirection,
     visualReference: generatedManifest.visualReference,
     approvedCardFallbacks: generatedManifest.approvedCardFallbacks?.length || 0,
+    explicitDerivedSources: generatedManifest.explicitDerivedSources || [],
     backgroundPolicy: generatedManifest.backgroundPolicy,
     shieldTvProfile: generatedManifest.designProfile?.shield || null,
     generatedShieldUrls: generatedShieldVisualUrls.length,
