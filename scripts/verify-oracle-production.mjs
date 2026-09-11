@@ -150,7 +150,12 @@ async function verifyVisual(urlValue, label) {
   if (/platform-(?:category-card|backdrop)\.svg$/.test(url.pathname)) {
     assert(result.response.headers.get('x-nuvio-visual-renderer') === 'platform-assets-v2', `${label}: platform renderer marker missing`);
   }
-  return { type, bytes: result.bytes.byteLength };
+  return {
+    type,
+    bytes: result.bytes.byteLength,
+    backgroundSource: result.response.headers.get('x-nuvio-background-source') || null,
+    backgroundFormat: result.response.headers.get('x-nuvio-background-format') || null
+  };
 }
 
 async function fetchCatalog(region, source, label, requireNonEmpty = false) {
@@ -251,8 +256,19 @@ assert(shieldVisualUrls.length > 0, 'Shield collection import has no native cine
 for (const value of shieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `Shield collection visual escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v')?.includes('shield13-cinematic-jpeg'), `Shield collection visual has stale renderer revision: ${value}`);
+  assert(visualUrl.searchParams.get('v')?.includes('shield14-real-content'), `Shield collection visual has stale renderer revision: ${value}`);
 }
+const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
+assert(frNetflixReal, 'France Netflix collection missing for real-content visual verification');
+const frNetflixSeriesReal = (frNetflixReal.folders || []).find((folder) => /séries|series/i.test(String(folder.title || ''))) || frNetflixReal.folders?.[0];
+assert(frNetflixSeriesReal?.coverImageUrl, 'France Netflix real-content card missing');
+const netflixCardProbe = await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix real-content Shield card');
+assert(netflixCardProbe.backgroundSource === 'tmdb-cinematic', `Netflix Shield card is not using real TMDb cinematic content: ${netflixCardProbe.backgroundSource}`);
+assert(frNetflixSeriesReal?.heroBackdropUrl, 'France Netflix real-content hero missing');
+const netflixHeroProbe = await verifyVisual(frNetflixSeriesReal.heroBackdropUrl, 'France Netflix real-content hero');
+assert(netflixHeroProbe.backgroundSource === 'tmdb-cinematic', `Netflix Shield hero is not using real TMDb cinematic content: ${netflixHeroProbe.backgroundSource}`);
+assert(netflixHeroProbe.backgroundFormat === '1920x1080', `Netflix Shield hero format mismatch: ${netflixHeroProbe.backgroundFormat}`);
+
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
 const desktopVisualUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/desktop-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }
@@ -261,7 +277,7 @@ assert(desktopVisualUrls.length > 0, 'Desktop collection import has no native De
 for (const value of desktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `Desktop collection visual escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v')?.includes('desktop12-shield-jpeg'), `Desktop collection visual has stale renderer revision: ${value}`);
+  assert(visualUrl.searchParams.get('v')?.includes('desktop13-real-content'), `Desktop collection visual has stale renderer revision: ${value}`);
 }
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
