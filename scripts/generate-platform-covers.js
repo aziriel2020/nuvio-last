@@ -119,8 +119,27 @@ async function providerSource(region, providerSlug) {
       file: source.file,
       sourceFile: path.relative(ROOT, source.file),
       sourceKind: 'approved-card',
-      derived: false
+      derived: false,
+      crossRegion: false
     };
+  }
+
+  // Some regions can reuse the exact same validated service design from another
+  // region when the service branding is identical. This is NOT a visual fallback:
+  // it is the same approved provider card (e.g. Crunchyroll Türkiye -> France).
+  if (providerSlug === 'crunchyroll') {
+    const sharedCard = path.join(PLATFORM_ART_ROOT, 'fr', 'crunchyroll-card.jpg');
+    const buffer = await readIfExists(sharedCard);
+    if (buffer) {
+      return {
+        buffer,
+        file: sharedCard,
+        sourceFile: path.relative(ROOT, sharedCard),
+        sourceKind: 'approved-card-cross-region',
+        derived: false,
+        crossRegion: true
+      };
+    }
   }
 
   // Bi Kanal is the only active service absent from the validated board/source set.
@@ -135,7 +154,8 @@ async function providerSource(region, providerSlug) {
       file: news,
       sourceFile: path.relative(ROOT, news),
       sourceKind: 'approved-derived-bi-kanal',
-      derived: true
+      derived: true,
+      crossRegion: false
     };
   }
 
@@ -360,7 +380,8 @@ async function providerJob(region, api, definition) {
       type,
       sourceFile: source.sourceFile,
       sourceKind: source.sourceKind,
-      derived: source.derived === true
+      derived: source.derived === true,
+      crossRegion: source.crossRegion === true
     });
   }
 
@@ -378,6 +399,7 @@ async function providerJob(region, api, definition) {
     sourceFile: source.sourceFile,
     sourceKind: source.sourceKind,
     derived: source.derived === true,
+    crossRegion: source.crossRegion === true,
     sources: sourceSets
   };
 }
@@ -486,6 +508,9 @@ async function main() {
     ...providerResults.filter((item) => item.derived === true).map((item) => `${item.region}/${item.provider}`),
     ...genreResults.filter((item) => item.derived === true).map((item) => `${item.region}/genres/${item.genre}`)
   ];
+  const crossRegionApprovedSources = providerResults
+    .filter((item) => item.crossRegion === true)
+    .map((item) => `${item.region}/${item.provider}<=${item.sourceFile}`);
 
   const manifest = {
     revision: REVISION,
@@ -509,6 +534,7 @@ async function main() {
     genreIdentities: genreResults.length,
     approvedCardFallbacks: [],
     explicitDerivedSources: derivedSources,
+    crossRegionApprovedSources,
     designProfile: {
       shield: {
         target: '83-inch-tv-distance',
@@ -557,6 +583,7 @@ async function main() {
     genreIdentities: genreResults.length,
     approvedCardFallbacks: 0,
     explicitDerivedSources: derivedSources,
+    crossRegionApprovedSources,
     output: path.relative(ROOT, OUT_ROOT)
   }));
 }
