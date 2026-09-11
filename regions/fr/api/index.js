@@ -68,11 +68,22 @@ function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   catch (_) { LOCAL_VISUAL_DATA_CACHE.set(key, null); return null; }
 }
 function platformPhotoDataUri(providerSlug, variant = 'card') { return localVisualDataUri(path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`)); }
-function servePlatformArtJpeg(res, url, variant = 'card') {
+async function servePlatformArtJpeg(res, url, variant = 'card') {
   const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  const type = normalizedDesktopType(url.searchParams.get('type'));
   if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
+
+  try {
+    const cinematic = await platformCinematicBackdrop(providerSlug, type);
+    if (cinematic?.buffer) {
+      const data = await cinematicBackdropJpegBuffer(cinematic.buffer);
+      return sendPlatformCinematicJpeg(res, data, 'tmdb-cinematic');
+    }
+  } catch {}
+
   return serveLocalJpeg(res, path.join(PLATFORM_ART_DIR, `${providerSlug}-${variant === 'backdrop' ? 'backdrop' : 'card'}.jpg`));
 }
+
 function genreCinematicDataUri(genreSlug, variant='card') { const v=variant==='backdrop'?'backdrop':'card'; return localVisualDataUri(path.join(GENRE_CINEMATIC_ART_DIR, `${String(genreSlug || '').trim().toLowerCase()}-${v}.jpg`)); }
 function serveGenreCinematicJpeg(res, url, variant = 'card') {
   const genreSlug = String(url.searchParams.get('genre') || '').trim().toLowerCase();
@@ -251,7 +262,9 @@ async function handleDesktopFolderCard(res, url) {
   const type = normalizedDesktopType(url.searchParams.get('type'));
   if (!/^[a-z0-9-]+$/.test(providerSlug)) { res.statusCode = 404; return res.end('Not found'); }
   try {
-    const source = fs.readFileSync(path.join(PLATFORM_ART_DIR, `${providerSlug}-card.jpg`));
+    const cinematic = await platformCinematicBackdrop(providerSlug, type);
+    const source = cinematic?.buffer || fs.readFileSync(path.join(PLATFORM_ART_DIR, `${providerSlug}-card.jpg`));
+    res.setHeader('X-Nuvio-Background-Source', cinematic?.buffer ? 'tmdb-cinematic' : 'local-fallback');
     const asset = await platformLogoAsset(providerSlug, type);
     const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
     const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
@@ -2152,6 +2165,127 @@ async function resolveProvider(providerSlug, type) {
 
 
 const platformLogoAssetCache = new Map();
+
+const platformCinematicBackdropCache = new Map();
+
+function cinematicMonetizationTypes(providerSlug) {
+  const provider = platformProviderDefinition(providerSlug);
+  const values = Array.isArray(provider?.monetizationTypes) && provider.monetizationTypes.length
+    ? provider.monetizationTypes
+    : ['flatrate', 'free', 'ads'];
+  return [...new Set(values)].join('|');
+}
+
+function cinematicCandidateScore(entry) {
+  return Number(entry?.popularity || 0)
+    + Math.min(Number(entry?.vote_count || 0), 6000) / 90
+    + (Number(entry?.vote_average || 0) * 4);
+}
+
+function cinematicBackdropCandidates(results, providerSlug) {
+  const all = (results || []).filter((entry) => typeof entry?.backdrop_path === 'string' && entry.backdrop_path.startsWith('/'));
+  const animePlatform = /(?:anime|crunchyroll)/i.test(providerSlug);
+  const liveAction = animePlatform
+    ? all
+    : all.filter((entry) => !(entry?.genre_ids || []).map(Number).includes(16));
+  return (liveAction.length ? liveAction : all)
+    .sort((a, b) => cinematicCandidateScore(b) - cinematicCandidateScore(a));
+}
+
+async function fetchCinematicBackdropBuffer(backdropPath) {
+  if (!/^\/[A-Za-z0-9._/-]+$/.test(String(backdropPath || ''))) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6500);
+  try {
+    const response = await fetch(`https://image.tmdb.org/t/p/w1280${backdropPath}`, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'image/jpeg,image/webp,*/*;q=0.8',
+        'User-Agent': `NuvioCalendar/${VERSION} cinematic-art`
+      }
+    });
+    if (!response.ok) return null;
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.startsWith('image/')) return null;
+    const data = Buffer.from(await response.arrayBuffer());
+    return data.length >= 18000 ? data : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function platformCinematicBackdrop(providerSlug, mediaType = 'series') {
+  const type = normalizedDesktopType(mediaType);
+  const key = `${providerSlug}:${type}:live-action-v1`;
+  if (platformCinematicBackdropCache.has(key)) return platformCinematicBackdropCache.get(key);
+
+  try {
+    const endpoint = type === 'movie' ? '/discover/movie' : '/discover/tv';
+    const params = {
+      language: getConfig().language,
+      page: 1,
+      include_adult: false,
+      sort_by: 'popularity.desc'
+    };
+
+    if (providerSlug === 'anime-asia') {
+      params.with_genres = '16';
+      params.with_original_language = 'ja';
+      if (type === 'movie') params.region = 'JP';
+    } else if (providerSlug !== ARCHIVE_VOD_PROVIDER.slug) {
+      const resolved = await resolveProvider(providerSlug, type);
+      if (!resolved?.ids?.length) {
+        platformCinematicBackdropCache.set(key, null);
+        return null;
+      }
+      params.watch_region = DEFAULT_COUNTRY;
+      params.with_watch_providers = resolved.ids.join('|');
+      params.with_watch_monetization_types = cinematicMonetizationTypes(providerSlug);
+    } else if (type === 'movie' && DEFAULT_COUNTRY) {
+      params.region = DEFAULT_COUNTRY;
+    }
+
+    const payload = await tmdbFetch(endpoint, params);
+    const candidates = cinematicBackdropCandidates(payload?.results, providerSlug);
+    for (const candidate of candidates.slice(0, 6)) {
+      const buffer = await fetchCinematicBackdropBuffer(candidate.backdrop_path);
+      if (!buffer) continue;
+      const result = {
+        buffer,
+        backdropPath: candidate.backdrop_path,
+        contentId: Number(candidate.id) || null,
+        title: candidate.title || candidate.name || ''
+      };
+      platformCinematicBackdropCache.set(key, result);
+      return result;
+    }
+  } catch {}
+
+  platformCinematicBackdropCache.set(key, null);
+  return null;
+}
+
+async function cinematicBackdropJpegBuffer(sourceBuffer) {
+  return sharp(sourceBuffer)
+    .resize(1920, 1080, { fit: 'cover', position: 'attention' })
+    .modulate({ brightness: 0.93, saturation: 1.09 })
+    .sharpen({ sigma: 0.75 })
+    .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
+function sendPlatformCinematicJpeg(res, data, source = 'local-fallback') {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  res.setHeader('X-Nuvio-Background-Source', source);
+  res.setHeader('X-Nuvio-Background-Format', '1920x1080');
+  res.end(data);
+}
+
 
 function platformProviderDefinition(providerSlug) {
   if (providerSlug === ARCHIVE_VOD_PROVIDER.slug) return ARCHIVE_VOD_PROVIDER;
@@ -4241,6 +4375,7 @@ module.exports._internals = {
   platformCollectionTitle,
   regionCollectionTitle,
   platformLogoAsset,
+  platformCinematicBackdrop,
   platformFallbackLogoSvg,
   platformWordmarkSvg,
   platformBackdropSvg,

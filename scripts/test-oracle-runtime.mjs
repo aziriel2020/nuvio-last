@@ -155,7 +155,7 @@ try {
   for (const [label, visual] of [['folder', desktopFolderVisual], ['genre', desktopGenreVisual]]) {
     const u = new URL(visual);
     if (u.origin !== origin) throw new Error(`Desktop ${label} visual escaped Oracle origin: ${visual}`);
-    if (!u.searchParams.get('v')?.includes('desktop12-shield-jpeg')) throw new Error(`Desktop ${label} visual has stale revision`);
+    if (!u.searchParams.get('v')?.includes('desktop13-real-content')) throw new Error(`Desktop ${label} visual has stale revision`);
     const card = await retry(u.pathname + u.search);
     requireHeader(card, 'x-nuvio-origin', 'oracle-vm');
     requireHeader(card, 'x-nuvio-edge', 'oracle-node');
