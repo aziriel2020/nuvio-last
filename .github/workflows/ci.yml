@@ -52,11 +52,35 @@ jobs:
             if (JSON.stringify(manifest.explicitDerivedSources || []) !== JSON.stringify(['tr/bi-kanal'])) {
               throw new Error('unexpected derived service set: ' + JSON.stringify(manifest.explicitDerivedSources));
             }
+            if (JSON.stringify(manifest.crossRegionApprovedSources || []) !== JSON.stringify(['tr/crunchyroll<=assets/platform-art/fr/crunchyroll-card.jpg'])) {
+              throw new Error('unexpected cross-region approved source set: ' + JSON.stringify(manifest.crossRegionApprovedSources));
+            }
             for (const item of manifest.results || []) {
               const biKanal = item.region === 'tr' && item.provider === 'bi-kanal';
-              const validExact = item.sourceMode === 'approved-board-exact' && item.sourceKind === 'approved-card' && String(item.sourceFile || '').endsWith('-card.jpg') && item.derived !== true;
-              const validBiKanal = biKanal && item.sourceMode === 'approved-board-exact' && item.sourceKind === 'approved-derived-bi-kanal' && item.sourceFile === 'assets/genre-art/shared/news-card.jpg' && item.derived === true;
-              if (!validExact && !validBiKanal) throw new Error('service escaped approved source contract: ' + JSON.stringify(item));
+              const trCrunchyroll = item.region === 'tr' && item.provider === 'crunchyroll';
+              const validExact =
+                item.sourceMode === 'approved-board-exact' &&
+                item.sourceKind === 'approved-card' &&
+                String(item.sourceFile || '').endsWith('-card.jpg') &&
+                item.derived !== true &&
+                item.crossRegion !== true;
+              const validBiKanal =
+                biKanal &&
+                item.sourceMode === 'approved-board-exact' &&
+                item.sourceKind === 'approved-derived-bi-kanal' &&
+                item.sourceFile === 'assets/genre-art/shared/news-card.jpg' &&
+                item.derived === true &&
+                item.crossRegion !== true;
+              const validCrossRegionCrunchyroll =
+                trCrunchyroll &&
+                item.sourceMode === 'approved-board-exact' &&
+                item.sourceKind === 'approved-card-cross-region' &&
+                item.sourceFile === 'assets/platform-art/fr/crunchyroll-card.jpg' &&
+                item.derived !== true &&
+                item.crossRegion === true;
+              if (!validExact && !validBiKanal && !validCrossRegionCrunchyroll) {
+                throw new Error('service escaped approved source contract: ' + JSON.stringify(item));
+              }
             }
             for (const item of manifest.genres || []) {
               if (item.sourceMode !== 'approved-board-exact' || item.sourceKind !== 'approved-card' || !String(item.sourceFile || '').endsWith('-card.jpg')) {
