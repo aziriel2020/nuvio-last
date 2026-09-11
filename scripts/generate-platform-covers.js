@@ -314,6 +314,8 @@ async function preparedLayer(buffer, width, height, style, options = {}) {
   const zoom = options.zoom || style.zoom || 1;
   const targetW = Math.round(width * zoom);
   const targetH = Math.round(height * zoom);
+  const rawHue = options.hue == null ? style.hue : options.hue;
+  const hue = ((Math.round(Number(rawHue) || 0) % 360) + 360) % 360;
   let pipeline = sharp(buffer)
     .resize(targetW, targetH, { fit: 'cover', position: options.position || 'attention' })
     .extract({
@@ -325,7 +327,7 @@ async function preparedLayer(buffer, width, height, style, options = {}) {
     .modulate({
       brightness: options.brightness || style.brightness,
       saturation: options.saturation || style.saturation,
-      hue: options.hue == null ? style.hue : options.hue
+      hue
     });
   if (style.flop !== Boolean(options.noFlop)) pipeline = pipeline.flop();
   return pipeline.sharpen({ sigma: .65 }).ensureAlpha().toBuffer();
