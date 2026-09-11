@@ -76,6 +76,57 @@ jobs:
           })().catch((error) => { console.error(error); process.exit(1); });
           NODE
 
+      - name: Build approved-board visual preview
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const sharp = require('sharp');
+
+          const samples = [
+            ['Netflix', 'assets/generated-covers/fr/netflix/series-shield.jpg'],
+            ['Prime Video', 'assets/generated-covers/fr/prime-video/series-shield.jpg'],
+            ['Disney+', 'assets/generated-covers/fr/disney-plus/series-shield.jpg'],
+            ['Max', 'assets/generated-covers/fr/hbo-max/series-shield.jpg'],
+            ['Apple TV+', 'assets/generated-covers/fr/apple-tv-plus/series-shield.jpg'],
+            ['Action', 'assets/generated-covers/fr/genres/action-shield.jpg'],
+            ['Thriller', 'assets/generated-covers/fr/genres/thriller-shield.jpg'],
+            ['Crime', 'assets/generated-covers/fr/genres/crime-shield.jpg'],
+            ['Science-fiction', 'assets/generated-covers/fr/genres/science-fiction-shield.jpg'],
+            ['Fantasy', 'assets/generated-covers/fr/genres/fantasy-shield.jpg'],
+            ['Horreur', 'assets/generated-covers/fr/genres/horror-shield.jpg'],
+            ['Apple Hero', 'assets/generated-covers/fr/apple-tv-plus/series-hero.jpg']
+          ];
+
+          (async () => {
+            const cols = 3;
+            const cellW = 640;
+            const cellH = 390;
+            const rows = Math.ceil(samples.length / cols);
+            const composites = [];
+            for (let i = 0; i < samples.length; i += 1) {
+              const [label, file] = samples[i];
+              if (!fs.existsSync(file)) throw new Error('preview sample missing: ' + file);
+              const image = await sharp(file).resize(620, 349, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer();
+              const labelSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="620" height="38"><rect width="620" height="38" fill="#02040a"/><text x="12" y="27" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="700">${label}</text></svg>`);
+              composites.push({ input: image, left: (i % cols) * cellW + 10, top: Math.floor(i / cols) * cellH + 10 });
+              composites.push({ input: labelSvg, left: (i % cols) * cellW + 10, top: Math.floor(i / cols) * cellH + 359 });
+            }
+            await sharp({ create: { width: cols * cellW, height: rows * cellH, channels: 3, background: '#02040a' } })
+              .composite(composites)
+              .jpeg({ quality: 91, chromaSubsampling: '4:4:4' })
+              .toFile('approved-board-v5-preview.jpg');
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
+
+      - name: Upload approved-board visual preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-board-v5-preview
+          path: approved-board-v5-preview.jpg
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Test neutral runtime layer
         run: npm run test:runtime
 
