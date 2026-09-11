@@ -112,15 +112,34 @@ function genreArtFiles(slug) {
 async function providerSource(region, providerSlug) {
   const providerDir = path.join(PLATFORM_ART_ROOT, region);
   const card = path.join(providerDir, `${providerSlug}-card.jpg`);
-  const backdrop = path.join(providerDir, `${providerSlug}-backdrop.jpg`);
-  const source = await firstExisting([card, backdrop]);
-  if (!source) throw new Error(`${region}/${providerSlug}: approved platform artwork missing`);
-  return {
-    buffer: source.buffer,
-    file: source.file,
-    sourceFile: path.relative(ROOT, source.file),
-    sourceKind: source.file.endsWith('-card.jpg') ? 'approved-card' : 'fallback-backdrop'
-  };
+  const source = await firstExisting([card]);
+  if (source) {
+    return {
+      buffer: source.buffer,
+      file: source.file,
+      sourceFile: path.relative(ROOT, source.file),
+      sourceKind: 'approved-card',
+      derived: false
+    };
+  }
+
+  // Bi Kanal is the only active service absent from the validated board/source set.
+  // Give it one explicit, deterministic local visual instead of silently falling
+  // back to a random provider/backdrop or changing any approved service artwork.
+  if (region === 'tr' && providerSlug === 'bi-kanal') {
+    const news = genreArtFiles('news').card;
+    const buffer = await readIfExists(news);
+    if (!buffer) throw new Error('tr/bi-kanal: dedicated derived source is missing');
+    return {
+      buffer,
+      file: news,
+      sourceFile: path.relative(ROOT, news),
+      sourceKind: 'approved-derived-bi-kanal',
+      derived: true
+    };
+  }
+
+  throw new Error(`${region}/${providerSlug}: approved platform *-card.jpg artwork missing`);
 }
 
 async function genreSource(slug) {
@@ -163,18 +182,18 @@ function brandLabel(api, providerSlug) {
   }
 }
 
-async function approvedBackground(buffer, width, height, { hero = false } = {}) {
+async function approvedBackground(buffer, width, height, { hero = false, derived = false } = {}) {
   // IMPORTANT: no mood blending, no hue shift, no mirroring, no generated secondary layer.
   // The approved *-card.jpg is the visual truth shown in the validated board.
-  return sharp(buffer)
-    .resize(width, height, {
-      fit: 'cover',
-      position: hero ? 'attention' : 'centre',
-      withoutEnlargement: false
-    })
-    .sharpen({ sigma: 0.35 })
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-    .toBuffer();
+  // The one Bi Kanal source absent from that board gets a fixed crop only.
+  const pipeline = sharp(buffer).resize(width, height, {
+    fit: 'cover',
+    position: hero ? 'attention' : (derived ? 'east' : 'centre'),
+    withoutEnlargement: false
+  });
+  if (derived) pipeline.sharpen({ sigma: 0.7 });
+  else pipeline.sharpen({ sigma: 0.35 });
+  return pipeline.jpeg({ quality: 95, chromaSubsampling: '4:4:4' }).toBuffer();
 }
 
 function serviceCardOverlay(width, height, opts) {
@@ -227,7 +246,7 @@ function genreCardOverlay(width, height, opts) {
 async function serviceCover(source, logoBuffer, opts) {
   const width = 1600;
   const height = 900;
-  const background = await approvedBackground(source.buffer, width, height);
+  const background = await approvedBackground(source.buffer, width, height, { derived: source.derived === true });
   const composites = [{ input: serviceCardOverlay(width, height, opts), left: 0, top: 0 }];
 
   if (logoBuffer) {
@@ -285,7 +304,7 @@ function heroOverlay(width, height, accent) {
 async function approvedHero(source, accent) {
   const width = 1920;
   const height = 1080;
-  const background = await approvedBackground(source.buffer, width, height, { hero: true });
+  const background = await approvedBackground(source.buffer, width, height, { hero: true, derived: source.derived === true });
   return sharp(background)
     .composite([{ input: heroOverlay(width, height, accent), left: 0, top: 0 }])
     .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
@@ -340,7 +359,8 @@ async function providerJob(region, api, definition) {
     sourceSets.push({
       type,
       sourceFile: source.sourceFile,
-      sourceKind: source.sourceKind
+      sourceKind: source.sourceKind,
+      derived: source.derived === true
     });
   }
 
@@ -357,6 +377,7 @@ async function providerJob(region, api, definition) {
     sourceMode: 'approved-board-exact',
     sourceFile: source.sourceFile,
     sourceKind: source.sourceKind,
+    derived: source.derived === true,
     sources: sourceSets
   };
 }
@@ -461,9 +482,9 @@ async function main() {
     providerResults.reduce((sum, item) => sum + item.files.length, 0) +
     genreResults.reduce((sum, item) => sum + item.files.length, 0);
 
-  const fallbackSources = [
-    ...providerResults.filter((item) => item.sourceKind !== 'approved-card').map((item) => `${item.region}/${item.provider}`),
-    ...genreResults.filter((item) => item.sourceKind !== 'approved-card').map((item) => `${item.region}/genres/${item.genre}`)
+  const derivedSources = [
+    ...providerResults.filter((item) => item.derived === true).map((item) => `${item.region}/${item.provider}`),
+    ...genreResults.filter((item) => item.derived === true).map((item) => `${item.region}/genres/${item.genre}`)
   ];
 
   const manifest = {
@@ -486,7 +507,8 @@ async function main() {
     generatedFiles,
     platformParents: providerResults.length,
     genreIdentities: genreResults.length,
-    approvedCardFallbacks: fallbackSources,
+    approvedCardFallbacks: [],
+    explicitDerivedSources: derivedSources,
     designProfile: {
       shield: {
         target: '83-inch-tv-distance',
@@ -533,7 +555,8 @@ async function main() {
     generatedFiles,
     platformParents: providerResults.length,
     genreIdentities: genreResults.length,
-    approvedCardFallbacks: fallbackSources.length,
+    approvedCardFallbacks: 0,
+    explicitDerivedSources: derivedSources,
     output: path.relative(ROOT, OUT_ROOT)
   }));
 }
