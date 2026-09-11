@@ -147,20 +147,26 @@ try {
   }
 
   const desktopStrings = flattenDesktopStrings(desktopBody);
-  const desktopFolderVisual = desktopStrings.find((value) => /\/desktop-folder-card\.jpg(?:\?|$)/i.test(value));
-  const desktopGenreVisual = desktopStrings.find((value) => /\/desktop-genre-card\.jpg(?:\?|$)/i.test(value));
-  if (!desktopFolderVisual) throw new Error('Desktop collection has no desktop-folder-card.jpg visual');
-  if (!desktopGenreVisual) throw new Error('Desktop collection has no desktop-genre-card.jpg visual');
+  const desktopFolderVisual = desktopStrings.find((value) => {
+    try {
+      return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/(?!genres\/)[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/i.test(new URL(value).pathname);
+    } catch { return false; }
+  });
+  const desktopGenreVisual = desktopStrings.find((value) => {
+    try {
+      return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/i.test(new URL(value).pathname);
+    } catch { return false; }
+  });
+  if (!desktopFolderVisual) throw new Error('Desktop collection has no Original Premium service cover');
+  if (!desktopGenreVisual) throw new Error('Desktop collection has no Original Premium genre cover');
 
-  for (const [label, visual] of [['folder', desktopFolderVisual], ['genre', desktopGenreVisual]]) {
+  for (const [label, visual] of [['service', desktopFolderVisual], ['genre', desktopGenreVisual]]) {
     const u = new URL(visual);
     if (u.origin !== origin) throw new Error(`Desktop ${label} visual escaped Oracle origin: ${visual}`);
-    if (!u.searchParams.get('v')?.includes('desktop13-real-content')) throw new Error(`Desktop ${label} visual has stale revision`);
+    if (u.searchParams.get('v') !== 'generated-v4-original-premium') throw new Error(`Desktop ${label} visual has stale revision: ${u.searchParams.get('v')}`);
     const card = await retry(u.pathname + u.search);
     requireHeader(card, 'x-nuvio-origin', 'oracle-vm');
     requireHeader(card, 'x-nuvio-edge', 'oracle-node');
-    requireHeader(card, 'x-nuvio-card-renderer', 'shield-desktop-jpeg-v4');
-    requireHeader(card, 'x-nuvio-desktop-format', '1600x900');
     const contentType = String(card.headers.get('content-type') || '').toLowerCase();
     if (!contentType.startsWith('image/jpeg')) throw new Error(`Desktop ${label} is not JPEG: ${contentType}`);
     const bytes = Buffer.from(await card.arrayBuffer());

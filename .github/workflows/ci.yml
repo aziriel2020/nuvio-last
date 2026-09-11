@@ -12,7 +12,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,6 +30,35 @@ jobs:
 
       - name: Validate generated-cover pipeline syntax
         run: node --check scripts/generate-platform-covers.js
+
+      - name: Generate and validate Original Premium cover set
+        run: |
+          rm -rf assets/generated-covers
+          NUVIO_FORCE_COVER_REGEN=1 npm run generate:covers
+          node - <<'NODE'
+          const fs = require('fs');
+          const sharp = require('sharp');
+          (async () => {
+            const manifest = JSON.parse(fs.readFileSync('assets/generated-covers/manifest.json', 'utf8'));
+            if (manifest.revision !== 'generated-v4-original-premium') throw new Error('unexpected cover revision');
+            if (manifest.artDirection !== 'nuvio-original-premium-v4') throw new Error('unexpected art direction');
+            if (manifest.backgroundPolicy?.tmdbBackdropDependency !== false) throw new Error('TMDb background dependency leaked');
+            if (Number(manifest.platformParents || 0) < 40) throw new Error('too few service identities');
+            if (Number(manifest.genreIdentities || 0) < 20) throw new Error('too few genre identities');
+            const sample = 'assets/generated-covers/fr/netflix/series-shield.jpg';
+            const meta = await sharp(sample).metadata();
+            if (meta.format !== 'jpeg' || meta.width !== 1600 || meta.height !== 900) {
+              throw new Error(`bad sample cover: ${meta.format} ${meta.width}x${meta.height}`);
+            }
+            console.log(JSON.stringify({
+              revision: manifest.revision,
+              generatedFiles: manifest.generatedFiles,
+              platformParents: manifest.platformParents,
+              genreIdentities: manifest.genreIdentities,
+              sample: `${meta.width}x${meta.height}`
+            }));
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
 
       - name: Test neutral runtime layer
         run: npm run test:runtime
