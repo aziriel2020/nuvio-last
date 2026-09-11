@@ -43,12 +43,12 @@ test('Oracle release tests run before the final public build and atomic switch',
   assert.ok(
     testIndex >= 0 &&
     runtimeTestIndex > testIndex &&
-    oracleTestIndex > runtimeTestIndex &&
-    coverIndex > oracleTestIndex &&
-    buildIndex > coverIndex &&
+    coverIndex > runtimeTestIndex &&
+    oracleTestIndex > coverIndex &&
+    buildIndex > oracleTestIndex &&
     originGuardIndex > buildIndex &&
     switchIndex > originGuardIndex,
-    'Oracle tests and generated covers must run before the final production-origin build and switch'
+    'Oracle tests and generated covers must run in release order before the final production-origin build and switch'
   );
   assert.match(updater, /assets\/generated-covers/);
   assert.match(updater, /Generating\/validating Nuvio cinematic collection covers/);
