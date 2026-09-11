@@ -31,7 +31,7 @@ jobs:
       - name: Validate generated-cover pipeline syntax
         run: node --check scripts/generate-platform-covers.js
 
-      - name: Generate and validate Original Premium cover set
+      - name: Generate and validate approved-board exact cover set
         run: |
           rm -rf assets/generated-covers
           NUVIO_FORCE_COVER_REGEN=1 npm run generate:covers
@@ -40,9 +40,25 @@ jobs:
           const sharp = require('sharp');
           (async () => {
             const manifest = JSON.parse(fs.readFileSync('assets/generated-covers/manifest.json', 'utf8'));
-            if (manifest.revision !== 'generated-v4-original-premium') throw new Error('unexpected cover revision');
-            if (manifest.artDirection !== 'nuvio-original-premium-v4') throw new Error('unexpected art direction');
+            if (manifest.revision !== 'generated-v5-approved-board-exact') throw new Error('unexpected cover revision');
+            if (manifest.artDirection !== 'approved-board-exact-v5') throw new Error('unexpected art direction');
             if (manifest.backgroundPolicy?.tmdbBackdropDependency !== false) throw new Error('TMDb background dependency leaked');
+            if (manifest.backgroundPolicy?.moodMixing !== false) throw new Error('mood mixing leaked');
+            if (manifest.backgroundPolicy?.secondaryCompositing !== false) throw new Error('secondary compositing leaked');
+            if (manifest.backgroundPolicy?.hueMutation !== false) throw new Error('hue mutation leaked');
+            if (manifest.backgroundPolicy?.horizontalMirroring !== false) throw new Error('mirroring leaked');
+            if (manifest.backgroundPolicy?.exactApprovedCardSource !== true) throw new Error('approved-card source policy missing');
+            if (!Array.isArray(manifest.approvedCardFallbacks) || manifest.approvedCardFallbacks.length !== 0) throw new Error('approved-card fallback detected: ' + JSON.stringify(manifest.approvedCardFallbacks));
+            for (const item of manifest.results || []) {
+              if (item.sourceMode !== 'approved-board-exact' || item.sourceKind !== 'approved-card' || !String(item.sourceFile || '').endsWith('-card.jpg')) {
+                throw new Error('service escaped approved card source: ' + JSON.stringify(item));
+              }
+            }
+            for (const item of manifest.genres || []) {
+              if (item.sourceMode !== 'approved-board-exact' || item.sourceKind !== 'approved-card' || !String(item.sourceFile || '').endsWith('-card.jpg')) {
+                throw new Error('genre escaped approved card source: ' + JSON.stringify(item));
+              }
+            }
             if (Number(manifest.platformParents || 0) < 40) throw new Error('too few service identities');
             if (Number(manifest.genreIdentities || 0) < 20) throw new Error('too few genre identities');
             const sample = 'assets/generated-covers/fr/netflix/series-shield.jpg';
