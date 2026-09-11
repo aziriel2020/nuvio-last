@@ -492,8 +492,40 @@ const originalPremiumUrls = [...visualUrls].filter((value) => {
 });
 const originalPremiumDigests = originalPremiumUrls.map((value) => visualDigests.get(value)).filter(Boolean);
 assert(originalPremiumDigests.length === originalPremiumUrls.length, 'missing visual digest for Original Premium assets');
-const duplicateDigestCount = originalPremiumDigests.length - new Set(originalPremiumDigests).size;
-assert(duplicateDigestCount === 0, `Original Premium service/genre covers contain ${duplicateDigestCount} pixel-identical duplicate(s)`);
+
+// The same approved visual identity is intentionally emitted in several regional
+// imports (for example Netflix FR/TR/US and the same Action genre in FR/TR/US).
+// Treat those as one semantic identity. What must never happen is two DIFFERENT
+// services/genres becoming pixel-identical.
+function originalPremiumIdentity(value) {
+  const pathname = new URL(value).pathname;
+  const genre = pathname.match(/\/generated-covers\/(?:fr|global|tr|us)\/genres\/([a-z0-9-]+)-(?:shield|desktop)\.jpg$/);
+  if (genre) return `genre:${genre[1]}`;
+  const service = pathname.match(/\/generated-covers\/(?:fr|global|tr|us)\/([a-z0-9-]+)\/(series|movie)-(?:shield|desktop)\.jpg$/);
+  if (service) {
+    const provider = service[1] === 'hbo-max' ? 'max' : service[1];
+    return `service:${provider}:${service[2]}`;
+  }
+  return `url:${pathname}`;
+}
+
+const premiumDigestGroups = new Map();
+for (const value of originalPremiumUrls) {
+  const digest = visualDigests.get(value);
+  if (!premiumDigestGroups.has(digest)) premiumDigestGroups.set(digest, []);
+  premiumDigestGroups.get(digest).push(value);
+}
+const crossIdentityDuplicateGroups = [...premiumDigestGroups.entries()]
+  .map(([digest, urls]) => ({
+    digest,
+    urls,
+    identities: [...new Set(urls.map(originalPremiumIdentity))]
+  }))
+  .filter((group) => group.identities.length > 1);
+assert(
+  crossIdentityDuplicateGroups.length === 0,
+  `Original Premium has pixel-identical assets across different identities: ${JSON.stringify(crossIdentityDuplicateGroups.slice(0, 8))}`
+);
 
 // Explicit renderer routes requested for the migration contract.
 // Content-card validation must use a URL actually emitted by a live catalog so
