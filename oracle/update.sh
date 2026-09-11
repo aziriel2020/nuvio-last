@@ -52,14 +52,9 @@ run_nuvio "if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci 
 run_nuvio "npm test"
 run_nuvio "npm run test:runtime"
 
-# The Oracle integration test deliberately builds a local 127.0.0.1 fixture.
-# Run it BEFORE the final production build so that fixture can never become the
-# static payload switched into production.
-run_nuvio "npm run test:oracle"
-
-# Generated collection covers are immutable release assets. Reuse the previous
-# generated set when its manifest revision is still current; the generator will
-# invalidate and rebuild automatically when its revision changes.
+# Generated collection covers are release assets consumed by the Oracle integration
+# test itself. Reuse the previous set only as a warm cache; the revisioned generator
+# invalidates and fully rebuilds it whenever the art-direction revision changes.
 if [[ -n "$PREVIOUS" && -d "$PREVIOUS/assets/generated-covers" && ! -d "$TARGET/assets/generated-covers" ]]; then
   cp -a "$PREVIOUS/assets/generated-covers" "$TARGET/assets/generated-covers"
   chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
@@ -71,6 +66,11 @@ echo "Generating/validating Nuvio cinematic collection covers"
   npm run generate:covers
 )
 chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
+
+# The Oracle integration test deliberately builds a local 127.0.0.1 fixture.
+# Run it AFTER cover generation so the fixture validates the exact release artwork,
+# but BEFORE the final public-origin build so localhost URLs can never be switched.
+run_nuvio "npm run test:oracle"
 
 if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   if [[ -z "${PUBLIC_HOST:-}" ]]; then
