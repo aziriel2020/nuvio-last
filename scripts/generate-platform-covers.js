@@ -11,7 +11,7 @@ const rootHandler = require('../api/index.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT_ROOT = path.join(ROOT, 'assets', 'generated-covers');
-const REVISION = 'generated-v2';
+const REVISION = 'generated-v3';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w1280';
 
 const REGION_APIS = {
@@ -138,7 +138,7 @@ async function downloadImage(url) {
       signal: controller.signal,
       headers: {
         Accept: 'image/jpeg,image/webp,*/*;q=0.8',
-        'User-Agent': 'NuvioGeneratedCovers/2.0'
+        'User-Agent': 'NuvioGeneratedCovers/3.0'
       }
     });
     if (!response.ok) return null;
@@ -291,43 +291,53 @@ async function panel(buffer, width, height, mode) {
 function overlaySvg(width, height, opts) {
   const { accent, providerLabel, category, mode, region } = opts;
   const shield = mode === 'shield';
-  const titleSize = shield ? 96 : 86;
-  const categoryY = shield ? 748 : 742;
-  const subY = shield ? 825 : 820;
-  const footerY = 866;
-  const footer = shield ? 'NUVIO · CINEMATIC COLLECTION' : 'NUVIO DESKTOP · CINEMATIC';
-  const logoBoxWidth = 340;
 
-  const categoryPath = pathText(category, 108, categoryY, 1010, titleSize, { minSize: 50, fill: '#ffffff' });
-  const providerPath = pathText(providerLabel.toUpperCase(), 110, subY, 790, 40, { minSize: 28, fill: accent });
-  const footerPath = pathText(`${footer} · ${region.toUpperCase()}`, 110, footerY, 920, 22, { minSize: 18, fill: '#d5dbe6', opacity: .78 });
+  // Shield is tuned for long-distance readability on very large TVs.
+  // Desktop keeps its denser typography so the existing desktop layout does not regress.
+  const titleSize = shield ? 136 : 86;
+  const providerSize = shield ? 58 : 40;
+  const footerSize = shield ? 31 : 22;
+  const categoryY = shield ? 720 : 742;
+  const subY = shield ? 810 : 820;
+  const footerY = shield ? 872 : 866;
+  const footer = shield ? 'NUVIO · CINEMATIC COLLECTION' : 'NUVIO DESKTOP · CINEMATIC';
+  const logoBoxWidth = shield ? 468 : 340;
+  const logoBoxHeight = shield ? 164 : 118;
+  const logoBoxTop = shield ? 28 : 34;
+  const accentWidth = shield ? 18 : 12;
+  const accentY = shield ? 575 : 650;
+  const accentHeight = shield ? 260 : 178;
+
+  const categoryPath = pathText(category, 112, categoryY, shield ? 1060 : 1010, titleSize, { minSize: shield ? 78 : 50, fill: '#ffffff' });
+  const providerPath = pathText(providerLabel.toUpperCase(), 114, subY, shield ? 980 : 790, providerSize, { minSize: shield ? 38 : 28, fill: accent });
+  const footerPath = pathText(`${footer} · ${region.toUpperCase()}`, 114, footerY, shield ? 1120 : 920, footerSize, { minSize: shield ? 24 : 18, fill: '#d5dbe6', opacity: .86 });
 
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>
       <linearGradient id="left" x1="0" x2="1">
-        <stop offset="0%" stop-color="#02040a" stop-opacity=".90"/>
-        <stop offset="36%" stop-color="#02040a" stop-opacity=".52"/>
-        <stop offset="68%" stop-color="#02040a" stop-opacity=".12"/>
+        <stop offset="0%" stop-color="#02040a" stop-opacity=".92"/>
+        <stop offset="38%" stop-color="#02040a" stop-opacity=".56"/>
+        <stop offset="70%" stop-color="#02040a" stop-opacity=".14"/>
         <stop offset="100%" stop-color="#02040a" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="40%" stop-color="#02040a" stop-opacity="0"/>
-        <stop offset="70%" stop-color="#02040a" stop-opacity=".60"/>
+        <stop offset="36%" stop-color="#02040a" stop-opacity="0"/>
+        <stop offset="67%" stop-color="#02040a" stop-opacity=".62"/>
         <stop offset="100%" stop-color="#02040a" stop-opacity=".98"/>
       </linearGradient>
       <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#02040a" stop-opacity=".44"/>
+        <stop offset="0%" stop-color="#02040a" stop-opacity=".48"/>
         <stop offset="100%" stop-color="#02040a" stop-opacity="0"/>
       </linearGradient>
     </defs>
     <rect width="${width}" height="${height}" fill="url(#left)"/>
     <rect width="${width}" height="${height}" fill="url(#bottom)"/>
-    <rect width="${width}" height="190" fill="url(#top)"/>
-    <rect x="72" y="650" width="12" height="178" rx="6" fill="${accent}"/>
+    <rect width="${width}" height="${shield ? 215 : 190}" fill="url(#top)"/>
+    <rect x="${shield ? 70 : 72}" y="${accentY}" width="${accentWidth}" height="${accentHeight}" rx="${Math.ceil(accentWidth / 2)}" fill="${accent}"/>
     ${categoryPath}
     ${providerPath}
     ${footerPath}
-    <rect x="${width - logoBoxWidth - 44}" y="34" width="${logoBoxWidth}" height="118" rx="25" fill="#02050a" fill-opacity=".82" stroke="${accent}" stroke-opacity=".86" stroke-width="4"/>
+    <rect x="${width - logoBoxWidth - (shield ? 34 : 44)}" y="${logoBoxTop}" width="${logoBoxWidth}" height="${logoBoxHeight}" rx="${shield ? 30 : 25}" fill="#02050a" fill-opacity=".84" stroke="${accent}" stroke-opacity=".90" stroke-width="${shield ? 5 : 4}"/>
   </svg>`);
 }
 
@@ -349,19 +359,33 @@ async function composeCover(sources, logoBuffer, opts) {
 
   if (logoBuffer) {
     try {
+      const shield = opts.mode === 'shield';
+      const logoTarget = shield
+        ? { width: 410, height: 118 }
+        : { width: 285, height: 78 };
       const logo = await sharp(logoBuffer)
-        .resize({ width: 285, height: 78, fit: 'inside', withoutEnlargement: true })
+        .resize({ ...logoTarget, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
       const meta = await sharp(logo).metadata();
+      const boxWidth = shield ? 468 : 340;
+      const boxLeft = width - boxWidth - (shield ? 34 : 44);
       composites.push({
         input: logo,
-        left: width - 214 - Math.round((meta.width || 285) / 2),
-        top: 55
+        left: Math.round(boxLeft + (boxWidth - (meta.width || logoTarget.width)) / 2),
+        top: shield ? 51 : 55
       });
     } catch {}
   } else {
-    const providerFallback = centeredPathText(opts.providerLabel.toUpperCase(), 1386, 111, 300, 34, { minSize: 25, fill: '#ffffff' });
+    const shield = opts.mode === 'shield';
+    const providerFallback = centeredPathText(
+      opts.providerLabel.toUpperCase(),
+      shield ? 1332 : 1386,
+      shield ? 128 : 111,
+      shield ? 410 : 300,
+      shield ? 48 : 34,
+      { minSize: shield ? 32 : 25, fill: '#ffffff' }
+    );
     const labelSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">${providerFallback}</svg>`);
     composites.push({ input: labelSvg, left: 0, top: 0 });
   }
@@ -381,8 +405,8 @@ async function composeHero(sources, logoBuffer, opts) {
     .toBuffer();
   const middle = await panel(sources[1].buffer, 980, height, 'middle');
   const right = await panel(sources[2].buffer, 860, height, 'right');
-  const heroProviderPath = pathText(opts.providerLabel, 132, 830, 850, 76, { minSize: 48, fill: '#ffffff' });
-  const heroCategoryPath = pathText(opts.category.toUpperCase(), 134, 900, 700, 36, { minSize: 28, fill: opts.accent });
+  const heroProviderPath = pathText(opts.providerLabel, 138, 810, 980, 108, { minSize: 66, fill: '#ffffff' });
+  const heroCategoryPath = pathText(opts.category.toUpperCase(), 140, 902, 860, 52, { minSize: 36, fill: opts.accent });
   const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     <defs>
       <linearGradient id="g" x1="0" x2="1">
@@ -398,7 +422,7 @@ async function composeHero(sources, logoBuffer, opts) {
     </defs>
     <rect width="${width}" height="${height}" fill="url(#g)"/>
     <rect width="${width}" height="${height}" fill="url(#b)"/>
-    <rect x="92" y="738" width="12" height="205" rx="6" fill="${opts.accent}"/>
+    <rect x="94" y="680" width="18" height="280" rx="9" fill="${opts.accent}"/>
     ${heroProviderPath}
     ${heroCategoryPath}
   </svg>`);
@@ -411,10 +435,10 @@ async function composeHero(sources, logoBuffer, opts) {
   if (logoBuffer) {
     try {
       const logo = await sharp(logoBuffer)
-        .resize({ width: 400, height: 120, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 540, height: 160, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
-      composites.push({ input: logo, left: 128, top: 115 });
+      composites.push({ input: logo, left: 138, top: 92 });
     } catch {}
   }
   return sharp(base)
@@ -537,6 +561,29 @@ async function main() {
     generatedAt: new Date().toISOString(),
     generatedFiles,
     platformParents: results.length,
+    designProfile: {
+      shield: {
+        target: '83-inch-tv-distance',
+        titlePx: 136,
+        providerPx: 58,
+        footerPx: 31,
+        logoWidthPx: 410,
+        logoBoxWidthPx: 468,
+        accentWidthPx: 18
+      },
+      desktop: {
+        preserved: true,
+        titlePx: 86,
+        providerPx: 40,
+        footerPx: 22,
+        logoWidthPx: 285
+      },
+      hero: {
+        providerPx: 108,
+        categoryPx: 52,
+        logoWidthPx: 540
+      }
+    },
     regions: Object.fromEntries(Object.keys(REGION_APIS).map((region) => [
       region,
       results.filter((item) => item.region === region).length
