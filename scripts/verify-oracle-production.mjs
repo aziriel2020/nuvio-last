@@ -262,10 +262,15 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v2', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v3', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
 assert(Number(generatedManifest?.platformParents || 0) >= 40, `generated cover platform parent count too small: ${generatedManifest?.platformParents}`);
 assert(Number(generatedManifest?.generatedFiles || 0) >= 100, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
+assert(generatedManifest?.designProfile?.shield?.target === '83-inch-tv-distance', `Shield TV design profile missing: ${JSON.stringify(generatedManifest?.designProfile?.shield || null)}`);
+assert(Number(generatedManifest?.designProfile?.shield?.titlePx || 0) >= 130, `Shield title too small: ${generatedManifest?.designProfile?.shield?.titlePx}`);
+assert(Number(generatedManifest?.designProfile?.shield?.providerPx || 0) >= 56, `Shield provider label too small: ${generatedManifest?.designProfile?.shield?.providerPx}`);
+assert(Number(generatedManifest?.designProfile?.shield?.logoWidthPx || 0) >= 400, `Shield logo target too small: ${generatedManifest?.designProfile?.shield?.logoWidthPx}`);
+assert(generatedManifest?.designProfile?.desktop?.preserved === true, 'Desktop typography profile was not preserved');
 
 const generatedShieldVisualUrls = flattenStrings(standard).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-shield\.jpg$/.test(new URL(value).pathname); } catch { return false; }
@@ -274,7 +279,7 @@ assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield covers 
 for (const value of generatedShieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v2', `generated Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v3', `generated Shield cover has stale revision: ${value}`);
 }
 
 const legacyShieldVisualUrls = flattenStrings(standard).filter((value) => {
@@ -308,7 +313,7 @@ assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop cover
 for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v2', `generated Desktop cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v3', `generated Desktop cover has stale revision: ${value}`);
 }
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
@@ -491,6 +496,7 @@ const summary = {
     generatedCoverRevision: generatedManifest.revision,
     generatedCoverFiles: generatedManifest.generatedFiles,
     generatedPlatformParents: generatedManifest.platformParents,
+    shieldTvProfile: generatedManifest.designProfile?.shield || null,
     generatedShieldUrls: generatedShieldVisualUrls.length,
     generatedDesktopUrls: generatedDesktopVisualUrls.length,
     totalVisualBytes: stats.visualBytes
