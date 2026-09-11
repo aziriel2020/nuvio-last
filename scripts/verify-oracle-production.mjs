@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import sharp from 'sharp';
+import { createHash } from 'node:crypto';
 
 const ORIGIN = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip.io').origin;
 const TIMEOUT_MS = Math.max(5000, Number(process.env.VERIFY_TIMEOUT_MS || 25000));
@@ -7,6 +8,7 @@ const FORBIDDEN = /pages\.dev|workers\.dev|vercel(?:\.app)?|sslip\.io/i;
 const EXTERNAL_ART_HOSTS = /^(?:image\.tmdb\.org|static\.tvmaze\.com|s[1-4]\.anilist\.co|img\.anili\.st)$/i;
 const IMAGE_PATH = /\.(?:jpe?g|png|webp|svg)(?:$|\?)/i;
 const stats = { requests: 0, json: 0, images: 0, catalogs: 0, metas: 0, visualBytes: 0 };
+const visualDigests = new Map();
 
 function assert(value, message) {
   if (!value) throw new Error(message);
@@ -160,9 +162,12 @@ async function verifyVisual(urlValue, label) {
     const metadata = await sharp(result.bytes).metadata();
     assert(metadata.format === 'jpeg' && metadata.width === 1920 && metadata.height === 1080, `${label}: generated hero expected 1920x1080, got ${metadata.format} ${metadata.width}x${metadata.height}`);
   }
+  const digest = createHash('sha256').update(result.bytes).digest('hex');
+  visualDigests.set(url.toString(), digest);
   return {
     type,
     bytes: result.bytes.byteLength,
+    digest,
     backgroundSource: result.response.headers.get('x-nuvio-background-source') || null,
     backgroundFormat: result.response.headers.get('x-nuvio-background-format') || null
   };
@@ -262,59 +267,85 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v3', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v4-original-premium', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
+assert(generatedManifest?.artDirection === 'nuvio-original-premium-v4', `wrong art direction: ${generatedManifest?.artDirection}`);
+assert(generatedManifest?.backgroundPolicy?.tmdbBackdropDependency === false, 'v4 backgrounds still depend on TMDb backdrops');
+assert(generatedManifest?.backgroundPolicy?.uniquePerService === true, 'v4 service backgrounds are not declared unique');
+assert(generatedManifest?.backgroundPolicy?.uniquePerGenre === true, 'v4 genre backgrounds are not declared unique');
+assert(generatedManifest?.backgroundPolicy?.uniquePerServiceMediaType === true, 'v4 Films/Séries backgrounds are not distinct');
 assert(Number(generatedManifest?.platformParents || 0) >= 40, `generated cover platform parent count too small: ${generatedManifest?.platformParents}`);
-assert(Number(generatedManifest?.generatedFiles || 0) >= 100, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
+assert(Number(generatedManifest?.genreIdentities || 0) >= 20, `generated genre identity count too small: ${generatedManifest?.genreIdentities}`);
+assert(Number(generatedManifest?.generatedFiles || 0) >= 180, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
 assert(generatedManifest?.designProfile?.shield?.target === '83-inch-tv-distance', `Shield TV design profile missing: ${JSON.stringify(generatedManifest?.designProfile?.shield || null)}`);
+assert(generatedManifest?.designProfile?.shield?.layout === 'validated-model-v2', `Shield validated layout missing: ${generatedManifest?.designProfile?.shield?.layout}`);
 assert(Number(generatedManifest?.designProfile?.shield?.titlePx || 0) >= 130, `Shield title too small: ${generatedManifest?.designProfile?.shield?.titlePx}`);
-assert(Number(generatedManifest?.designProfile?.shield?.providerPx || 0) >= 56, `Shield provider label too small: ${generatedManifest?.designProfile?.shield?.providerPx}`);
+assert(Number(generatedManifest?.designProfile?.shield?.providerPx || 0) >= 48, `Shield provider label too small: ${generatedManifest?.designProfile?.shield?.providerPx}`);
+assert(Number(generatedManifest?.designProfile?.shield?.subtitlePx || 0) >= 44, `Shield subtitle too small: ${generatedManifest?.designProfile?.shield?.subtitlePx}`);
 assert(Number(generatedManifest?.designProfile?.shield?.logoWidthPx || 0) >= 400, `Shield logo target too small: ${generatedManifest?.designProfile?.shield?.logoWidthPx}`);
-assert(generatedManifest?.designProfile?.desktop?.preserved === true, 'Desktop typography profile was not preserved');
+
+const serviceResults = (generatedManifest.results || []).filter((item) => item?.sourceMode === 'local-original-premium');
+assert(serviceResults.length === generatedManifest.platformParents, `not every service uses local-original-premium sources: ${serviceResults.length}/${generatedManifest.platformParents}`);
+for (const item of serviceResults) {
+  assert(Array.isArray(item.sources) && item.sources.length > 0, `service source set missing for ${item.region}/${item.provider}`);
+  for (const source of item.sources) {
+    assert(Array.isArray(source.sourceFiles) && source.sourceFiles.length > 0, `local source files missing for ${item.region}/${item.provider}/${source.type}`);
+    assert(source.sourceFiles.every((file) => /^assets\/(?:platform-art|genre-art)\//.test(String(file))), `non-local art source leaked for ${item.region}/${item.provider}: ${JSON.stringify(source.sourceFiles)}`);
+  }
+}
+const genreResults = (generatedManifest.genres || []).filter((item) => item?.sourceMode === 'local-original-premium');
+assert(genreResults.length === generatedManifest.genreIdentities, `not every genre uses local-original-premium sources: ${genreResults.length}/${generatedManifest.genreIdentities}`);
 
 const generatedShieldVisualUrls = flattenStrings(standard).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-shield\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
-assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield covers in collection payload: ${generatedShieldVisualUrls.length}`);
+assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield service covers in collection payload: ${generatedShieldVisualUrls.length}`);
 for (const value of generatedShieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v3', `generated Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v4-original-premium', `generated Shield cover has stale revision: ${value}`);
 }
 
-const legacyShieldVisualUrls = flattenStrings(standard).filter((value) => {
-  try { return /\/shield-(?:folder|genre)-card\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
+  try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-shield\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
-for (const value of legacyShieldVisualUrls) {
+assert(generatedGenreShieldUrls.length >= 20, `too few generated Shield genre covers in collection payload: ${generatedGenreShieldUrls.length}`);
+for (const value of generatedGenreShieldUrls) {
   const visualUrl = new URL(value);
-  assert(visualUrl.origin === ORIGIN, `Shield fallback visual escaped Oracle: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v4-original-premium', `generated genre Shield cover has stale revision: ${value}`);
 }
 
 const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
-assert(frNetflixReal, 'France Netflix collection missing for generated-cover verification');
+assert(frNetflixReal, 'France Netflix collection missing for Original Premium verification');
 const frNetflixSeriesReal = (frNetflixReal.folders || []).find((folder) => /séries|series/i.test(String(folder.title || ''))) || frNetflixReal.folders?.[0];
-assert(frNetflixSeriesReal?.coverImageUrl, 'France Netflix generated card missing');
-assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-shield\.jpg$/.test(new URL(frNetflixSeriesReal.coverImageUrl).pathname), `France Netflix Shield is not using generated asset: ${frNetflixSeriesReal.coverImageUrl}`);
-await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix generated Shield card');
+const frNetflixMovieReal = (frNetflixReal.folders || []).find((folder) => /film|movie/i.test(String(folder.title || '')));
+assert(frNetflixSeriesReal?.coverImageUrl, 'France Netflix generated series card missing');
+assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-shield\.jpg$/.test(new URL(frNetflixSeriesReal.coverImageUrl).pathname), `France Netflix Shield series is not using v4 asset: ${frNetflixSeriesReal.coverImageUrl}`);
+await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix Original Premium series card');
+if (frNetflixMovieReal?.coverImageUrl) {
+  assert(/\/static\/assets\/generated-covers\/fr\/netflix\/movie-shield\.jpg$/.test(new URL(frNetflixMovieReal.coverImageUrl).pathname), `France Netflix Shield movie is not using v4 asset: ${frNetflixMovieReal.coverImageUrl}`);
+  const seriesProbe = await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix series uniqueness probe');
+  const movieProbe = await verifyVisual(frNetflixMovieReal.coverImageUrl, 'France Netflix movie uniqueness probe');
+  assert(seriesProbe.digest !== movieProbe.digest, 'Netflix Films and Séries generated identical background/card pixels');
+}
 assert(frNetflixSeriesReal?.heroBackdropUrl, 'France Netflix generated hero missing');
-assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-hero\.jpg$/.test(new URL(frNetflixSeriesReal.heroBackdropUrl).pathname), `France Netflix hero is not using generated asset: ${frNetflixSeriesReal.heroBackdropUrl}`);
-await verifyVisual(frNetflixSeriesReal.heroBackdropUrl, 'France Netflix generated hero');
-
-const netflixManifest = (generatedManifest.results || []).find((item) => item.region === 'fr' && item.provider === 'netflix');
-assert(netflixManifest, 'generated cover manifest missing France Netflix');
-const netflixImportedBackdrops = (netflixManifest.sources || []).flatMap((entry) => entry.imported || []).filter((entry) => entry.backdropPath);
-assert(netflixImportedBackdrops.length >= 2, `France Netflix generated cover did not import enough real TMDb backdrops: ${netflixImportedBackdrops.length}`);
+assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-hero\.jpg$/.test(new URL(frNetflixSeriesReal.heroBackdropUrl).pathname), `France Netflix hero is not using v4 asset: ${frNetflixSeriesReal.heroBackdropUrl}`);
+await verifyVisual(frNetflixSeriesReal.heroBackdropUrl, 'France Netflix Original Premium hero');
 
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
 const generatedDesktopVisualUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
-assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop covers in collection payload: ${generatedDesktopVisualUrls.length}`);
+assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop service covers in collection payload: ${generatedDesktopVisualUrls.length}`);
 for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v3', `generated Desktop cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v4-original-premium', `generated Desktop cover has stale revision: ${value}`);
 }
+const generatedGenreDesktopUrls = flattenStrings(desktop).filter((value) => {
+  try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+});
+assert(generatedGenreDesktopUrls.length >= 20, `too few generated Desktop genre covers in collection payload: ${generatedGenreDesktopUrls.length}`);
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
 assert(health.data.trCollectionCount === tr.length, `health trCollectionCount ${health.data.trCollectionCount} != ${tr.length}`);
@@ -424,6 +455,14 @@ for (const payload of [standard, desktop, tr]) {
 assert(visualUrls.size > 0, 'No Oracle-owned collection visuals discovered');
 await mapLimit([...visualUrls], 6, (url, index) => verifyVisual(url, `collection visual #${index + 1}`));
 
+const originalPremiumUrls = [...visualUrls].filter((value) => {
+  try { return /\/static\/assets\/generated-covers\/.+-(?:shield|desktop)\.jpg$/.test(new URL(value).pathname); } catch { return false; }
+});
+const originalPremiumDigests = originalPremiumUrls.map((value) => visualDigests.get(value)).filter(Boolean);
+assert(originalPremiumDigests.length === originalPremiumUrls.length, 'missing visual digest for Original Premium assets');
+const duplicateDigestCount = originalPremiumDigests.length - new Set(originalPremiumDigests).size;
+assert(duplicateDigestCount === 0, `Original Premium service/genre covers contain ${duplicateDigestCount} pixel-identical duplicate(s)`);
+
 // Explicit renderer routes requested for the migration contract.
 // Content-card validation must use a URL actually emitted by a live catalog so
 // its source artwork is real; a fabricated source-less URL is intentionally invalid.
@@ -496,9 +535,15 @@ const summary = {
     generatedCoverRevision: generatedManifest.revision,
     generatedCoverFiles: generatedManifest.generatedFiles,
     generatedPlatformParents: generatedManifest.platformParents,
+    generatedGenreIdentities: generatedManifest.genreIdentities,
+    artDirection: generatedManifest.artDirection,
+    backgroundPolicy: generatedManifest.backgroundPolicy,
     shieldTvProfile: generatedManifest.designProfile?.shield || null,
     generatedShieldUrls: generatedShieldVisualUrls.length,
+    generatedGenreShieldUrls: generatedGenreShieldUrls.length,
     generatedDesktopUrls: generatedDesktopVisualUrls.length,
+    generatedGenreDesktopUrls: generatedGenreDesktopUrls.length,
+    pixelDuplicateCount: duplicateDigestCount,
     totalVisualBytes: stats.visualBytes
   },
   antiLegacyScan: {

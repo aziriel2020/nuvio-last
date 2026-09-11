@@ -63,7 +63,7 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
-const GENERATED_COVER_REV = 'generated-v3';
+const GENERATED_COVER_REV = 'generated-v4-original-premium';
 const GENERATED_COVER_ROOT = path.resolve(__dirname, '../assets/generated-covers');
 
 function generatedCoverStaticUrl(urlValue, folder = null, variant = 'card', mode = 'shield', collectionTitle = '') {
@@ -72,9 +72,21 @@ function generatedCoverStaticUrl(urlValue, folder = null, variant = 'card', mode
   let url;
   try { url = new URL(value); } catch (_) { return null; }
   const region = url.pathname.match(/^\/(fr|global|tr|us)\//)?.[1];
-  const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
-  if (!region || !/^[a-z0-9-]+$/.test(provider)) return null;
+  if (!region) return null;
 
+  const genre = String(url.searchParams.get('genre') || '').trim().toLowerCase();
+  if (/^[a-z0-9-]+$/.test(genre)) {
+    const genreFile = variant === 'backdrop'
+      ? `${genre}-hero.jpg`
+      : `${genre}-${mode === 'desktop' ? 'desktop' : 'shield'}.jpg`;
+    const genreLocal = path.join(GENERATED_COVER_ROOT, region, 'genres', genreFile);
+    if (fs.existsSync(genreLocal)) {
+      return `${url.origin}/static/assets/generated-covers/${region}/genres/${genreFile}?v=${GENERATED_COVER_REV}`;
+    }
+  }
+
+  const provider = String(url.searchParams.get('provider') || '').trim().toLowerCase();
+  if (!/^[a-z0-9-]+$/.test(provider)) return null;
   const context = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
   const type = context.includes('film') ? 'movie' : 'series';
   const file = variant === 'backdrop'
