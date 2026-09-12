@@ -5,6 +5,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const sharp = require('sharp');
+const crypto = require('crypto');
 const opentype = require('opentype.js');
 
 const rootHandler = require('../api/index.js');
@@ -13,7 +14,137 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_ROOT = path.join(ROOT, 'assets', 'generated-covers');
 const PLATFORM_ART_ROOT = path.join(ROOT, 'assets', 'platform-art');
 const GENRE_ART_ROOT = path.join(ROOT, 'assets', 'genre-art', 'shared');
-const REVISION = 'generated-v5-approved-board-exact';
+const APPROVED_BOARD_ROOT = path.join(ROOT, 'assets', 'approved-board');
+const REVISION = 'generated-v7-approved-board-canonical-direct';
+
+const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 });
+const APPROVED_BOARD_PARTS = Object.freeze([
+  'canonical.b64.00',
+  'canonical.b64.01',
+  'canonical.b64.02',
+  'canonical.b64.03',
+  'canonical.b64.04',
+  'canonical.b64.05',
+  'canonical.b64.06',
+  'canonical.b64.07',
+  'canonical.b64.08a',
+  'canonical.b64.08b',
+  'canonical.b64.09'
+]);
+
+// Coordinates are measured from the validated board supplied by the user.
+// They are scaled against the decoded canonical master at runtime, so the
+// source may be stored at a different pixel density without changing the crop.
+const APPROVED_BOARD_PLATFORM_CELLS = Object.freeze({
+  'netflix':        { x: 11,   y: 43,  w: 294, h: 120 },
+  'prime-video':    { x: 311,  y: 43,  w: 296, h: 120 },
+  'disney-plus':    { x: 614,  y: 43,  w: 308, h: 120 },
+  'max':            { x: 929,  y: 43,  w: 296, h: 120 },
+  'apple-tv-plus':  { x: 1233, y: 44,  w: 294, h: 119 },
+  'paramount-plus': { x: 11,   y: 169, w: 294, h: 117 },
+  'canal-plus':     { x: 311,  y: 169, w: 296, h: 117 },
+  'crunchyroll':    { x: 614,  y: 169, w: 308, h: 117 },
+  'anime-asia':     { x: 929,  y: 169, w: 296, h: 117 },
+  'tod':            { x: 1233, y: 169, w: 294, h: 117 },
+  'tabii':          { x: 11,   y: 291, w: 294, h: 108 },
+  'exxen':          { x: 312,  y: 291, w: 295, h: 108 },
+  'puhutv':         { x: 614,  y: 291, w: 308, h: 108 },
+  'tv-plus':        { x: 929,  y: 291, w: 296, h: 108 },
+  'tivibu':         { x: 1233, y: 291, w: 295, h: 108 },
+  'd-smart-go':     { x: 11,   y: 404, w: 294, h: 107 },
+  's-sport-plus':   { x: 312,  y: 404, w: 295, h: 107 },
+  'bein-connect':   { x: 614,  y: 404, w: 308, h: 107 },
+  'blutv':          { x: 930,  y: 404, w: 295, h: 107 },
+  'mubi':           { x: 1233, y: 404, w: 294, h: 107 }
+});
+
+const APPROVED_BOARD_GENRE_CELLS = Object.freeze({
+  'action':          { x: 11,   y: 547, w: 252, h: 78 },
+  'thriller':        { x: 268,  y: 547, w: 247, h: 78 },
+  'crime':           { x: 520,  y: 547, w: 246, h: 78 },
+  'science-fiction': { x: 771,  y: 547, w: 245, h: 78 },
+  'fantasy':         { x: 1022, y: 547, w: 248, h: 78 },
+  'horror':          { x: 1276, y: 547, w: 251, h: 78 },
+  'comedy':          { x: 11,   y: 629, w: 251, h: 80 },
+  'romance':         { x: 268,  y: 629, w: 247, h: 80 },
+  'documentary':     { x: 521,  y: 629, w: 244, h: 80 },
+  'adventure':       { x: 771,  y: 629, w: 245, h: 80 },
+  'animation':       { x: 1022, y: 629, w: 248, h: 80 },
+  'anime':           { x: 1276, y: 629, w: 251, h: 80 },
+  'drama':           { x: 11,   y: 714, w: 252, h: 82 },
+  'mystery':         { x: 267,  y: 714, w: 248, h: 82 },
+  'western':         { x: 520,  y: 714, w: 246, h: 82 },
+  'music':           { x: 771,  y: 714, w: 245, h: 82 },
+  'sport':           { x: 1022, y: 714, w: 248, h: 82 },
+  'family':          { x: 1276, y: 714, w: 251, h: 82 }
+});
+
+const PROVIDER_BOARD_KEY = Object.freeze({
+  'netflix': 'netflix',
+  'prime-video': 'prime-video',
+  'disney-plus': 'disney-plus',
+  'hbo-max': 'max',
+  'max': 'max',
+  'apple-tv-plus': 'apple-tv-plus',
+  'paramount-plus': 'paramount-plus',
+  'canal-plus': 'canal-plus',
+  'crunchyroll': 'crunchyroll',
+  'anime-asia': 'anime-asia',
+  'tod': 'tod',
+  'tabii': 'tabii',
+  'exxen': 'exxen',
+  'puhutv': 'puhutv',
+  'tv-plus': 'tv-plus',
+  'tivibu': 'tivibu',
+  'd-smart-go': 'd-smart-go',
+  's-sport-plus': 's-sport-plus',
+  'bein-connect': 'bein-connect',
+  'blutv': 'blutv',
+  'mubi': 'mubi'
+});
+
+const BOARD_ACCENTS = Object.freeze({
+  'netflix': '#e50914',
+  'prime-video': '#00a8e1',
+  'disney-plus': '#5b7cff',
+  'max': '#6f67ff',
+  'apple-tv-plus': '#d7e0e8',
+  'paramount-plus': '#1476d4',
+  'canal-plus': '#ffffff',
+  'crunchyroll': '#ff6400',
+  'anime-asia': '#ff4f88',
+  'tod': '#f4c400',
+  'tabii': '#1dd3b0',
+  'exxen': '#f4d400',
+  'puhutv': '#ffffff',
+  'tv-plus': '#f2c800',
+  'tivibu': '#4ec5ef',
+  'd-smart-go': '#ff9718',
+  's-sport-plus': '#44b8ff',
+  'bein-connect': '#7657ff',
+  'blutv': '#5bbcff',
+  'mubi': '#ffffff',
+  'action': '#ef4444',
+  'thriller': '#2f84bf',
+  'crime': '#64748b',
+  'science-fiction': '#38bdf8',
+  'fantasy': '#c084fc',
+  'horror': '#dc2626',
+  'comedy': '#22c55e',
+  'romance': '#fb7185',
+  'documentary': '#d6a65a',
+  'adventure': '#60a5fa',
+  'animation': '#8b5cf6',
+  'anime': '#22d3ee',
+  'drama': '#3b82f6',
+  'mystery': '#6366f1',
+  'western': '#d97706',
+  'music': '#d946ef',
+  'sport': '#38bdf8',
+  'family': '#ec4899'
+});
+
+let APPROVED_BOARD_CACHE = null;
 
 const REGION_APIS = {
   fr: rootHandler._internals.frHandler._internals,
@@ -92,6 +223,113 @@ async function firstExisting(files) {
   return null;
 }
 
+async function approvedBoardMaster() {
+  if (APPROVED_BOARD_CACHE) return APPROVED_BOARD_CACHE;
+  const chunks = await Promise.all(APPROVED_BOARD_PARTS.map((name) =>
+    fsp.readFile(path.join(APPROVED_BOARD_ROOT, name), 'utf8')
+  ));
+  const base64 = chunks.join('').replace(/\s+/g, '');
+  const buffer = Buffer.from(base64, 'base64');
+  const metadata = await sharp(buffer).metadata();
+  if (!metadata.width || !metadata.height) throw new Error('approved-board canonical master has no dimensions');
+  if (metadata.width < 1200 || metadata.height < 675) {
+    throw new Error('approved-board canonical master is unexpectedly small: ' + metadata.width + 'x' + metadata.height);
+  }
+  const ratio = metadata.width / metadata.height;
+  if (Math.abs(ratio - (16 / 9)) > 0.04) {
+    throw new Error('approved-board canonical master aspect ratio drifted: ' + metadata.width + 'x' + metadata.height);
+  }
+  APPROVED_BOARD_CACHE = {
+    buffer,
+    metadata,
+    sha256: crypto.createHash('sha256').update(buffer).digest('hex'),
+    sourceFile: 'assets/approved-board/canonical.b64.*'
+  };
+  return APPROVED_BOARD_CACHE;
+}
+
+async function approvedBoardCrop(kind, key) {
+  const cells = kind === 'platform' ? APPROVED_BOARD_PLATFORM_CELLS : APPROVED_BOARD_GENRE_CELLS;
+  const cell = cells[key];
+  if (!cell) return null;
+  const master = await approvedBoardMaster();
+  const sx = master.metadata.width / APPROVED_BOARD_REFERENCE_SIZE.width;
+  const sy = master.metadata.height / APPROVED_BOARD_REFERENCE_SIZE.height;
+  const left = Math.max(0, Math.round(cell.x * sx));
+  const top = Math.max(0, Math.round(cell.y * sy));
+  const width = Math.min(master.metadata.width - left, Math.max(2, Math.round(cell.w * sx)));
+  const height = Math.min(master.metadata.height - top, Math.max(2, Math.round(cell.h * sy)));
+  const buffer = await sharp(master.buffer)
+    .extract({ left, top, width, height })
+    .png()
+    .toBuffer();
+  return {
+    buffer,
+    sourceFile: master.sourceFile,
+    sourceKind: 'approved-board-crop',
+    boardExact: true,
+    boardKey: key,
+    boardKind: kind,
+    boardRect: { left, top, width, height },
+    sourceDigest: crypto.createHash('sha256').update(buffer).digest('hex')
+  };
+}
+
+async function approvedBoardCardFrame(buffer, width = 1600, height = 900) {
+  // The board cell itself is the canonical card. Keep every pixel visible and
+  // extend only the unused 16:9 area with a soft version of the same cell.
+  const background = await sharp(buffer)
+    .resize(width, height, { fit: 'cover', position: 'centre', withoutEnlargement: false })
+    .blur(18)
+    .modulate({ brightness: 0.68, saturation: 1.04 })
+    .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+  const foreground = await sharp(buffer)
+    .resize(width, height, {
+      fit: 'contain',
+      position: 'centre',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      withoutEnlargement: false
+    })
+    .sharpen({ sigma: 0.45 })
+    .png()
+    .toBuffer();
+  return sharp(background)
+    .composite([{ input: foreground, left: 0, top: 0 }])
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
+async function approvedBoardHeroFrame(source, accent) {
+  const width = 1920;
+  const height = 1080;
+  const meta = await sharp(source.buffer).metadata();
+  const inset = Math.max(1, Math.round(Math.min(meta.width || 0, meta.height || 0) * 0.012));
+  let scene = source.buffer;
+  if ((meta.width || 0) > inset * 2 + 10 && (meta.height || 0) > inset * 2 + 10) {
+    scene = await sharp(source.buffer)
+      .extract({
+        left: inset,
+        top: inset,
+        width: meta.width - inset * 2,
+        height: meta.height - inset * 2
+      })
+      .toBuffer();
+  }
+  // East anchoring intentionally removes most of the baked left-side logo/text
+  // while preserving the exact character/background scene from the validated card.
+  const background = await sharp(scene)
+    .resize(width, height, { fit: 'cover', position: 'east', withoutEnlargement: false })
+    .modulate({ brightness: 0.86, saturation: 1.04 })
+    .sharpen({ sigma: 0.35 })
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+  return sharp(background)
+    .composite([{ input: heroOverlay(width, height, accent), left: 0, top: 0 }])
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
 function genreArtFiles(slug) {
   const clean = safeSlug(slug);
   const aliases = {
@@ -110,41 +348,34 @@ function genreArtFiles(slug) {
 }
 
 async function providerSource(region, providerSlug) {
+  const boardKey = PROVIDER_BOARD_KEY[providerSlug];
+  if (boardKey && APPROVED_BOARD_PLATFORM_CELLS[boardKey]) {
+    const board = await approvedBoardCrop('platform', boardKey);
+    return {
+      ...board,
+      file: null,
+      derived: false,
+      crossRegion: false
+    };
+  }
+
   const providerDir = path.join(PLATFORM_ART_ROOT, region);
-  const card = path.join(providerDir, `${providerSlug}-card.jpg`);
+  const card = path.join(providerDir, providerSlug + '-card.jpg');
   const source = await firstExisting([card]);
   if (source) {
     return {
       buffer: source.buffer,
       file: source.file,
       sourceFile: path.relative(ROOT, source.file),
-      sourceKind: 'approved-card',
+      sourceKind: 'approved-card-local',
+      boardExact: false,
+      boardKey: null,
       derived: false,
-      crossRegion: false
+      crossRegion: false,
+      sourceDigest: crypto.createHash('sha256').update(source.buffer).digest('hex')
     };
   }
 
-  // Some regions can reuse the exact same validated service design from another
-  // region when the service branding is identical. This is NOT a visual fallback:
-  // it is the same approved provider card (e.g. Crunchyroll Türkiye -> France).
-  if (providerSlug === 'crunchyroll') {
-    const sharedCard = path.join(PLATFORM_ART_ROOT, 'fr', 'crunchyroll-card.jpg');
-    const buffer = await readIfExists(sharedCard);
-    if (buffer) {
-      return {
-        buffer,
-        file: sharedCard,
-        sourceFile: path.relative(ROOT, sharedCard),
-        sourceKind: 'approved-card-cross-region',
-        derived: false,
-        crossRegion: true
-      };
-    }
-  }
-
-  // Bi Kanal is the only active service absent from the validated board/source set.
-  // Give it one explicit, deterministic local visual instead of silently falling
-  // back to a random provider/backdrop or changing any approved service artwork.
   if (region === 'tr' && providerSlug === 'bi-kanal') {
     const news = genreArtFiles('news').card;
     const buffer = await readIfExists(news);
@@ -154,23 +385,39 @@ async function providerSource(region, providerSlug) {
       file: news,
       sourceFile: path.relative(ROOT, news),
       sourceKind: 'approved-derived-bi-kanal',
+      boardExact: false,
+      boardKey: null,
       derived: true,
-      crossRegion: false
+      crossRegion: false,
+      sourceDigest: crypto.createHash('sha256').update(buffer).digest('hex')
     };
   }
 
-  throw new Error(`${region}/${providerSlug}: approved platform *-card.jpg artwork missing`);
+  throw new Error(region + '/' + providerSlug + ': approved platform artwork missing');
 }
 
 async function genreSource(slug) {
-  const files = genreArtFiles(slug);
+  const clean = safeSlug(slug);
+  if (APPROVED_BOARD_GENRE_CELLS[clean]) {
+    const board = await approvedBoardCrop('genre', clean);
+    return {
+      ...board,
+      file: null,
+      resolvedSlug: clean
+    };
+  }
+
+  const files = genreArtFiles(clean);
   const source = await firstExisting([files.card, files.backdrop]);
-  if (!source) throw new Error(`genre/${slug}: approved genre artwork missing`);
+  if (!source) throw new Error('genre/' + slug + ': approved genre artwork missing');
   return {
     buffer: source.buffer,
     file: source.file,
     sourceFile: path.relative(ROOT, source.file),
-    sourceKind: source.file.endsWith('-card.jpg') ? 'approved-card' : 'fallback-backdrop',
+    sourceKind: source.file.endsWith('-card.jpg') ? 'approved-card-local' : 'fallback-backdrop',
+    boardExact: false,
+    boardKey: null,
+    sourceDigest: crypto.createHash('sha256').update(source.buffer).digest('hex'),
     resolvedSlug: files.slug
   };
 }
@@ -266,6 +513,7 @@ function genreCardOverlay(width, height, opts) {
 async function serviceCover(source, logoBuffer, opts) {
   const width = 1600;
   const height = 900;
+  if (source.boardExact === true) return approvedBoardCardFrame(source.buffer, width, height);
   const background = await approvedBackground(source.buffer, width, height, { derived: source.derived === true });
   const composites = [{ input: serviceCardOverlay(width, height, opts), left: 0, top: 0 }];
 
@@ -293,6 +541,7 @@ async function serviceCover(source, logoBuffer, opts) {
 async function genreCover(source, opts) {
   const width = 1600;
   const height = 900;
+  if (source.boardExact === true) return approvedBoardCardFrame(source.buffer, width, height);
   const background = await approvedBackground(source.buffer, width, height);
   return sharp(background)
     .composite([{ input: genreCardOverlay(width, height, opts), left: 0, top: 0 }])
@@ -322,6 +571,7 @@ function heroOverlay(width, height, accent) {
 }
 
 async function approvedHero(source, accent) {
+  if (source.boardExact === true) return approvedBoardHeroFrame(source, accent);
   const width = 1920;
   const height = 1080;
   const background = await approvedBackground(source.buffer, width, height, { hero: true, derived: source.derived === true });
@@ -380,6 +630,9 @@ async function providerJob(region, api, definition) {
       type,
       sourceFile: source.sourceFile,
       sourceKind: source.sourceKind,
+      canonicalBoard: source.boardExact === true,
+      boardKey: source.boardKey || null,
+      sourceDigest: source.sourceDigest || null,
       derived: source.derived === true,
       crossRegion: source.crossRegion === true
     });
@@ -398,6 +651,10 @@ async function providerJob(region, api, definition) {
     sourceMode: 'approved-board-exact',
     sourceFile: source.sourceFile,
     sourceKind: source.sourceKind,
+    canonicalBoard: source.boardExact === true,
+    boardKey: source.boardKey || null,
+    sourceDigest: source.sourceDigest || null,
+    boardRect: source.boardRect || null,
     derived: source.derived === true,
     crossRegion: source.crossRegion === true,
     sources: sourceSets
@@ -444,8 +701,64 @@ async function genreJob(region, genre) {
     files: Object.values(files),
     sourceMode: 'approved-board-exact',
     sourceFile: source.sourceFile,
-    sourceKind: source.sourceKind
+    sourceKind: source.sourceKind,
+    canonicalBoard: source.boardExact === true,
+    boardKey: source.boardKey || null,
+    sourceDigest: source.sourceDigest || null,
+    boardRect: source.boardRect || null
   };
+}
+
+async function canonicalLibraryJob() {
+  const files = [];
+  const platformResults = [];
+  const genreResults = [];
+  const platformDir = path.join(OUT_ROOT, '_canonical', 'platforms');
+  const genreDir = path.join(OUT_ROOT, '_canonical', 'genres');
+
+  for (const key of Object.keys(APPROVED_BOARD_PLATFORM_CELLS)) {
+    const source = await approvedBoardCrop('platform', key);
+    const accent = BOARD_ACCENTS[key] || '#38bdf8';
+    const [card, hero] = await Promise.all([
+      approvedBoardCardFrame(source.buffer, 1600, 900),
+      approvedBoardHeroFrame(source, accent)
+    ]);
+    const names = [
+      '_canonical/platforms/' + key + '-shield.jpg',
+      '_canonical/platforms/' + key + '-desktop.jpg',
+      '_canonical/platforms/' + key + '-hero.jpg'
+    ];
+    await Promise.all([
+      writeAtomic(path.join(platformDir, key + '-shield.jpg'), card),
+      writeAtomic(path.join(platformDir, key + '-desktop.jpg'), card),
+      writeAtomic(path.join(platformDir, key + '-hero.jpg'), hero)
+    ]);
+    files.push(...names);
+    platformResults.push({ key, sourceDigest: source.sourceDigest, boardRect: source.boardRect, files: names });
+  }
+
+  for (const key of Object.keys(APPROVED_BOARD_GENRE_CELLS)) {
+    const source = await approvedBoardCrop('genre', key);
+    const accent = BOARD_ACCENTS[key] || '#38bdf8';
+    const [card, hero] = await Promise.all([
+      approvedBoardCardFrame(source.buffer, 1600, 900),
+      approvedBoardHeroFrame(source, accent)
+    ]);
+    const names = [
+      '_canonical/genres/' + key + '-shield.jpg',
+      '_canonical/genres/' + key + '-desktop.jpg',
+      '_canonical/genres/' + key + '-hero.jpg'
+    ];
+    await Promise.all([
+      writeAtomic(path.join(genreDir, key + '-shield.jpg'), card),
+      writeAtomic(path.join(genreDir, key + '-desktop.jpg'), card),
+      writeAtomic(path.join(genreDir, key + '-hero.jpg'), hero)
+    ]);
+    files.push(...names);
+    genreResults.push({ key, sourceDigest: source.sourceDigest, boardRect: source.boardRect, files: names });
+  }
+
+  return { files, platforms: platformResults, genres: genreResults };
 }
 
 async function mapLimit(items, limit, worker) {
@@ -477,6 +790,10 @@ async function main() {
   await fsp.rm(OUT_ROOT, { recursive: true, force: true });
   await fsp.mkdir(OUT_ROOT, { recursive: true });
 
+  const boardMaster = await approvedBoardMaster();
+  console.log('Canonical approved board: ' + boardMaster.metadata.width + 'x' + boardMaster.metadata.height + ' ' + boardMaster.metadata.format + ' sha256=' + boardMaster.sha256.slice(0, 16));
+  const canonicalLibrary = await canonicalLibraryJob();
+
   const providerJobs = [];
   const genreJobs = [];
   for (const [region, api] of Object.entries(REGION_APIS)) {
@@ -484,7 +801,7 @@ async function main() {
     for (const genre of uniqueGenres(api)) genreJobs.push({ region, genre });
   }
 
-  console.log(`Generating Nuvio Approved Board Exact v5: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
+  console.log(`Generating Nuvio Approved Board Canonical Direct v7: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
 
   const providerResults = await mapLimit(providerJobs, 3, async (job, index) => {
     process.stdout.write(`[service ${index + 1}/${providerJobs.length}] ${job.region}/${job.definition.provider.slug} ... `);
@@ -501,6 +818,7 @@ async function main() {
   });
 
   const generatedFiles =
+    canonicalLibrary.files.length +
     providerResults.reduce((sum, item) => sum + item.files.length, 0) +
     genreResults.reduce((sum, item) => sum + item.files.length, 0);
 
@@ -516,8 +834,19 @@ async function main() {
     revision: REVISION,
     complete: true,
     generatedAt: new Date().toISOString(),
-    artDirection: 'approved-board-exact-v5',
+    artDirection: 'approved-board-canonical-direct-v7',
     visualReference: 'validated-streaming-platforms-and-genres-board',
+    boardSource: {
+      sourceFile: boardMaster.sourceFile,
+      sha256: boardMaster.sha256,
+      format: boardMaster.metadata.format,
+      width: boardMaster.metadata.width,
+      height: boardMaster.metadata.height,
+      referenceWidth: APPROVED_BOARD_REFERENCE_SIZE.width,
+      referenceHeight: APPROVED_BOARD_REFERENCE_SIZE.height,
+      platformCells: Object.keys(APPROVED_BOARD_PLATFORM_CELLS).length,
+      genreCells: Object.keys(APPROVED_BOARD_GENRE_CELLS).length
+    },
     backgroundPolicy: {
       tmdbBackdropDependency: false,
       moodMixing: false,
@@ -527,7 +856,10 @@ async function main() {
       exactApprovedCardSource: true,
       uniquePerService: true,
       uniquePerGenre: true,
-      source: 'repository-platform-card-and-genre-card'
+      source: 'canonical-approved-board-crops-with-local-approved-fallbacks',
+      canonicalBoardCellsArePrimary: true,
+      canonicalBoardCellPreservedInFull: true,
+      heroUsesCanonicalScene: true
     },
     generatedFiles,
     platformParents: providerResults.length,
@@ -535,27 +867,44 @@ async function main() {
     approvedCardFallbacks: [],
     explicitDerivedSources: derivedSources,
     crossRegionApprovedSources,
+    canonicalLibrary: {
+      platformCount: canonicalLibrary.platforms.length,
+      genreCount: canonicalLibrary.genres.length,
+      files: canonicalLibrary.files,
+      platforms: canonicalLibrary.platforms,
+      genres: canonicalLibrary.genres
+    },
+    canonicalCoverage: {
+      activeServiceParents: providerResults.filter((item) => item.canonicalBoard === true).map((item) => item.region + '/' + item.provider),
+      activeGenreIdentities: genreResults.filter((item) => item.canonicalBoard === true).map((item) => item.region + '/genres/' + item.genre)
+    },
     designProfile: {
       shield: {
         target: '83-inch-tv-distance',
         layout: 'approved-board-platform-card',
+        canonicalBoardCrop: true,
+        canonicalCellFit: 'contain-on-self-derived-blur',
         mediaLabelPx: 62,
         logoWidthPx: 560,
         borderPx: 5
       },
       desktop: {
         layout: 'approved-board-platform-card',
+        canonicalBoardCrop: true,
+        canonicalCellFit: 'contain-on-self-derived-blur',
         mediaLabelPx: 50,
         logoWidthPx: 480,
         borderPx: 5
       },
       genres: {
         layout: 'approved-board-genre-card',
+        canonicalBoardCrop: true,
         shieldTitlePx: 76,
         desktopTitlePx: 60
       },
       hero: {
         layout: 'approved-card-scene-only',
+        canonicalSceneCrop: 'east-cover',
         leftBlackStartOpacity: 0.96,
         noGeneratedCharacters: true,
         noGeneratedSecondaryScene: true
