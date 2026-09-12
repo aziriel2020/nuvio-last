@@ -163,7 +163,7 @@ try {
   for (const [label, visual] of [['service', desktopFolderVisual], ['genre', desktopGenreVisual]]) {
     const u = new URL(visual);
     if (u.origin !== origin) throw new Error(`Desktop ${label} visual escaped Oracle origin: ${visual}`);
-    if (u.searchParams.get('v') !== 'generated-v5-approved-board-exact') throw new Error(`Desktop ${label} visual has stale revision: ${u.searchParams.get('v')}`);
+    if (u.searchParams.get('v') !== 'generated-v7-approved-board-canonical-direct') throw new Error(`Desktop ${label} visual has stale revision: ${u.searchParams.get('v')}`);
     const card = await retry(u.pathname + u.search);
     requireHeader(card, 'x-nuvio-origin', 'oracle-vm');
     requireHeader(card, 'x-nuvio-edge', 'oracle-node');
