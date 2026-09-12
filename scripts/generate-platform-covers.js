@@ -21,16 +21,24 @@ const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 }
 const APPROVED_BOARD_PARTS = Object.freeze([
   'canonical.b64.00',
   'canonical.b64.01',
-  'canonical.b64.02',
-  'canonical.b64.03',
-  'canonical.b64.04',
-  'canonical.b64.05',
-  'canonical.b64.06',
-  'canonical.b64.07',
-  'canonical.b64.08a',
-  'canonical.b64.08b',
-  'canonical.b64.09'
+  'canonical.b64.02a',
+  'canonical.b64.02b',
+  'canonical.b64.03a',
+  'canonical.b64.03b',
+  'canonical.b64.04a',
+  'canonical.b64.04b',
+  'canonical.b64.05a',
+  'canonical.b64.05b',
+  'canonical.b64.06-00',
+  'canonical.b64.06-01',
+  'canonical.b64.06-02',
+  'canonical.b64.06-03',
+  'canonical.b64.06-04',
+  'canonical.b64.06-05',
+  'canonical.b64.06-06',
+  'canonical.b64.06-07'
 ]);
+const APPROVED_BOARD_SHA256 = '32167e94380ba826dc3e1d39a4dd6742a6df7671ad9b1bc9b38dfc2b5b7f8bef';
 
 // Coordinates are measured from the validated board supplied by the user.
 // They are scaled against the decoded canonical master at runtime, so the
@@ -239,10 +247,14 @@ async function approvedBoardMaster() {
   if (Math.abs(ratio - (16 / 9)) > 0.04) {
     throw new Error('approved-board canonical master aspect ratio drifted: ' + metadata.width + 'x' + metadata.height);
   }
+  const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+  if (sha256 !== APPROVED_BOARD_SHA256) {
+    throw new Error('approved-board canonical master sha256 drifted: ' + sha256);
+  }
   APPROVED_BOARD_CACHE = {
     buffer,
     metadata,
-    sha256: crypto.createHash('sha256').update(buffer).digest('hex'),
+    sha256,
     sourceFile: 'assets/approved-board/canonical.b64.*'
   };
   return APPROVED_BOARD_CACHE;
