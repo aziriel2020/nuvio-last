@@ -638,12 +638,24 @@ function heroOverlay(width, height, accent) {
 
 async function approvedHero(source, accent) {
   if (source.boardExact === true) return approvedBoardHeroFrame(source, accent);
-  const width = 1920;
-  const height = 1080;
-  const background = await approvedBackground(source.buffer, width, height, { hero: true, derived: source.derived === true });
-  return sharp(background)
-    .composite([{ input: heroOverlay(width, height, accent), left: 0, top: 0 }])
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+  const width = 3840;
+  const height = 2160;
+  const extension = await sharp(source.buffer)
+    .resize(width, height, { fit: 'cover', position: 'centre', withoutEnlargement: false })
+    .blur(42)
+    .modulate({ brightness: 0.34, saturation: 0.92 })
+    .jpeg({ quality: 94, chromaSubsampling: '4:4:4', mozjpeg: true })
+    .toBuffer();
+  const fullFrame = await sharp(source.buffer)
+    .resize(width, height, { fit: 'contain', position: 'centre', background: { r: 0, g: 0, b: 0, alpha: 0 }, withoutEnlargement: false })
+    .png()
+    .toBuffer();
+  return sharp(extension)
+    .composite([
+      { input: fullFrame, left: 0, top: 0 },
+      { input: heroOverlay(width, height, accent), left: 0, top: 0 }
+    ])
+    .jpeg({ quality: 96, chromaSubsampling: '4:4:4', mozjpeg: true })
     .toBuffer();
 }
 
