@@ -783,7 +783,7 @@ async function canonicalLibraryJob() {
   const genreDir = path.join(OUT_ROOT, '_canonical', 'genres');
 
   for (const key of Object.keys(APPROVED_BOARD_PLATFORM_CELLS)) {
-    const source = await approvedBoardCrop('platform', key);
+    const source = await individualMaster('platforms', key);\n    if (!source) throw new Error('Missing canonical platform master: ' + key);
     const accent = BOARD_ACCENTS[key] || '#38bdf8';
     const [card, hero] = await Promise.all([
       approvedBoardCardFrame(source.buffer, 1600, 900),
@@ -804,7 +804,7 @@ async function canonicalLibraryJob() {
   }
 
   for (const key of Object.keys(APPROVED_BOARD_GENRE_CELLS)) {
-    const source = await approvedBoardCrop('genre', key);
+    const source = await individualMaster('genres', key);\n    if (!source) throw new Error('Missing canonical genre master: ' + key);
     const accent = BOARD_ACCENTS[key] || '#38bdf8';
     const [card, hero] = await Promise.all([
       approvedBoardCardFrame(source.buffer, 1600, 900),
@@ -856,8 +856,9 @@ async function main() {
   await fsp.rm(OUT_ROOT, { recursive: true, force: true });
   await fsp.mkdir(OUT_ROOT, { recursive: true });
 
-  const boardMaster = await approvedBoardMaster();
-  console.log('Canonical approved board: ' + boardMaster.metadata.width + 'x' + boardMaster.metadata.height + ' ' + boardMaster.metadata.format + ' sha256=' + boardMaster.sha256.slice(0, 16));
+  await materializeIndividualMasters();
+  const masterPack = await individualMasterPack();
+  console.log('Individual HQ master pack: ' + masterPack.length + ' bytes sha256=' + MASTER_INDEX.packSha256.slice(0, 16));
   const canonicalLibrary = await canonicalLibraryJob();
 
   const providerJobs = [];
@@ -867,7 +868,7 @@ async function main() {
     for (const genre of uniqueGenres(api)) genreJobs.push({ region, genre });
   }
 
-  console.log(`Generating Nuvio Approved Board Canonical Direct v7: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
+  console.log(`Generating Nuvio Individual HQ Lots v8: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
 
   const providerResults = await mapLimit(providerJobs, 3, async (job, index) => {
     process.stdout.write(`[service ${index + 1}/${providerJobs.length}] ${job.region}/${job.definition.provider.slug} ... `);
@@ -900,18 +901,18 @@ async function main() {
     revision: REVISION,
     complete: true,
     generatedAt: new Date().toISOString(),
-    artDirection: 'approved-board-canonical-direct-v7',
-    visualReference: 'validated-streaming-platforms-and-genres-board',
-    boardSource: {
-      sourceFile: boardMaster.sourceFile,
-      sha256: boardMaster.sha256,
-      format: boardMaster.metadata.format,
-      width: boardMaster.metadata.width,
-      height: boardMaster.metadata.height,
-      referenceWidth: APPROVED_BOARD_REFERENCE_SIZE.width,
-      referenceHeight: APPROVED_BOARD_REFERENCE_SIZE.height,
-      platformCells: Object.keys(APPROVED_BOARD_PLATFORM_CELLS).length,
-      genreCells: Object.keys(APPROVED_BOARD_GENRE_CELLS).length
+    artDirection: 'individual-hq-lots-no-crop-v8',
+    visualReference: 'validated-individual-lots-1-4',
+    masterSource: {
+      source: 'individual-avif-master-pack',
+      packSha256: MASTER_INDEX.packSha256,
+      packChunks: MASTER_INDEX.packChunks,
+      platformMasters: MASTER_INDEX.entries.filter((x) => x.kind === 'platforms').length,
+      genreMasters: MASTER_INDEX.entries.filter((x) => x.kind === 'genres').length,
+      cardWidth: MASTER_INDEX.card.width,
+      cardHeight: MASTER_INDEX.card.height,
+      backgroundWidth: MASTER_INDEX.hero.width,
+      backgroundHeight: MASTER_INDEX.hero.height
     },
     backgroundPolicy: {
       tmdbBackdropDependency: false,
@@ -922,10 +923,10 @@ async function main() {
       exactApprovedCardSource: true,
       uniquePerService: true,
       uniquePerGenre: true,
-      source: 'canonical-approved-board-crops-with-local-approved-fallbacks',
-      canonicalBoardCellsArePrimary: true,
-      canonicalBoardCellPreservedInFull: true,
-      heroUsesCanonicalScene: true
+      source: 'individual-hq-masters-with-local-approved-fallbacks',
+      individualMastersArePrimary: true,
+      individualMasterPreservedInFull: true,
+      heroUsesCompleteIndividualMaster: true
     },
     generatedFiles,
     platformParents: providerResults.length,
