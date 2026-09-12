@@ -15,7 +15,74 @@ const OUT_ROOT = path.join(ROOT, 'assets', 'generated-covers');
 const PLATFORM_ART_ROOT = path.join(ROOT, 'assets', 'platform-art');
 const GENRE_ART_ROOT = path.join(ROOT, 'assets', 'genre-art', 'shared');
 const APPROVED_BOARD_ROOT = path.join(ROOT, 'assets', 'approved-board');
-const REVISION = 'generated-v7-approved-board-canonical-direct';
+const MASTER_INDEX = require('./individual-master-index.js');
+const MASTER_PACK_ROOT = path.join(ROOT, 'assets', 'collection-masters', 'pack');
+const MASTER_MATERIALIZED_ROOT = path.join(ROOT, 'assets', 'collection-masters', 'materialized');
+const REVISION = 'generated-v8-individual-hq-lots';
+const MASTER_LOOKUP = new Map(MASTER_INDEX.entries.map((entry) => [entry.kind + ':' + entry.key, entry]));
+let MASTER_PACK_PROMISE = null;
+
+async function individualMasterPack() {
+  if (!MASTER_PACK_PROMISE) {
+    MASTER_PACK_PROMISE = (async () => {
+      const files = (await fsp.readdir(MASTER_PACK_ROOT)).filter((name) => /^pack\\.b64\\.\\d+$/.test(name)).sort();
+      if (files.length !== MASTER_INDEX.packChunks) throw new Error('Expected ' + MASTER_INDEX.packChunks + ' HQ master pack chunks, got ' + files.length);
+      for (let i = 0; i < files.length; i++) {
+        const expected = 'pack.b64.' + String(i).padStart(2, '0');
+        if (files[i] !== expected) throw new Error('HQ master pack sequence mismatch: expected ' + expected + ', got ' + files[i]);
+      }
+      const encoded = (await Promise.all(files.map((name) => fsp.readFile(path.join(MASTER_PACK_ROOT, name), 'utf8')))).map((x) => x.trim()).join('');
+      const pack = Buffer.from(encoded, 'base64');
+      const digest = crypto.createHash('sha256').update(pack).digest('hex');
+      if (digest !== MASTER_INDEX.packSha256) throw new Error('HQ master pack SHA mismatch: ' + digest);
+      return pack;
+    })();
+  }
+  return MASTER_PACK_PROMISE;
+}
+
+async function individualMaster(kind, key) {
+  const entry = MASTER_LOOKUP.get(kind + ':' + key);
+  if (!entry) return null;
+  const pack = await individualMasterPack();
+  const buffer = pack.subarray(entry.offset, entry.offset + entry.length);
+  if (buffer.length !== entry.length) throw new Error('Truncated HQ master: ' + kind + '/' + key);
+  const digest = crypto.createHash('sha256').update(buffer).digest('hex');
+  if (digest !== entry.sha256) throw new Error('HQ master SHA mismatch: ' + kind + '/' + key);
+  return {
+    buffer,
+    file: null,
+    sourceFile: 'assets/collection-masters/materialized/' + kind + '/' + key + '.avif',
+    sourceKind: 'individual-hq-master',
+    boardExact: true,
+    boardKey: key,
+    boardKind: kind === 'platforms' ? 'platform' : 'genre',
+    boardRect: null,
+    derived: false,
+    crossRegion: false,
+    sourceDigest: digest
+  };
+}
+
+async function materializeIndividualMasters() {
+  const pack = await individualMasterPack();
+  await fsp.rm(MASTER_MATERIALIZED_ROOT, { recursive: true, force: true });
+  for (const entry of MASTER_INDEX.entries) {
+    const buffer = pack.subarray(entry.offset, entry.offset + entry.length);
+    const target = path.join(MASTER_MATERIALIZED_ROOT, entry.kind, entry.key + '.avif');
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.writeFile(target, buffer);
+  }
+  await fsp.writeFile(path.join(MASTER_MATERIALIZED_ROOT, 'manifest.json'), JSON.stringify({
+    revision: REVISION,
+    packSha256: MASTER_INDEX.packSha256,
+    platformCount: MASTER_INDEX.entries.filter((x) => x.kind === 'platforms').length,
+    genreCount: MASTER_INDEX.entries.filter((x) => x.kind === 'genres').length,
+    shield: { width: 1600, height: 900, ratio: '16:9', fit: 'contain', crop: false },
+    desktop: { width: 1600, height: 900, ratio: '16:9', fit: 'contain', crop: false },
+    background: { width: 3840, height: 2160, ratio: '16:9', fit: 'contain-over-dark-extension', crop: false }
+  }, null, 2) + '\\n');
+}
 
 const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 });
 const APPROVED_BOARD_PARTS = Object.freeze([
