@@ -160,7 +160,7 @@ async function verifyVisual(urlValue, label) {
   if (/\/static\/assets\/generated-covers\/.+-hero\.jpg$/.test(url.pathname) || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg$/.test(url.pathname)) {
     assert(type.startsWith('image/jpeg'), `${label}: generated hero must be JPEG, got ${type}`);
     const metadata = await sharp(result.bytes).metadata();
-    assert(metadata.format === 'jpeg' && metadata.width === 1920 && metadata.height === 1080, `${label}: generated hero expected 1920x1080, got ${metadata.format} ${metadata.width}x${metadata.height}`);
+    assert(metadata.format === 'jpeg' && metadata.width === 3840 && metadata.height === 2160, `${label}: generated hero expected 3840x2160, got ${metadata.format} ${metadata.width}x${metadata.height}`);
   }
   const digest = createHash('sha256').update(result.bytes).digest('hex');
   visualDigests.set(url.toString(), digest);
@@ -267,16 +267,18 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v7-approved-board-canonical-direct', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v8-individual-hq-lots', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
-assert(generatedManifest?.artDirection === 'approved-board-canonical-direct-v7', `wrong art direction: ${generatedManifest?.artDirection}`);
-assert(generatedManifest?.visualReference === 'validated-streaming-platforms-and-genres-board', 'validated board reference missing');
-assert(generatedManifest?.backgroundPolicy?.tmdbBackdropDependency === false, 'approved-board backgrounds still depend on TMDb backdrops');
+assert(generatedManifest?.artDirection === 'individual-hq-lots-no-crop-v8', `wrong art direction: ${generatedManifest?.artDirection}`);
+assert(generatedManifest?.visualReference === 'validated-individual-lots-1-4', 'individual visual reference missing');
+assert(generatedManifest?.backgroundPolicy?.tmdbBackdropDependency === false, 'individual backgrounds still depend on TMDb backdrops');
 assert(generatedManifest?.backgroundPolicy?.moodMixing === false, 'mood mixing must stay disabled');
 assert(generatedManifest?.backgroundPolicy?.secondaryCompositing === false, 'secondary image compositing must stay disabled');
-assert(generatedManifest?.backgroundPolicy?.hueMutation === false, 'approved artwork hue mutation must stay disabled');
-assert(generatedManifest?.backgroundPolicy?.horizontalMirroring === false, 'approved artwork mirroring must stay disabled');
-assert(generatedManifest?.backgroundPolicy?.exactApprovedCardSource === true, 'approved card source policy missing');
+assert(generatedManifest?.backgroundPolicy?.hueMutation === false, 'artwork hue mutation must stay disabled');
+assert(generatedManifest?.backgroundPolicy?.horizontalMirroring === false, 'artwork mirroring must stay disabled');
+assert(generatedManifest?.backgroundPolicy?.individualMastersArePrimary === true, 'individual masters are not primary');
+assert(generatedManifest?.backgroundPolicy?.individualMasterPreservedInFull === true, 'individual master full-frame preservation missing');
+assert(generatedManifest?.backgroundPolicy?.heroUsesCompleteIndividualMaster === true, 'hero does not preserve complete individual master');
 assert(generatedManifest?.backgroundPolicy?.uniquePerService === true, 'service backgrounds are not declared unique');
 assert(generatedManifest?.backgroundPolicy?.uniquePerGenre === true, 'genre backgrounds are not declared unique');
 assert(Number(generatedManifest?.platformParents || 0) >= 40, `generated cover platform parent count too small: ${generatedManifest?.platformParents}`);
@@ -284,21 +286,25 @@ assert(Number(generatedManifest?.genreIdentities || 0) >= 20, `generated genre i
 assert(Number(generatedManifest?.generatedFiles || 0) >= 180, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
 assert(Array.isArray(generatedManifest?.approvedCardFallbacks) && generatedManifest.approvedCardFallbacks.length === 0, `approved card fallbacks detected: ${JSON.stringify(generatedManifest?.approvedCardFallbacks)}`);
 assert(JSON.stringify(generatedManifest?.explicitDerivedSources || []) === JSON.stringify(['tr/bi-kanal']), `unexpected derived source set: ${JSON.stringify(generatedManifest?.explicitDerivedSources)}`);
-assert(JSON.stringify(generatedManifest?.crossRegionApprovedSources || []) === JSON.stringify([]), `unexpected cross-region approved source set: ${JSON.stringify(generatedManifest?.crossRegionApprovedSources)}`);
-assert(generatedManifest?.designProfile?.shield?.target === '83-inch-tv-distance', `Shield TV design profile missing: ${JSON.stringify(generatedManifest?.designProfile?.shield || null)}`);
-assert(generatedManifest?.designProfile?.shield?.layout === 'approved-board-platform-card', `Shield approved-board layout missing: ${generatedManifest?.designProfile?.shield?.layout}`);
-assert(Number(generatedManifest?.designProfile?.shield?.logoWidthPx || 0) >= 520, `Shield logo target too small: ${generatedManifest?.designProfile?.shield?.logoWidthPx}`);
-assert(generatedManifest?.designProfile?.genres?.layout === 'approved-board-genre-card', 'Genre approved-board layout missing');
-assert(generatedManifest?.designProfile?.hero?.layout === 'approved-card-scene-only', 'Hero must use approved card scene only');
-assert(generatedManifest?.designProfile?.hero?.noGeneratedCharacters === true, 'Hero generated-character guard missing');
-assert(generatedManifest?.designProfile?.hero?.noGeneratedSecondaryScene === true, 'Hero secondary-scene guard missing');
+assert(JSON.stringify(generatedManifest?.crossRegionApprovedSources || []) === JSON.stringify([]), `unexpected cross-region source set: ${JSON.stringify(generatedManifest?.crossRegionApprovedSources)}`);
 
-const boardSource = generatedManifest?.boardSource || {};
-assert(boardSource.sourceFile === 'assets/approved-board/canonical.b64.*', 'canonical approved-board source file marker missing');
-assert(Number(boardSource.width || 0) === 1536 && Number(boardSource.height || 0) === 864, `canonical board dimensions invalid: ${boardSource.width}x${boardSource.height}`);
-assert(Number(boardSource.platformCells || 0) === 20, `canonical board platform cell count mismatch: ${boardSource.platformCells}`);
-assert(Number(boardSource.genreCells || 0) === 18, `canonical board genre cell count mismatch: ${boardSource.genreCells}`);
-assert(boardSource.sha256 === '32167e94380ba826dc3e1d39a4dd6742a6df7671ad9b1bc9b38dfc2b5b7f8bef', `canonical board sha256 mismatch: ${boardSource.sha256}`);
+const masterSource = generatedManifest?.masterSource || {};
+assert(masterSource.source === 'individual-avif-master-pack', 'individual master source marker missing');
+assert(masterSource.packSha256 === '4b381680cab922a4c4e1a42d5c6fd6ba22387f85e5e9fb94bd14ed52835fce32', `individual master pack SHA mismatch: ${masterSource.packSha256}`);
+assert(Number(masterSource.packChunks || 0) === 26, `individual master pack chunk count mismatch: ${masterSource.packChunks}`);
+assert(Number(masterSource.platformMasters || 0) === 20, `individual platform master count mismatch: ${masterSource.platformMasters}`);
+assert(Number(masterSource.genreMasters || 0) === 18, `individual genre master count mismatch: ${masterSource.genreMasters}`);
+assert(Number(masterSource.cardWidth || 0) === 1600 && Number(masterSource.cardHeight || 0) === 900, `individual card dimensions invalid: ${masterSource.cardWidth}x${masterSource.cardHeight}`);
+assert(Number(masterSource.backgroundWidth || 0) === 3840 && Number(masterSource.backgroundHeight || 0) === 2160, `individual background dimensions invalid: ${masterSource.backgroundWidth}x${masterSource.backgroundHeight}`);
+
+const materializedResult = await request('/static/assets/collection-masters/materialized/manifest.json', { attempts: 3 });
+stats.json += 1;
+assert(materializedResult.data?.packSha256 === masterSource.packSha256, 'materialized master manifest SHA mismatch');
+assert(Number(materializedResult.data?.platformCount || 0) === 20, 'materialized platform master count mismatch');
+assert(Number(materializedResult.data?.genreCount || 0) === 18, 'materialized genre master count mismatch');
+assert(materializedResult.data?.shield?.width === 1600 && materializedResult.data?.shield?.height === 900, 'materialized Shield dimensions mismatch');
+assert(materializedResult.data?.background?.width === 3840 && materializedResult.data?.background?.height === 2160, 'materialized background dimensions mismatch');
+assert(materializedResult.data?.background?.crop === false, 'materialized background destructive-crop guard missing');
 
 const canonicalLibrary = generatedManifest?.canonicalLibrary || {};
 assert(Number(canonicalLibrary.platformCount || 0) === 20, `canonical platform library count mismatch: ${canonicalLibrary.platformCount}`);
