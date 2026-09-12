@@ -157,13 +157,13 @@ try {
       return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/i.test(new URL(value).pathname);
     } catch { return false; }
   });
-  if (!desktopFolderVisual) throw new Error('Desktop collection has no approved-board service cover');
-  if (!desktopGenreVisual) throw new Error('Desktop collection has no approved-board genre cover');
+  if (!desktopFolderVisual) throw new Error('Desktop collection has no v8 individual-master service cover');
+  if (!desktopGenreVisual) throw new Error('Desktop collection has no v8 individual-master genre cover');
 
   for (const [label, visual] of [['service', desktopFolderVisual], ['genre', desktopGenreVisual]]) {
     const u = new URL(visual);
     if (u.origin !== origin) throw new Error(`Desktop ${label} visual escaped Oracle origin: ${visual}`);
-    if (u.searchParams.get('v') !== 'generated-v7-approved-board-canonical-direct') throw new Error(`Desktop ${label} visual has stale revision: ${u.searchParams.get('v')}`);
+    if (u.searchParams.get('v') !== 'generated-v8-individual-masters-hq') throw new Error(`Desktop ${label} visual has stale revision: ${u.searchParams.get('v')}`);
     const card = await retry(u.pathname + u.search);
     requireHeader(card, 'x-nuvio-origin', 'oracle-vm');
     requireHeader(card, 'x-nuvio-edge', 'oracle-node');
