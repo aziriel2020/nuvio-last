@@ -63,7 +63,7 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
-const GENERATED_COVER_REV = 'generated-v7-approved-board-canonical-direct';
+const GENERATED_COVER_REV = 'generated-v8-individual-masters-hq';
 const GENERATED_COVER_ROOT = path.resolve(__dirname, '../assets/generated-covers');
 
 function generatedCoverStaticUrl(urlValue, folder = null, variant = 'card', mode = 'shield', collectionTitle = '') {

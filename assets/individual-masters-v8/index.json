@@ -1,0 +1,396 @@
+{
+  "revision": "individual-masters-v8-hq",
+  "packSha256": "19724311e5aa02db932c0caa88eb6d8bdbf3c6de8f2f5b42146d41803f18e352",
+  "encoding": "base64-concatenated-binary",
+  "chunkPattern": "pack.b64.*",
+  "entryCount": 38,
+  "platformCount": 20,
+  "genreCount": 18,
+  "cardDimensions": {
+    "width": 1600,
+    "height": 900,
+    "ratio": "16:9"
+  },
+  "entries": [
+    {
+      "kind": "platforms",
+      "key": "anime-asia",
+      "offset": 0,
+      "length": 86231,
+      "sha256": "45e9f337e1194bfaa6b1f5632ba175123db2944db3647572e87d50b83ad84952",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "apple-tv-plus",
+      "offset": 86231,
+      "length": 53614,
+      "sha256": "8ba9be29464c5187d9a094054c30aa996af9670b9483c1bae3e8b4631eeabf32",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "bein-connect",
+      "offset": 139845,
+      "length": 88810,
+      "sha256": "e18bff6638233543d413296a4c9eab9d0b122640e5be6f6f1e2bd16ba6fd8ab4",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "blutv",
+      "offset": 228655,
+      "length": 49239,
+      "sha256": "0a23f425f889428dcfb27830579a6bb3a68c6a9abae9750186c2ad7c2fdd552c",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "canal-plus",
+      "offset": 277894,
+      "length": 47416,
+      "sha256": "df665274993b1cfdd640eea12278a3c489286cf7811b524f5e04d268c5565ed6",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "crunchyroll",
+      "offset": 325310,
+      "length": 87523,
+      "sha256": "5e80dd9127cce7a81c32253bce04f48ddc24d7411681c0a37d89e94e1cb8b662",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "d-smart-go",
+      "offset": 412833,
+      "length": 91612,
+      "sha256": "e900601c64a31070f758b4dbf331f6bf962a855bad3e5573d5856054560d49fc",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "disney-plus",
+      "offset": 504445,
+      "length": 87319,
+      "sha256": "b056fbd248a4dcbb88c486becc9cd0120850e67a5d4378df8a932729e2be3081",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "exxen",
+      "offset": 591764,
+      "length": 69493,
+      "sha256": "6b52f8ba20af5350b31c4e9e8c3934b6c051d975fdfd33dd490afa6bc16e9423",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "max",
+      "offset": 661257,
+      "length": 72660,
+      "sha256": "97faa7a912df5638b9288e372106bd957208c1515c01d0cdc178ff898b8b3b88",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "mubi",
+      "offset": 733917,
+      "length": 37221,
+      "sha256": "a23a3b1422c5f7cb1341bba08bdf509d6825c5944c6a5a2b1f982c5f58ccff4d",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "netflix",
+      "offset": 771138,
+      "length": 59853,
+      "sha256": "c02c6a7e684fb30fcb2813be3d0af783d1c70f73d17c392a58d15cc08edc6d45",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "paramount-plus",
+      "offset": 830991,
+      "length": 92579,
+      "sha256": "7a3038533f3d0e97658601196b7738f1cb7ab23dc6717a742526cf2a979b0fb4",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "prime-video",
+      "offset": 923570,
+      "length": 77271,
+      "sha256": "7169f7f1d066672853562ecc146e21cc76f3509f113742239e49f373044d7d80",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "puhutv",
+      "offset": 1000841,
+      "length": 66025,
+      "sha256": "174d46b51af54f0d2d19157aeeb643cd540dfc192467eb521c6842d40a619792",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "s-sport-plus",
+      "offset": 1066866,
+      "length": 60944,
+      "sha256": "ef38c82d00bdc9a0cd4a8019bafd2fa85db76a7319537a35e671f7d68f789c00",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "tabii",
+      "offset": 1127810,
+      "length": 70879,
+      "sha256": "3a1413a9bc4cdb98cd2c5060e153ee888c1e91368abed41a2126e4679b5fe903",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "tivibu",
+      "offset": 1198689,
+      "length": 71609,
+      "sha256": "3bedc0a353adda6d3eecb8f2413dcb0720ba06462c3ce843f89bf9fcc0edaf31",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "tod",
+      "offset": 1270298,
+      "length": 60397,
+      "sha256": "289711850bd601246526153219fc726a1ebfbc351f73e8a7170137bc9bc465cd",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "platforms",
+      "key": "tv-plus",
+      "offset": 1330695,
+      "length": 53409,
+      "sha256": "5aff6adf1eb54be5442ca521d77903b47caf820af9dae19d094a18ce4ea12c00",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "action",
+      "offset": 1384104,
+      "length": 77013,
+      "sha256": "9fcb473f91c1b8903403bc330ac34fa3e8eeddfadc71d5cde7acc7997d6dbd54",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "adventure",
+      "offset": 1461117,
+      "length": 90172,
+      "sha256": "ac89863ee5ec895df5ff3f99f706c112e1c9b956d7d66139975f60b42b6c8aa9",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "animation",
+      "offset": 1551289,
+      "length": 89129,
+      "sha256": "2112a8dd53dff1eea63450a7d8f6c7c490569be2a87739e05acd77db6536b663",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "anime",
+      "offset": 1640418,
+      "length": 103790,
+      "sha256": "f900c751ef9fdb8586971425d433292cf5d4d981ad9457d71be6b44e210fe74b",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "comedy",
+      "offset": 1744208,
+      "length": 78048,
+      "sha256": "b5e0b346d0970f71de0b6ee73aaf20f1c299dd1acbc4fe9e08806649929af39b",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "crime",
+      "offset": 1822256,
+      "length": 68103,
+      "sha256": "377e897ead1b2867af5f341a9ff1fdb3ca83da53ce2d269264f8452b552d1947",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "documentary",
+      "offset": 1890359,
+      "length": 91191,
+      "sha256": "40712cce03911821432891d1e75413ded96ce55fc1c7a8912ba935fe7a17dad2",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "drama",
+      "offset": 1981550,
+      "length": 60010,
+      "sha256": "ef7b20aca56326fcf49c0d5a13b00f388bb9f85e3437bf06ba7217d3dd318b44",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "family",
+      "offset": 2041560,
+      "length": 96014,
+      "sha256": "b839cfda83db92c9a2a4ce2d25c47744afb058ecd41671c8d2b0ba158a1b554d",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "fantasy",
+      "offset": 2137574,
+      "length": 98291,
+      "sha256": "35a4ea5ca14bc2218608cbc9442e122ff4d9cd259808221cfc34f3633ef7a317",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "horror",
+      "offset": 2235865,
+      "length": 55153,
+      "sha256": "1b100356f2b0b197521fa898604739f45f19a726ae53174ada8e79597e58de53",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "music",
+      "offset": 2291018,
+      "length": 81627,
+      "sha256": "288604d034721097ada669b2ebf613537cf28df5b9ff0971bcae70d45518d869",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "mystery",
+      "offset": 2372645,
+      "length": 46998,
+      "sha256": "108d6ef4693da46780fc6ae444f93016e66b0afbd82c4b133d53660137c17a65",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "romance",
+      "offset": 2419643,
+      "length": 54997,
+      "sha256": "248cae264292cd1f5731355503fabfbbeb74b1226f1089e5ac7c1ef398311eb3",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "science-fiction",
+      "offset": 2474640,
+      "length": 87157,
+      "sha256": "1303906e8c09c46830aca4c3a7b57353ea974fe02708d3c26ea7110bf6c9116a",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "sport",
+      "offset": 2561797,
+      "length": 74167,
+      "sha256": "78dc97b932718089fb73125aca148f8f63efd12738bb5e907f5a70f44c3fcafd",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "thriller",
+      "offset": 2635964,
+      "length": 73850,
+      "sha256": "0a6af9bfd4630d33f9250188c5a40e685a32c512ef736e8bf919cfedfbea4238",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    },
+    {
+      "kind": "genres",
+      "key": "western",
+      "offset": 2709814,
+      "length": 70862,
+      "sha256": "612bdb36053952c19e36d7974e51af11eca7020f9bd743b686990fb2d472ba1c",
+      "width": 1600,
+      "height": 900,
+      "format": "avif"
+    }
+  ]
+}
