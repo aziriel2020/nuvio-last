@@ -295,10 +295,10 @@ assert(generatedManifest?.designProfile?.hero?.noGeneratedSecondaryScene === tru
 
 const boardSource = generatedManifest?.boardSource || {};
 assert(boardSource.sourceFile === 'assets/approved-board/canonical.b64.*', 'canonical approved-board source file marker missing');
-assert(Number(boardSource.width || 0) >= 1200 && Number(boardSource.height || 0) >= 675, `canonical board dimensions invalid: ${boardSource.width}x${boardSource.height}`);
+assert(Number(boardSource.width || 0) === 1536 && Number(boardSource.height || 0) === 864, `canonical board dimensions invalid: ${boardSource.width}x${boardSource.height}`);
 assert(Number(boardSource.platformCells || 0) === 20, `canonical board platform cell count mismatch: ${boardSource.platformCells}`);
 assert(Number(boardSource.genreCells || 0) === 18, `canonical board genre cell count mismatch: ${boardSource.genreCells}`);
-assert(typeof boardSource.sha256 === 'string' && boardSource.sha256.length === 64, 'canonical board sha256 missing');
+assert(boardSource.sha256 === '32167e94380ba826dc3e1d39a4dd6742a6df7671ad9b1bc9b38dfc2b5b7f8bef', `canonical board sha256 mismatch: ${boardSource.sha256}`);
 
 const canonicalLibrary = generatedManifest?.canonicalLibrary || {};
 assert(Number(canonicalLibrary.platformCount || 0) === 20, `canonical platform library count mismatch: ${canonicalLibrary.platformCount}`);
