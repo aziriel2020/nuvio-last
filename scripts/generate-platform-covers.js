@@ -429,13 +429,9 @@ function genreArtFiles(slug) {
 async function providerSource(region, providerSlug) {
   const boardKey = PROVIDER_BOARD_KEY[providerSlug];
   if (boardKey && APPROVED_BOARD_PLATFORM_CELLS[boardKey]) {
-    const board = await approvedBoardCrop('platform', boardKey);
-    return {
-      ...board,
-      file: null,
-      derived: false,
-      crossRegion: false
-    };
+    const master = await individualMaster('platforms', boardKey);
+    if (!master) throw new Error(region + '/' + providerSlug + ': individual HQ master missing for ' + boardKey);
+    return master;
   }
 
   const providerDir = path.join(PLATFORM_ART_ROOT, region);
@@ -477,13 +473,11 @@ async function providerSource(region, providerSlug) {
 
 async function genreSource(slug) {
   const clean = safeSlug(slug);
-  if (APPROVED_BOARD_GENRE_CELLS[clean]) {
-    const board = await approvedBoardCrop('genre', clean);
-    return {
-      ...board,
-      file: null,
-      resolvedSlug: clean
-    };
+  const canonicalGenre = ({ 'sci-fi': 'science-fiction', scifi: 'science-fiction', sports: 'sport' })[clean] || clean;
+  if (APPROVED_BOARD_GENRE_CELLS[canonicalGenre]) {
+    const master = await individualMaster('genres', canonicalGenre);
+    if (!master) throw new Error('genre/' + slug + ': individual HQ master missing for ' + canonicalGenre);
+    return { ...master, resolvedSlug: canonicalGenre };
   }
 
   const files = genreArtFiles(clean);
