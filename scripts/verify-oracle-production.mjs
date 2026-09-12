@@ -267,9 +267,9 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v5-approved-board-exact', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v7-approved-board-canonical-direct', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
-assert(generatedManifest?.artDirection === 'approved-board-exact-v5', `wrong art direction: ${generatedManifest?.artDirection}`);
+assert(generatedManifest?.artDirection === 'approved-board-canonical-direct-v7', `wrong art direction: ${generatedManifest?.artDirection}`);
 assert(generatedManifest?.visualReference === 'validated-streaming-platforms-and-genres-board', 'validated board reference missing');
 assert(generatedManifest?.backgroundPolicy?.tmdbBackdropDependency === false, 'approved-board backgrounds still depend on TMDb backdrops');
 assert(generatedManifest?.backgroundPolicy?.moodMixing === false, 'mood mixing must stay disabled');
@@ -284,7 +284,7 @@ assert(Number(generatedManifest?.genreIdentities || 0) >= 20, `generated genre i
 assert(Number(generatedManifest?.generatedFiles || 0) >= 180, `generated cover file count too small: ${generatedManifest?.generatedFiles}`);
 assert(Array.isArray(generatedManifest?.approvedCardFallbacks) && generatedManifest.approvedCardFallbacks.length === 0, `approved card fallbacks detected: ${JSON.stringify(generatedManifest?.approvedCardFallbacks)}`);
 assert(JSON.stringify(generatedManifest?.explicitDerivedSources || []) === JSON.stringify(['tr/bi-kanal']), `unexpected derived source set: ${JSON.stringify(generatedManifest?.explicitDerivedSources)}`);
-assert(JSON.stringify(generatedManifest?.crossRegionApprovedSources || []) === JSON.stringify(['tr/crunchyroll<=assets/platform-art/fr/crunchyroll-card.jpg']), `unexpected cross-region approved source set: ${JSON.stringify(generatedManifest?.crossRegionApprovedSources)}`);
+assert(JSON.stringify(generatedManifest?.crossRegionApprovedSources || []) === JSON.stringify([]), `unexpected cross-region approved source set: ${JSON.stringify(generatedManifest?.crossRegionApprovedSources)}`);
 assert(generatedManifest?.designProfile?.shield?.target === '83-inch-tv-distance', `Shield TV design profile missing: ${JSON.stringify(generatedManifest?.designProfile?.shield || null)}`);
 assert(generatedManifest?.designProfile?.shield?.layout === 'approved-board-platform-card', `Shield approved-board layout missing: ${generatedManifest?.designProfile?.shield?.layout}`);
 assert(Number(generatedManifest?.designProfile?.shield?.logoWidthPx || 0) >= 520, `Shield logo target too small: ${generatedManifest?.designProfile?.shield?.logoWidthPx}`);
@@ -293,39 +293,88 @@ assert(generatedManifest?.designProfile?.hero?.layout === 'approved-card-scene-o
 assert(generatedManifest?.designProfile?.hero?.noGeneratedCharacters === true, 'Hero generated-character guard missing');
 assert(generatedManifest?.designProfile?.hero?.noGeneratedSecondaryScene === true, 'Hero secondary-scene guard missing');
 
+const boardSource = generatedManifest?.boardSource || {};
+assert(boardSource.sourceFile === 'assets/approved-board/canonical.b64.*', 'canonical approved-board source file marker missing');
+assert(Number(boardSource.width || 0) >= 1200 && Number(boardSource.height || 0) >= 675, `canonical board dimensions invalid: ${boardSource.width}x${boardSource.height}`);
+assert(Number(boardSource.platformCells || 0) === 20, `canonical board platform cell count mismatch: ${boardSource.platformCells}`);
+assert(Number(boardSource.genreCells || 0) === 18, `canonical board genre cell count mismatch: ${boardSource.genreCells}`);
+assert(typeof boardSource.sha256 === 'string' && boardSource.sha256.length === 64, 'canonical board sha256 missing');
+
+const canonicalLibrary = generatedManifest?.canonicalLibrary || {};
+assert(Number(canonicalLibrary.platformCount || 0) === 20, `canonical platform library count mismatch: ${canonicalLibrary.platformCount}`);
+assert(Number(canonicalLibrary.genreCount || 0) === 18, `canonical genre library count mismatch: ${canonicalLibrary.genreCount}`);
+assert(Array.isArray(canonicalLibrary.files) && canonicalLibrary.files.length === (20 + 18) * 3, `canonical library file count mismatch: ${canonicalLibrary.files?.length}`);
+const canonicalPlatformKeys = new Set((canonicalLibrary.platforms || []).map((item) => item.key));
+const canonicalGenreKeys = new Set((canonicalLibrary.genres || []).map((item) => item.key));
+for (const key of ['netflix','prime-video','disney-plus','max','apple-tv-plus','paramount-plus','canal-plus','crunchyroll','anime-asia','tod','tabii','exxen','puhutv','tv-plus','tivibu','d-smart-go','s-sport-plus','bein-connect','blutv','mubi']) {
+  assert(canonicalPlatformKeys.has(key), `canonical board platform missing: ${key}`);
+}
+for (const key of ['action','thriller','crime','science-fiction','fantasy','horror','comedy','romance','documentary','adventure','animation','anime','drama','mystery','western','music','sport','family']) {
+  assert(canonicalGenreKeys.has(key), `canonical board genre missing: ${key}`);
+}
+
 const serviceResults = (generatedManifest.results || []).filter((item) => item?.sourceMode === 'approved-board-exact');
-assert(serviceResults.length === generatedManifest.platformParents, `not every service uses approved-board-exact source: ${serviceResults.length}/${generatedManifest.platformParents}`);
+assert(serviceResults.length === generatedManifest.platformParents, `not every service uses approved-board pipeline: ${serviceResults.length}/${generatedManifest.platformParents}`);
 for (const item of serviceResults) {
   const biKanal = item.region === 'tr' && item.provider === 'bi-kanal';
-  const trCrunchyroll = item.region === 'tr' && item.provider === 'crunchyroll';
   if (biKanal) {
     assert(item.sourceKind === 'approved-derived-bi-kanal', 'Bi Kanal derived source marker missing');
     assert(item.sourceFile === 'assets/genre-art/shared/news-card.jpg', `Bi Kanal unexpected source: ${item.sourceFile}`);
     assert(item.derived === true, 'Bi Kanal derived flag missing');
+    assert(item.canonicalBoard !== true, 'Bi Kanal must not claim a canonical board cell');
     assert(item.crossRegion !== true, 'Bi Kanal must not be marked cross-region');
-  } else if (trCrunchyroll) {
-    assert(item.sourceKind === 'approved-card-cross-region', 'Türkiye Crunchyroll cross-region source marker missing');
-    assert(item.sourceFile === 'assets/platform-art/fr/crunchyroll-card.jpg', `Türkiye Crunchyroll unexpected source: ${item.sourceFile}`);
-    assert(item.derived !== true, 'Türkiye Crunchyroll must use exact approved card, not derived art');
-    assert(item.crossRegion === true, 'Türkiye Crunchyroll cross-region flag missing');
+  } else if (item.canonicalBoard === true) {
+    assert(item.sourceKind === 'approved-board-crop', `canonical service source marker missing: ${item.region}/${item.provider}`);
+    assert(item.sourceFile === 'assets/approved-board/canonical.b64.*', `canonical service escaped board source: ${item.region}/${item.provider} -> ${item.sourceFile}`);
+    assert(typeof item.boardKey === 'string' && item.boardKey.length > 0, `canonical service board key missing: ${item.region}/${item.provider}`);
+    assert(typeof item.sourceDigest === 'string' && item.sourceDigest.length === 64, `canonical service source digest missing: ${item.region}/${item.provider}`);
+    assert(item.derived !== true, `canonical service unexpectedly marked derived: ${item.region}/${item.provider}`);
+    assert(item.crossRegion !== true, `canonical service unexpectedly marked cross-region: ${item.region}/${item.provider}`);
   } else {
-    assert(/-card\.jpg$/.test(String(item.sourceFile || '')), `service is not sourced from approved *-card.jpg: ${item.region}/${item.provider} -> ${item.sourceFile}`);
-    assert(item.sourceKind === 'approved-card', `service fell back from approved card: ${item.region}/${item.provider}`);
-    assert(item.derived !== true, `approved service unexpectedly marked derived: ${item.region}/${item.provider}`);
-    assert(item.crossRegion !== true, `approved service unexpectedly marked cross-region: ${item.region}/${item.provider}`);
+    assert(/-card\.jpg$/.test(String(item.sourceFile || '')), `local approved service source is not a card: ${item.region}/${item.provider} -> ${item.sourceFile}`);
+    assert(item.sourceKind === 'approved-card-local', `local service escaped approved card source: ${item.region}/${item.provider}`);
+    assert(item.derived !== true, `local approved service unexpectedly marked derived: ${item.region}/${item.provider}`);
+    assert(item.crossRegion !== true, `local approved service unexpectedly marked cross-region: ${item.region}/${item.provider}`);
   }
   assert(Array.isArray(item.sources) && item.sources.length > 0, `service source set missing for ${item.region}/${item.provider}`);
   for (const source of item.sources) {
     assert(source.sourceFile === item.sourceFile, `service media type changed visual source for ${item.region}/${item.provider}/${source.type}`);
     assert(source.sourceKind === item.sourceKind, `service media source kind changed for ${item.region}/${item.provider}/${source.type}`);
+    assert(Boolean(source.canonicalBoard) === Boolean(item.canonicalBoard), `service canonical-board marker changed for ${item.region}/${item.provider}/${source.type}`);
+    assert((source.boardKey || null) === (item.boardKey || null), `service board key changed for ${item.region}/${item.provider}/${source.type}`);
     assert(Boolean(source.crossRegion) === Boolean(item.crossRegion), `service media cross-region marker changed for ${item.region}/${item.provider}/${source.type}`);
   }
 }
+
+const activeBoardKeys = new Set(serviceResults.filter((item) => item.canonicalBoard === true).map((item) => item.boardKey));
+for (const key of ['netflix','prime-video','disney-plus','max','apple-tv-plus','paramount-plus','canal-plus','crunchyroll','anime-asia','tod','tabii','exxen','puhutv','tv-plus','tivibu','d-smart-go','s-sport-plus','mubi']) {
+  assert(activeBoardKeys.has(key), `active collection pipeline is not using canonical board cell: ${key}`);
+}
+
 const genreResults = (generatedManifest.genres || []).filter((item) => item?.sourceMode === 'approved-board-exact');
-assert(genreResults.length === generatedManifest.genreIdentities, `not every genre uses approved-board-exact source: ${genreResults.length}/${generatedManifest.genreIdentities}`);
+assert(genreResults.length === generatedManifest.genreIdentities, `not every genre uses approved-board pipeline: ${genreResults.length}/${generatedManifest.genreIdentities}`);
 for (const item of genreResults) {
-  assert(/-card\.jpg$/.test(String(item.sourceFile || '')), `genre is not sourced from approved *-card.jpg: ${item.region}/${item.genre} -> ${item.sourceFile}`);
-  assert(item.sourceKind === 'approved-card', `genre fell back from approved card: ${item.region}/${item.genre}`);
+  if (item.canonicalBoard === true) {
+    assert(item.sourceKind === 'approved-board-crop', `canonical genre source marker missing: ${item.region}/${item.genre}`);
+    assert(item.sourceFile === 'assets/approved-board/canonical.b64.*', `canonical genre escaped board source: ${item.region}/${item.genre}`);
+    assert(item.boardKey === item.genre, `canonical genre board key drifted: ${item.region}/${item.genre} -> ${item.boardKey}`);
+    assert(typeof item.sourceDigest === 'string' && item.sourceDigest.length === 64, `canonical genre digest missing: ${item.region}/${item.genre}`);
+  } else {
+    assert(/-card\.jpg$/.test(String(item.sourceFile || '')), `local genre source is not an approved card: ${item.region}/${item.genre} -> ${item.sourceFile}`);
+    assert(item.sourceKind === 'approved-card-local', `local genre escaped approved card source: ${item.region}/${item.genre}`);
+  }
+}
+
+const canonicalVisualSamples = [
+  '/static/assets/generated-covers/_canonical/platforms/netflix-shield.jpg',
+  '/static/assets/generated-covers/_canonical/platforms/bein-connect-shield.jpg',
+  '/static/assets/generated-covers/_canonical/platforms/blutv-desktop.jpg',
+  '/static/assets/generated-covers/_canonical/platforms/mubi-hero.jpg',
+  '/static/assets/generated-covers/_canonical/genres/anime-shield.jpg',
+  '/static/assets/generated-covers/_canonical/genres/sport-desktop.jpg'
+];
+for (const sample of canonicalVisualSamples) {
+  await verifyVisual(new URL(sample, ORIGIN).toString(), 'canonical library ' + sample);
 }
 
 const generatedShieldVisualUrls = flattenStrings(standard).filter((value) => {
@@ -335,7 +384,7 @@ assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield service
 for (const value of generatedShieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v5-approved-board-exact', `generated Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v7-approved-board-canonical-direct', `generated Shield cover has stale revision: ${value}`);
 }
 
 const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
@@ -344,7 +393,7 @@ const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
 assert(generatedGenreShieldUrls.length >= 20, `too few generated Shield genre covers in collection payload: ${generatedGenreShieldUrls.length}`);
 for (const value of generatedGenreShieldUrls) {
   const visualUrl = new URL(value);
-  assert(visualUrl.searchParams.get('v') === 'generated-v5-approved-board-exact', `generated genre Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v7-approved-board-canonical-direct', `generated genre Shield cover has stale revision: ${value}`);
 }
 
 const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
@@ -358,7 +407,7 @@ if (frNetflixMovieReal?.coverImageUrl) {
   assert(/\/static\/assets\/generated-covers\/fr\/netflix\/movie-shield\.jpg$/.test(new URL(frNetflixMovieReal.coverImageUrl).pathname), `France Netflix Shield movie is not using v5 approved asset: ${frNetflixMovieReal.coverImageUrl}`);
   const seriesProbe = await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix series card probe');
   const movieProbe = await verifyVisual(frNetflixMovieReal.coverImageUrl, 'France Netflix movie card probe');
-  assert(seriesProbe.digest !== movieProbe.digest, 'Netflix Films and Séries cards must remain distinguishable');
+  assert(seriesProbe.digest === movieProbe.digest, 'Netflix Films and Séries must use the same canonical approved board cell');
 }
 assert(frNetflixSeriesReal?.heroBackdropUrl, 'France Netflix generated hero missing');
 assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-hero\.jpg$/.test(new URL(frNetflixSeriesReal.heroBackdropUrl).pathname), `France Netflix hero is not using v5 approved asset: ${frNetflixSeriesReal.heroBackdropUrl}`);
@@ -372,7 +421,7 @@ assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop servi
 for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v5-approved-board-exact', `generated Desktop cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v7-approved-board-canonical-direct', `generated Desktop cover has stale revision: ${value}`);
 }
 const generatedGenreDesktopUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
@@ -504,7 +553,7 @@ function originalPremiumIdentity(value) {
   const service = pathname.match(/\/generated-covers\/(?:fr|global|tr|us)\/([a-z0-9-]+)\/(series|movie)-(?:shield|desktop)\.jpg$/);
   if (service) {
     const provider = service[1] === 'hbo-max' ? 'max' : service[1];
-    return `service:${provider}:${service[2]}`;
+    return `service:${provider}`;
   }
   return `url:${pathname}`;
 }
