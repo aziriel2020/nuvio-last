@@ -355,57 +355,50 @@ async function approvedBoardCrop(kind, key) {
 }
 
 async function approvedBoardCardFrame(buffer, width = 1600, height = 900) {
-  // The board cell itself is the canonical card. Keep every pixel visible and
-  // extend only the unused 16:9 area with a soft version of the same cell.
-  const background = await sharp(buffer)
-    .resize(width, height, { fit: 'cover', position: 'centre', withoutEnlargement: false })
-    .blur(18)
-    .modulate({ brightness: 0.68, saturation: 1.04 })
-    .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+  // Individual card masters are already final artwork. Never crop, recompose,
+  // overlay a second logo, or reconstruct text. Keep every source pixel visible.
+  return sharp(buffer)
+    .resize(width, height, {
+      fit: 'contain',
+      position: 'centre',
+      background: { r: 0, g: 0, b: 0 },
+      withoutEnlargement: false
+    })
+    .jpeg({ quality: 97, chromaSubsampling: '4:4:4', mozjpeg: true })
     .toBuffer();
-  const foreground = await sharp(buffer)
+}
+
+async function approvedBoardHeroFrame(source, accent) {
+  const width = 3840;
+  const height = 2160;
+
+  // A dark self-extension is used behind the complete 16:9 master. The
+  // foreground is always "contain", so no subject/logo is ever cut. The
+  // black gradient matches the existing Nuvio dark surface instead of
+  // looking like a zoomed/cropped rectangle.
+  const extension = await sharp(source.buffer)
+    .resize(width, height, { fit: 'cover', position: 'centre', withoutEnlargement: false })
+    .blur(42)
+    .modulate({ brightness: 0.34, saturation: 0.92 })
+    .jpeg({ quality: 94, chromaSubsampling: '4:4:4', mozjpeg: true })
+    .toBuffer();
+
+  const fullFrame = await sharp(source.buffer)
     .resize(width, height, {
       fit: 'contain',
       position: 'centre',
       background: { r: 0, g: 0, b: 0, alpha: 0 },
       withoutEnlargement: false
     })
-    .sharpen({ sigma: 0.45 })
     .png()
     .toBuffer();
-  return sharp(background)
-    .composite([{ input: foreground, left: 0, top: 0 }])
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-    .toBuffer();
-}
 
-async function approvedBoardHeroFrame(source, accent) {
-  const width = 1920;
-  const height = 1080;
-  const meta = await sharp(source.buffer).metadata();
-  const inset = Math.max(1, Math.round(Math.min(meta.width || 0, meta.height || 0) * 0.012));
-  let scene = source.buffer;
-  if ((meta.width || 0) > inset * 2 + 10 && (meta.height || 0) > inset * 2 + 10) {
-    scene = await sharp(source.buffer)
-      .extract({
-        left: inset,
-        top: inset,
-        width: meta.width - inset * 2,
-        height: meta.height - inset * 2
-      })
-      .toBuffer();
-  }
-  // East anchoring intentionally removes most of the baked left-side logo/text
-  // while preserving the exact character/background scene from the validated card.
-  const background = await sharp(scene)
-    .resize(width, height, { fit: 'cover', position: 'east', withoutEnlargement: false })
-    .modulate({ brightness: 0.86, saturation: 1.04 })
-    .sharpen({ sigma: 0.35 })
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-    .toBuffer();
-  return sharp(background)
-    .composite([{ input: heroOverlay(width, height, accent), left: 0, top: 0 }])
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+  return sharp(extension)
+    .composite([
+      { input: fullFrame, left: 0, top: 0 },
+      { input: heroOverlay(width, height, accent), left: 0, top: 0 }
+    ])
+    .jpeg({ quality: 96, chromaSubsampling: '4:4:4', mozjpeg: true })
     .toBuffer();
 }
 
