@@ -763,6 +763,8 @@ async function providerJob(region, api, definition) {
     sourceFile: source.sourceFile,
     sourceKind: source.sourceKind,
     canonicalBoard: source.boardExact === true,
+    individualMaster: source.individualExact === true,
+    masterDimensions: source.masterDimensions || null,
     boardKey: source.boardKey || null,
     sourceDigest: source.sourceDigest || null,
     boardRect: source.boardRect || null,

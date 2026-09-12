@@ -86,6 +86,16 @@ jobs:
               if (Number(item.masterDimensions?.width) !== 1600 || Number(item.masterDimensions?.height) !== 900) throw new Error('canonical item dimensions invalid: ' + item.key);
             }
 
+            for (const item of manifest.results || []) {
+              const biKanal = item.region === 'tr' && item.provider === 'bi-kanal';
+              if (item.sourceKind === 'individual-master-v8-hq') {
+                if (item.individualMaster !== true) throw new Error('provider v8 parent marker missing: ' + item.region + '/' + item.provider);
+                if (Number(item.masterDimensions?.width) !== 1600 || Number(item.masterDimensions?.height) !== 900) throw new Error('provider v8 parent dimensions missing: ' + item.region + '/' + item.provider);
+              } else if (!biKanal && item.sourceKind !== 'approved-card-local') {
+                throw new Error('unexpected provider source kind: ' + item.region + '/' + item.provider + ' -> ' + item.sourceKind);
+              }
+            }
+
             const expectedPlatforms = ['netflix','prime-video','disney-plus','max','apple-tv-plus','paramount-plus','canal-plus','crunchyroll','anime-asia','tod','tabii','exxen','puhutv','tv-plus','tivibu','d-smart-go','s-sport-plus','bein-connect','blutv','mubi'];
             const expectedGenres = ['action','thriller','crime','science-fiction','fantasy','horror','comedy','romance','documentary','adventure','animation','anime','drama','mystery','western','music','sport','family'];
             const platformKeys = new Set((library.platforms || []).map((item) => item.key));
