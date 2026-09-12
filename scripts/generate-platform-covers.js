@@ -15,7 +15,8 @@ const OUT_ROOT = path.join(ROOT, 'assets', 'generated-covers');
 const PLATFORM_ART_ROOT = path.join(ROOT, 'assets', 'platform-art');
 const GENRE_ART_ROOT = path.join(ROOT, 'assets', 'genre-art', 'shared');
 const APPROVED_BOARD_ROOT = path.join(ROOT, 'assets', 'approved-board');
-const REVISION = 'generated-v7-approved-board-canonical-direct';
+const INDIVIDUAL_MASTER_ROOT = path.join(ROOT, 'assets', 'individual-masters-v8');
+const REVISION = 'generated-v8-individual-masters-hq';
 
 const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 });
 const APPROVED_BOARD_PARTS = Object.freeze([
@@ -153,6 +154,7 @@ const BOARD_ACCENTS = Object.freeze({
 });
 
 let APPROVED_BOARD_CACHE = null;
+let INDIVIDUAL_MASTER_CACHE = null;
 
 const REGION_APIS = {
   fr: rootHandler._internals.frHandler._internals,
@@ -229,6 +231,66 @@ async function firstExisting(files) {
     if (buffer) return { buffer, file };
   }
   return null;
+}
+
+async function individualMasterPack() {
+  if (INDIVIDUAL_MASTER_CACHE) return INDIVIDUAL_MASTER_CACHE;
+  const indexFile = path.join(INDIVIDUAL_MASTER_ROOT, 'index.json');
+  const index = JSON.parse(await fsp.readFile(indexFile, 'utf8'));
+  if (index?.revision !== 'individual-masters-v8-hq') {
+    throw new Error('individual master index revision mismatch: ' + index?.revision);
+  }
+  if (Number(index?.platformCount || 0) !== 20 || Number(index?.genreCount || 0) !== 18 || Number(index?.entryCount || 0) !== 38) {
+    throw new Error('individual master index coverage mismatch');
+  }
+  const chunkNames = (await fsp.readdir(INDIVIDUAL_MASTER_ROOT))
+    .filter((name) => /^pack\.b64\.\d+$/.test(name))
+    .sort();
+  if (chunkNames.length !== 19) throw new Error('individual master pack chunk count mismatch: ' + chunkNames.length);
+  const chunks = await Promise.all(chunkNames.map((name) => fsp.readFile(path.join(INDIVIDUAL_MASTER_ROOT, name), 'utf8')));
+  const packed = Buffer.from(chunks.join('').replace(/\s+/g, ''), 'base64');
+  const packSha256 = crypto.createHash('sha256').update(packed).digest('hex');
+  if (packSha256 !== index.packSha256) {
+    throw new Error('individual master pack sha256 mismatch: ' + packSha256);
+  }
+  const byKey = new Map();
+  for (const entry of index.entries || []) {
+    const id = entry.kind + '/' + entry.key;
+    if (byKey.has(id)) throw new Error('duplicate individual master entry: ' + id);
+    const end = Number(entry.offset) + Number(entry.length);
+    if (Number(entry.offset) < 0 || Number(entry.length) <= 0 || end > packed.length) {
+      throw new Error('invalid individual master range: ' + id);
+    }
+    byKey.set(id, entry);
+  }
+  INDIVIDUAL_MASTER_CACHE = { index, packed, byKey, packSha256, chunkNames };
+  return INDIVIDUAL_MASTER_CACHE;
+}
+
+async function individualMaster(kind, key) {
+  const pack = await individualMasterPack();
+  const entry = pack.byKey.get(kind + '/' + key);
+  if (!entry) return null;
+  const buffer = pack.packed.subarray(Number(entry.offset), Number(entry.offset) + Number(entry.length));
+  const digest = crypto.createHash('sha256').update(buffer).digest('hex');
+  if (digest !== entry.sha256) throw new Error('individual master digest mismatch: ' + kind + '/' + key);
+  const metadata = await sharp(buffer).metadata();
+  if (metadata.width !== 1600 || metadata.height !== 900) {
+    throw new Error('individual master dimensions invalid for ' + kind + '/' + key + ': ' + metadata.width + 'x' + metadata.height);
+  }
+  return {
+    buffer,
+    file: null,
+    sourceFile: 'assets/individual-masters-v8/' + kind + '/' + key + '.avif',
+    sourceKind: 'individual-master-v8-hq',
+    individualExact: true,
+    boardExact: false,
+    boardKey: key,
+    boardKind: kind === 'platforms' ? 'platform' : 'genre',
+    boardRect: null,
+    masterDimensions: { width: metadata.width, height: metadata.height },
+    sourceDigest: digest
+  };
 }
 
 async function approvedBoardMaster() {
@@ -360,12 +422,11 @@ function genreArtFiles(slug) {
 }
 
 async function providerSource(region, providerSlug) {
-  const boardKey = PROVIDER_BOARD_KEY[providerSlug];
-  if (boardKey && APPROVED_BOARD_PLATFORM_CELLS[boardKey]) {
-    const board = await approvedBoardCrop('platform', boardKey);
+  const boardKey = PROVIDER_BOARD_KEY[providerSlug] || providerSlug;
+  const individual = await individualMaster('platforms', boardKey);
+  if (individual) {
     return {
-      ...board,
-      file: null,
+      ...individual,
       derived: false,
       crossRegion: false
     };
@@ -410,11 +471,10 @@ async function providerSource(region, providerSlug) {
 
 async function genreSource(slug) {
   const clean = safeSlug(slug);
-  if (APPROVED_BOARD_GENRE_CELLS[clean]) {
-    const board = await approvedBoardCrop('genre', clean);
+  const individual = await individualMaster('genres', clean);
+  if (individual) {
     return {
-      ...board,
-      file: null,
+      ...individual,
       resolvedSlug: clean
     };
   }
@@ -459,6 +519,40 @@ function brandLabel(api, providerSlug) {
   } catch {
     return providerSlug.replace(/-/g, ' ');
   }
+}
+
+async function individualCardFrame(buffer, width = 1600, height = 900) {
+  return sharp(buffer)
+    .resize(width, height, {
+      fit: 'contain',
+      position: 'centre',
+      background: { r: 0, g: 0, b: 0, alpha: 1 },
+      withoutEnlargement: false
+    })
+    .sharpen({ sigma: 0.28 })
+    .jpeg({ quality: 97, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
+async function individualHeroFrame(source, accent) {
+  const width = 1920;
+  const height = 1080;
+  // Deliberately use contain, never cover/extract: the complete 16:9 master
+  // stays visible. The black UI blend is an overlay, not a crop.
+  const background = await sharp(source.buffer)
+    .resize(width, height, {
+      fit: 'contain',
+      position: 'centre',
+      background: { r: 0, g: 0, b: 0, alpha: 1 },
+      withoutEnlargement: false
+    })
+    .sharpen({ sigma: 0.28 })
+    .jpeg({ quality: 97, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+  return sharp(background)
+    .composite([{ input: heroOverlay(width, height, accent), left: 0, top: 0 }])
+    .jpeg({ quality: 97, chromaSubsampling: '4:4:4' })
+    .toBuffer();
 }
 
 async function approvedBackground(buffer, width, height, { hero = false, derived = false } = {}) {
@@ -525,6 +619,7 @@ function genreCardOverlay(width, height, opts) {
 async function serviceCover(source, logoBuffer, opts) {
   const width = 1600;
   const height = 900;
+  if (source.individualExact === true) return individualCardFrame(source.buffer, width, height);
   if (source.boardExact === true) return approvedBoardCardFrame(source.buffer, width, height);
   const background = await approvedBackground(source.buffer, width, height, { derived: source.derived === true });
   const composites = [{ input: serviceCardOverlay(width, height, opts), left: 0, top: 0 }];
@@ -553,6 +648,7 @@ async function serviceCover(source, logoBuffer, opts) {
 async function genreCover(source, opts) {
   const width = 1600;
   const height = 900;
+  if (source.individualExact === true) return individualCardFrame(source.buffer, width, height);
   if (source.boardExact === true) return approvedBoardCardFrame(source.buffer, width, height);
   const background = await approvedBackground(source.buffer, width, height);
   return sharp(background)
@@ -583,6 +679,7 @@ function heroOverlay(width, height, accent) {
 }
 
 async function approvedHero(source, accent) {
+  if (source.individualExact === true) return individualHeroFrame(source, accent);
   if (source.boardExact === true) return approvedBoardHeroFrame(source, accent);
   const width = 1920;
   const height = 1080;
@@ -643,6 +740,8 @@ async function providerJob(region, api, definition) {
       sourceFile: source.sourceFile,
       sourceKind: source.sourceKind,
       canonicalBoard: source.boardExact === true,
+      individualMaster: source.individualExact === true,
+      masterDimensions: source.masterDimensions || null,
       boardKey: source.boardKey || null,
       sourceDigest: source.sourceDigest || null,
       derived: source.derived === true,
@@ -660,7 +759,7 @@ async function providerJob(region, api, definition) {
     provider: providerSlug,
     label: providerLabel,
     files,
-    sourceMode: 'approved-board-exact',
+    sourceMode: source.individualExact === true ? 'individual-master-v8-hq' : 'approved-board-exact',
     sourceFile: source.sourceFile,
     sourceKind: source.sourceKind,
     canonicalBoard: source.boardExact === true,
@@ -711,10 +810,12 @@ async function genreJob(region, genre) {
     genre: slug,
     label,
     files: Object.values(files),
-    sourceMode: 'approved-board-exact',
+    sourceMode: source.individualExact === true ? 'individual-master-v8-hq' : 'approved-board-exact',
     sourceFile: source.sourceFile,
     sourceKind: source.sourceKind,
     canonicalBoard: source.boardExact === true,
+    individualMaster: source.individualExact === true,
+    masterDimensions: source.masterDimensions || null,
     boardKey: source.boardKey || null,
     sourceDigest: source.sourceDigest || null,
     boardRect: source.boardRect || null
@@ -729,11 +830,12 @@ async function canonicalLibraryJob() {
   const genreDir = path.join(OUT_ROOT, '_canonical', 'genres');
 
   for (const key of Object.keys(APPROVED_BOARD_PLATFORM_CELLS)) {
-    const source = await approvedBoardCrop('platform', key);
+    const source = await individualMaster('platforms', key);
+    if (!source) throw new Error('missing canonical individual platform master: ' + key);
     const accent = BOARD_ACCENTS[key] || '#38bdf8';
     const [card, hero] = await Promise.all([
-      approvedBoardCardFrame(source.buffer, 1600, 900),
-      approvedBoardHeroFrame(source, accent)
+      individualCardFrame(source.buffer, 1600, 900),
+      individualHeroFrame(source, accent)
     ]);
     const names = [
       '_canonical/platforms/' + key + '-shield.jpg',
@@ -746,15 +848,16 @@ async function canonicalLibraryJob() {
       writeAtomic(path.join(platformDir, key + '-hero.jpg'), hero)
     ]);
     files.push(...names);
-    platformResults.push({ key, sourceDigest: source.sourceDigest, boardRect: source.boardRect, files: names });
+    platformResults.push({ key, sourceKind: source.sourceKind, sourceFile: source.sourceFile, sourceDigest: source.sourceDigest, masterDimensions: source.masterDimensions, files: names });
   }
 
   for (const key of Object.keys(APPROVED_BOARD_GENRE_CELLS)) {
-    const source = await approvedBoardCrop('genre', key);
+    const source = await individualMaster('genres', key);
+    if (!source) throw new Error('missing canonical individual genre master: ' + key);
     const accent = BOARD_ACCENTS[key] || '#38bdf8';
     const [card, hero] = await Promise.all([
-      approvedBoardCardFrame(source.buffer, 1600, 900),
-      approvedBoardHeroFrame(source, accent)
+      individualCardFrame(source.buffer, 1600, 900),
+      individualHeroFrame(source, accent)
     ]);
     const names = [
       '_canonical/genres/' + key + '-shield.jpg',
@@ -767,7 +870,7 @@ async function canonicalLibraryJob() {
       writeAtomic(path.join(genreDir, key + '-hero.jpg'), hero)
     ]);
     files.push(...names);
-    genreResults.push({ key, sourceDigest: source.sourceDigest, boardRect: source.boardRect, files: names });
+    genreResults.push({ key, sourceKind: source.sourceKind, sourceFile: source.sourceFile, sourceDigest: source.sourceDigest, masterDimensions: source.masterDimensions, files: names });
   }
 
   return { files, platforms: platformResults, genres: genreResults };
@@ -802,8 +905,8 @@ async function main() {
   await fsp.rm(OUT_ROOT, { recursive: true, force: true });
   await fsp.mkdir(OUT_ROOT, { recursive: true });
 
-  const boardMaster = await approvedBoardMaster();
-  console.log('Canonical approved board: ' + boardMaster.metadata.width + 'x' + boardMaster.metadata.height + ' ' + boardMaster.metadata.format + ' sha256=' + boardMaster.sha256.slice(0, 16));
+  const masterPack = await individualMasterPack();
+  console.log('HQ individual master pack: 20 platforms + 18 genres, sha256=' + masterPack.packSha256.slice(0, 16));
   const canonicalLibrary = await canonicalLibraryJob();
 
   const providerJobs = [];
@@ -813,7 +916,7 @@ async function main() {
     for (const genre of uniqueGenres(api)) genreJobs.push({ region, genre });
   }
 
-  console.log(`Generating Nuvio Approved Board Canonical Direct v7: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
+  console.log(`Generating Nuvio Individual Masters HQ v8: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
 
   const providerResults = await mapLimit(providerJobs, 3, async (job, index) => {
     process.stdout.write(`[service ${index + 1}/${providerJobs.length}] ${job.region}/${job.definition.provider.slug} ... `);
@@ -846,18 +949,19 @@ async function main() {
     revision: REVISION,
     complete: true,
     generatedAt: new Date().toISOString(),
-    artDirection: 'approved-board-canonical-direct-v7',
-    visualReference: 'validated-streaming-platforms-and-genres-board',
-    boardSource: {
-      sourceFile: boardMaster.sourceFile,
-      sha256: boardMaster.sha256,
-      format: boardMaster.metadata.format,
-      width: boardMaster.metadata.width,
-      height: boardMaster.metadata.height,
-      referenceWidth: APPROVED_BOARD_REFERENCE_SIZE.width,
-      referenceHeight: APPROVED_BOARD_REFERENCE_SIZE.height,
-      platformCells: Object.keys(APPROVED_BOARD_PLATFORM_CELLS).length,
-      genreCells: Object.keys(APPROVED_BOARD_GENRE_CELLS).length
+    artDirection: 'individual-masters-hq-v8',
+    visualReference: 'validated-individual-lots-1-4',
+    masterSource: {
+      sourceFile: 'assets/individual-masters-v8/pack.b64.*',
+      indexFile: 'assets/individual-masters-v8/index.json',
+      sha256: masterPack.packSha256,
+      entryCount: masterPack.index.entryCount,
+      platformCount: masterPack.index.platformCount,
+      genreCount: masterPack.index.genreCount,
+      width: masterPack.index.cardDimensions.width,
+      height: masterPack.index.cardDimensions.height,
+      ratio: masterPack.index.cardDimensions.ratio,
+      chunkCount: masterPack.chunkNames.length
     },
     backgroundPolicy: {
       tmdbBackdropDependency: false,
@@ -868,10 +972,11 @@ async function main() {
       exactApprovedCardSource: true,
       uniquePerService: true,
       uniquePerGenre: true,
-      source: 'canonical-approved-board-crops-with-local-approved-fallbacks',
-      canonicalBoardCellsArePrimary: true,
-      canonicalBoardCellPreservedInFull: true,
-      heroUsesCanonicalScene: true
+      source: 'individual-hq-masters-with-local-approved-fallbacks',
+      individualMastersArePrimary: true,
+      fullFramePreserved: true,
+      heroUsesFullFrameMaster: true,
+      heroCropMode: 'none-contain-black-ui-blend'
     },
     generatedFiles,
     platformParents: providerResults.length,
@@ -887,36 +992,41 @@ async function main() {
       genres: canonicalLibrary.genres
     },
     canonicalCoverage: {
-      activeServiceParents: providerResults.filter((item) => item.canonicalBoard === true).map((item) => item.region + '/' + item.provider),
-      activeGenreIdentities: genreResults.filter((item) => item.canonicalBoard === true).map((item) => item.region + '/genres/' + item.genre)
+      activeServiceParents: providerResults.filter((item) => item.individualMaster === true).map((item) => item.region + '/' + item.provider),
+      activeGenreIdentities: genreResults.filter((item) => item.individualMaster === true).map((item) => item.region + '/genres/' + item.genre)
     },
     designProfile: {
       shield: {
         target: '83-inch-tv-distance',
-        layout: 'approved-board-platform-card',
-        canonicalBoardCrop: true,
-        canonicalCellFit: 'contain-on-self-derived-blur',
-        mediaLabelPx: 62,
-        logoWidthPx: 560,
-        borderPx: 5
+        layout: 'individual-master-landscape',
+        width: 1600,
+        height: 900,
+        ratio: '16:9',
+        fit: 'contain',
+        crop: false
       },
       desktop: {
-        layout: 'approved-board-platform-card',
-        canonicalBoardCrop: true,
-        canonicalCellFit: 'contain-on-self-derived-blur',
-        mediaLabelPx: 50,
-        logoWidthPx: 480,
-        borderPx: 5
+        layout: 'individual-master-landscape',
+        width: 1600,
+        height: 900,
+        ratio: '16:9',
+        fit: 'contain',
+        crop: false
       },
       genres: {
-        layout: 'approved-board-genre-card',
-        canonicalBoardCrop: true,
-        shieldTitlePx: 76,
-        desktopTitlePx: 60
+        layout: 'individual-master-landscape',
+        width: 1600,
+        height: 900,
+        ratio: '16:9',
+        crop: false
       },
       hero: {
-        layout: 'approved-card-scene-only',
-        canonicalSceneCrop: 'east-cover',
+        layout: 'full-frame-black-blend',
+        width: 1920,
+        height: 1080,
+        ratio: '16:9',
+        fit: 'contain',
+        crop: false,
         leftBlackStartOpacity: 0.96,
         noGeneratedCharacters: true,
         noGeneratedSecondaryScene: true
