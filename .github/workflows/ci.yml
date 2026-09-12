@@ -31,36 +31,72 @@ jobs:
       - name: Validate generated-cover pipeline syntax
         run: node --check scripts/generate-platform-covers.js
 
-      - name: Generate and validate approved-board exact cover set
+      - name: Generate and validate canonical approved-board cover set
         run: |
           rm -rf assets/generated-covers
           NUVIO_FORCE_COVER_REGEN=1 npm run generate:covers
           node - <<'NODE'
           const fs = require('fs');
           const sharp = require('sharp');
+
           (async () => {
             const manifest = JSON.parse(fs.readFileSync('assets/generated-covers/manifest.json', 'utf8'));
-            if (manifest.revision !== 'generated-v5-approved-board-exact') throw new Error('unexpected cover revision');
-            if (manifest.artDirection !== 'approved-board-exact-v5') throw new Error('unexpected art direction');
+            if (manifest.revision !== 'generated-v7-approved-board-canonical-direct') throw new Error('unexpected cover revision: ' + manifest.revision);
+            if (manifest.artDirection !== 'approved-board-canonical-direct-v7') throw new Error('unexpected art direction: ' + manifest.artDirection);
+            if (manifest.visualReference !== 'validated-streaming-platforms-and-genres-board') throw new Error('canonical visual reference missing');
             if (manifest.backgroundPolicy?.tmdbBackdropDependency !== false) throw new Error('TMDb background dependency leaked');
             if (manifest.backgroundPolicy?.moodMixing !== false) throw new Error('mood mixing leaked');
             if (manifest.backgroundPolicy?.secondaryCompositing !== false) throw new Error('secondary compositing leaked');
             if (manifest.backgroundPolicy?.hueMutation !== false) throw new Error('hue mutation leaked');
             if (manifest.backgroundPolicy?.horizontalMirroring !== false) throw new Error('mirroring leaked');
             if (manifest.backgroundPolicy?.exactApprovedCardSource !== true) throw new Error('approved-card source policy missing');
+            if (manifest.backgroundPolicy?.canonicalBoardCellsArePrimary !== true) throw new Error('canonical board is not primary');
+            if (manifest.backgroundPolicy?.canonicalBoardCellPreservedInFull !== true) throw new Error('canonical board cell preservation missing');
             if (!Array.isArray(manifest.approvedCardFallbacks) || manifest.approvedCardFallbacks.length !== 0) throw new Error('approved-card fallback detected: ' + JSON.stringify(manifest.approvedCardFallbacks));
             if (JSON.stringify(manifest.explicitDerivedSources || []) !== JSON.stringify(['tr/bi-kanal'])) {
               throw new Error('unexpected derived service set: ' + JSON.stringify(manifest.explicitDerivedSources));
             }
-            if (JSON.stringify(manifest.crossRegionApprovedSources || []) !== JSON.stringify(['tr/crunchyroll<=assets/platform-art/fr/crunchyroll-card.jpg'])) {
+            if (JSON.stringify(manifest.crossRegionApprovedSources || []) !== JSON.stringify([])) {
               throw new Error('unexpected cross-region approved source set: ' + JSON.stringify(manifest.crossRegionApprovedSources));
             }
+
+            const board = manifest.boardSource || {};
+            if (board.sourceFile !== 'assets/approved-board/canonical.b64.*') throw new Error('wrong canonical board source');
+            if (Number(board.width || 0) < 1200 || Number(board.height || 0) < 675) throw new Error('canonical board dimensions invalid');
+            if (Number(board.platformCells || 0) !== 20) throw new Error('canonical board platform count invalid');
+            if (Number(board.genreCells || 0) !== 18) throw new Error('canonical board genre count invalid');
+            if (typeof board.sha256 !== 'string' || board.sha256.length !== 64) throw new Error('canonical board sha256 missing');
+
+            const library = manifest.canonicalLibrary || {};
+            if (Number(library.platformCount || 0) !== 20) throw new Error('canonical platform library count invalid');
+            if (Number(library.genreCount || 0) !== 18) throw new Error('canonical genre library count invalid');
+            if (!Array.isArray(library.files) || library.files.length !== 114) throw new Error('canonical library file count invalid: ' + library.files?.length);
+            if (new Set((library.platforms || []).map((item) => item.sourceDigest)).size !== 20) throw new Error('canonical platform crops are not unique');
+            if (new Set((library.genres || []).map((item) => item.sourceDigest)).size !== 18) throw new Error('canonical genre crops are not unique');
+
+            const expectedPlatforms = ['netflix','prime-video','disney-plus','max','apple-tv-plus','paramount-plus','canal-plus','crunchyroll','anime-asia','tod','tabii','exxen','puhutv','tv-plus','tivibu','d-smart-go','s-sport-plus','bein-connect','blutv','mubi'];
+            const expectedGenres = ['action','thriller','crime','science-fiction','fantasy','horror','comedy','romance','documentary','adventure','animation','anime','drama','mystery','western','music','sport','family'];
+            const platformKeys = new Set((library.platforms || []).map((item) => item.key));
+            const genreKeys = new Set((library.genres || []).map((item) => item.key));
+            for (const key of expectedPlatforms) if (!platformKeys.has(key)) throw new Error('canonical platform missing: ' + key);
+            for (const key of expectedGenres) if (!genreKeys.has(key)) throw new Error('canonical genre missing: ' + key);
+
             for (const item of manifest.results || []) {
               const biKanal = item.region === 'tr' && item.provider === 'bi-kanal';
-              const trCrunchyroll = item.region === 'tr' && item.provider === 'crunchyroll';
-              const validExact =
+              const validCanonical =
                 item.sourceMode === 'approved-board-exact' &&
-                item.sourceKind === 'approved-card' &&
+                item.canonicalBoard === true &&
+                item.sourceKind === 'approved-board-crop' &&
+                item.sourceFile === 'assets/approved-board/canonical.b64.*' &&
+                typeof item.boardKey === 'string' &&
+                typeof item.sourceDigest === 'string' &&
+                item.sourceDigest.length === 64 &&
+                item.derived !== true &&
+                item.crossRegion !== true;
+              const validLocal =
+                item.sourceMode === 'approved-board-exact' &&
+                item.canonicalBoard !== true &&
+                item.sourceKind === 'approved-card-local' &&
                 String(item.sourceFile || '').endsWith('-card.jpg') &&
                 item.derived !== true &&
                 item.crossRegion !== true;
@@ -71,87 +107,128 @@ jobs:
                 item.sourceFile === 'assets/genre-art/shared/news-card.jpg' &&
                 item.derived === true &&
                 item.crossRegion !== true;
-              const validCrossRegionCrunchyroll =
-                trCrunchyroll &&
-                item.sourceMode === 'approved-board-exact' &&
-                item.sourceKind === 'approved-card-cross-region' &&
-                item.sourceFile === 'assets/platform-art/fr/crunchyroll-card.jpg' &&
-                item.derived !== true &&
-                item.crossRegion === true;
-              if (!validExact && !validBiKanal && !validCrossRegionCrunchyroll) {
+              if (!validCanonical && !validLocal && !validBiKanal) {
                 throw new Error('service escaped approved source contract: ' + JSON.stringify(item));
               }
             }
+
             for (const item of manifest.genres || []) {
-              if (item.sourceMode !== 'approved-board-exact' || item.sourceKind !== 'approved-card' || !String(item.sourceFile || '').endsWith('-card.jpg')) {
-                throw new Error('genre escaped approved card source: ' + JSON.stringify(item));
+              const validCanonical =
+                item.sourceMode === 'approved-board-exact' &&
+                item.canonicalBoard === true &&
+                item.sourceKind === 'approved-board-crop' &&
+                item.sourceFile === 'assets/approved-board/canonical.b64.*' &&
+                item.boardKey === item.genre &&
+                typeof item.sourceDigest === 'string' &&
+                item.sourceDigest.length === 64;
+              const validLocal =
+                item.sourceMode === 'approved-board-exact' &&
+                item.canonicalBoard !== true &&
+                item.sourceKind === 'approved-card-local' &&
+                String(item.sourceFile || '').endsWith('-card.jpg');
+              if (!validCanonical && !validLocal) {
+                throw new Error('genre escaped approved source contract: ' + JSON.stringify(item));
               }
             }
+
             if (Number(manifest.platformParents || 0) < 40) throw new Error('too few service identities');
             if (Number(manifest.genreIdentities || 0) < 20) throw new Error('too few genre identities');
-            const sample = 'assets/generated-covers/fr/netflix/series-shield.jpg';
-            const meta = await sharp(sample).metadata();
-            if (meta.format !== 'jpeg' || meta.width !== 1600 || meta.height !== 900) {
-              throw new Error(`bad sample cover: ${meta.format} ${meta.width}x${meta.height}`);
+
+            for (const sample of [
+              'assets/generated-covers/fr/netflix/series-shield.jpg',
+              'assets/generated-covers/_canonical/platforms/bein-connect-shield.jpg',
+              'assets/generated-covers/_canonical/platforms/blutv-desktop.jpg',
+              'assets/generated-covers/_canonical/genres/anime-shield.jpg',
+              'assets/generated-covers/_canonical/genres/sport-desktop.jpg',
+              'assets/generated-covers/_canonical/platforms/mubi-hero.jpg'
+            ]) {
+              const meta = await sharp(sample).metadata();
+              const hero = sample.endsWith('-hero.jpg');
+              if (meta.format !== 'jpeg' || meta.width !== (hero ? 1920 : 1600) || meta.height !== (hero ? 1080 : 900)) {
+                throw new Error(`bad canonical asset ${sample}: ${meta.format} ${meta.width}x${meta.height}`);
+              }
             }
+
             console.log(JSON.stringify({
               revision: manifest.revision,
+              board: `${board.width}x${board.height}`,
+              boardSha256: board.sha256,
               generatedFiles: manifest.generatedFiles,
+              canonicalPlatforms: library.platformCount,
+              canonicalGenres: library.genreCount,
               platformParents: manifest.platformParents,
-              genreIdentities: manifest.genreIdentities,
-              sample: `${meta.width}x${meta.height}`
+              genreIdentities: manifest.genreIdentities
             }));
           })().catch((error) => { console.error(error); process.exit(1); });
           NODE
 
-      - name: Build approved-board visual preview
+      - name: Build canonical approved-board visual preview
         run: |
           node - <<'NODE'
           const fs = require('fs');
           const path = require('path');
           const sharp = require('sharp');
 
-          const samples = [
-            ['Netflix', 'assets/generated-covers/fr/netflix/series-shield.jpg'],
-            ['Prime Video', 'assets/generated-covers/fr/prime-video/series-shield.jpg'],
-            ['Disney+', 'assets/generated-covers/fr/disney-plus/series-shield.jpg'],
-            ['Max', 'assets/generated-covers/fr/hbo-max/series-shield.jpg'],
-            ['Apple TV+', 'assets/generated-covers/fr/apple-tv-plus/series-shield.jpg'],
-            ['Action', 'assets/generated-covers/fr/genres/action-shield.jpg'],
-            ['Thriller', 'assets/generated-covers/fr/genres/thriller-shield.jpg'],
-            ['Crime', 'assets/generated-covers/fr/genres/crime-shield.jpg'],
-            ['Science-fiction', 'assets/generated-covers/fr/genres/science-fiction-shield.jpg'],
-            ['Fantasy', 'assets/generated-covers/fr/genres/fantasy-shield.jpg'],
-            ['Horreur', 'assets/generated-covers/fr/genres/horror-shield.jpg'],
-            ['Apple Hero', 'assets/generated-covers/fr/apple-tv-plus/series-hero.jpg']
-          ];
+          const platformKeys = ['netflix','prime-video','disney-plus','max','apple-tv-plus','paramount-plus','canal-plus','crunchyroll','anime-asia','tod','tabii','exxen','puhutv','tv-plus','tivibu','d-smart-go','s-sport-plus','bein-connect','blutv','mubi'];
+          const genreKeys = ['action','thriller','crime','science-fiction','fantasy','horror','comedy','romance','documentary','adventure','animation','anime','drama','mystery','western','music','sport','family'];
 
           (async () => {
-            const cols = 3;
-            const cellW = 640;
-            const cellH = 390;
-            const rows = Math.ceil(samples.length / cols);
-            const composites = [];
-            for (let i = 0; i < samples.length; i += 1) {
-              const [label, file] = samples[i];
-              if (!fs.existsSync(file)) throw new Error('preview sample missing: ' + file);
-              const image = await sharp(file).resize(620, 349, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer();
-              const labelSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="620" height="38"><rect width="620" height="38" fill="#02040a"/><text x="12" y="27" fill="white" font-family="Arial,sans-serif" font-size="22" font-weight="700">${label}</text></svg>`);
-              composites.push({ input: image, left: (i % cols) * cellW + 10, top: Math.floor(i / cols) * cellH + 10 });
-              composites.push({ input: labelSvg, left: (i % cols) * cellW + 10, top: Math.floor(i / cols) * cellH + 359 });
+            const canonicalParts = [
+              'canonical.b64.00','canonical.b64.01','canonical.b64.02','canonical.b64.03','canonical.b64.04',
+              'canonical.b64.05','canonical.b64.06','canonical.b64.07','canonical.b64.08a','canonical.b64.08b','canonical.b64.09'
+            ];
+            const b64 = canonicalParts.map((name) => fs.readFileSync(path.join('assets/approved-board', name), 'utf8').trim()).join('');
+            const master = Buffer.from(b64, 'base64');
+            const masterPreview = await sharp(master).resize(1880, 1058, { fit: 'contain', background: '#02040a' }).jpeg({ quality: 94 }).toBuffer();
+
+            const width = 1920;
+            const topH = 1098;
+            const platformCellW = 380;
+            const platformCellH = 230;
+            const platformRows = 4;
+            const genreCellW = 316;
+            const genreCellH = 190;
+            const genreRows = 3;
+            const height = topH + platformRows * platformCellH + genreRows * genreCellH + 80;
+            const composites = [{ input: masterPreview, left: 20, top: 20 }];
+
+            for (let i = 0; i < platformKeys.length; i += 1) {
+              const key = platformKeys[i];
+              const file = path.join('assets/generated-covers/_canonical/platforms', key + '-shield.jpg');
+              if (!fs.existsSync(file)) throw new Error('canonical platform preview missing: ' + file);
+              const image = await sharp(file).resize(360, 203, { fit: 'cover' }).jpeg({ quality: 91 }).toBuffer();
+              composites.push({
+                input: image,
+                left: 10 + (i % 5) * platformCellW,
+                top: topH + Math.floor(i / 5) * platformCellH
+              });
             }
-            await sharp({ create: { width: cols * cellW, height: rows * cellH, channels: 3, background: '#02040a' } })
+
+            const genreTop = topH + platformRows * platformCellH;
+            for (let i = 0; i < genreKeys.length; i += 1) {
+              const key = genreKeys[i];
+              const file = path.join('assets/generated-covers/_canonical/genres', key + '-shield.jpg');
+              if (!fs.existsSync(file)) throw new Error('canonical genre preview missing: ' + file);
+              const image = await sharp(file).resize(296, 166, { fit: 'cover' }).jpeg({ quality: 91 }).toBuffer();
+              composites.push({
+                input: image,
+                left: 10 + (i % 6) * genreCellW,
+                top: genreTop + Math.floor(i / 6) * genreCellH
+              });
+            }
+
+            await sharp({ create: { width, height, channels: 3, background: '#02040a' } })
               .composite(composites)
-              .jpeg({ quality: 91, chromaSubsampling: '4:4:4' })
-              .toFile('approved-board-v5-preview.jpg');
+              .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+              .toFile('approved-board-v7-preview.jpg');
           })().catch((error) => { console.error(error); process.exit(1); });
           NODE
 
-      - name: Upload approved-board visual preview
+      - name: Upload canonical approved-board visual preview
         uses: actions/upload-artifact@v4
         with:
-          name: approved-board-v5-preview
-          path: approved-board-v5-preview.jpg
+          name: approved-board-v7-preview
+          path: approved-board-v7-preview.jpg
           if-no-files-found: error
           retention-days: 7
 
