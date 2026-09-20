@@ -2908,6 +2908,7 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
     excludedNoImdb: 0,
     excludedNoTorrentio: 0,
     excludedTorrentioEmpty: 0,
+    torrentioVerifierUnavailableIncluded: 0,
     torrentioHttp403: 0,
     torrentioHttp429: 0,
     torrentioHttpOther: 0,
@@ -2958,7 +2959,13 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
     const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
     if (!imdbId) return { reason: 'no-imdb' };
     const torrentio = await torrentioAvailability(imdbId);
-    if (!torrentio.available) return { reason: 'no-torrentio', torrentioReason: torrentio.reason };
+    const verifierUnavailable = !torrentio.available && (
+      ['http-403', 'http-429', 'timeout', 'network'].includes(torrentio.reason) ||
+      Number(torrentio.status || 0) >= 500
+    );
+    if (!torrentio.available && !verifierUnavailable) {
+      return { reason: 'no-torrentio', torrentioReason: torrentio.reason, torrentioStatus: torrentio.status };
+    }
 
     const meta = baseMeta(
       details,
@@ -2970,7 +2977,9 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
     meta.description = [
       isNowPlaying ? 'Actuellement au cinéma en Belgique' : 'Sortie cinéma Belgique',
       `Date cinéma Belgique : ${humanCalendarDate(release.date)}`,
-      'Disponibilité vérifiée par Torrentio',
+      torrentio.available
+        ? 'Disponibilité vérifiée par Torrentio'
+        : 'Vérification serveur indisponible ; Nuvio contrôle les sources avec tes addons à l’ouverture',
       meta.description
     ].filter(Boolean).join('\n\n');
     meta._calendarProvider = 'Cinéma · Torrentio';
@@ -2978,7 +2987,8 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
     meta._dedupeKey = `cinema-torrentio:${imdbId}`;
     meta._cinemaNowPlaying = isNowPlaying;
     meta._cinemaReleaseDate = release.date;
-    return { meta };
+    meta._cinemaTorrentioVerified = Boolean(torrentio.available);
+    return { meta, verifierUnavailable };
   };
 
   for (let offset = 0; offset < candidates.length && metas.length < CINEMA_TARGET_ITEMS; offset += CINEMA_SCAN_BATCH_SIZE) {
@@ -3021,7 +3031,10 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
       }
       if (result?.reason === 'outside-window') { stats.excludedOutsideWindow += 1; continue; }
       if (result?.reason === 'candidate-timeout') { stats.enrichmentErrors += 1; continue; }
-      if (result?.meta) metas.push(result.meta);
+      if (result?.meta) {
+        if (result.verifierUnavailable) stats.torrentioVerifierUnavailableIncluded += 1;
+        metas.push(result.meta);
+      }
     }
   }
 
@@ -4357,12 +4370,13 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   res.setHeader('X-Nuvio-Calendar-Total', String(allMetas.length));
   res.setHeader('X-Nuvio-Calendar-Source-Errors', String(Number(result.stats?.sourceErrors || 0)));
   if (catalog.source === 'torrentio-theatrical') {
-    res.setHeader('X-Nuvio-Cinema-Debug-Rev', '9');
+    res.setHeader('X-Nuvio-Cinema-Debug-Rev', '10');
     res.setHeader('X-Nuvio-Cinema-Candidates', String(Number(result.stats?.candidates || 0)));
     res.setHeader('X-Nuvio-Cinema-Scanned', String(Number(result.stats?.scannedCandidates || 0)));
     res.setHeader('X-Nuvio-Cinema-No-Imdb', String(Number(result.stats?.excludedNoImdb || 0)));
     res.setHeader('X-Nuvio-Cinema-No-Torrentio', String(Number(result.stats?.excludedNoTorrentio || 0)));
     res.setHeader('X-Nuvio-Cinema-Torrentio-Empty', String(Number(result.stats?.excludedTorrentioEmpty || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-Unverified-Included', String(Number(result.stats?.torrentioVerifierUnavailableIncluded || 0)));
     res.setHeader('X-Nuvio-Cinema-Torrentio-403', String(Number(result.stats?.torrentioHttp403 || 0)));
     res.setHeader('X-Nuvio-Cinema-Torrentio-429', String(Number(result.stats?.torrentioHttp429 || 0)));
     res.setHeader('X-Nuvio-Cinema-Torrentio-Http-Other', String(Number(result.stats?.torrentioHttpOther || 0)));
