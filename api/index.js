@@ -232,6 +232,41 @@ function combinedCollections(req) {
   return combinedRawCollections(req).map(shieldizeCollectionArt);
 }
 
+function cinemaTorrentioCollection(req) {
+  const origin = originFromRequest(req);
+  const frOrigin = `${origin}/fr`;
+  const buckets = ['today', 'yesterday', 'thisweek', 'lastweek', 'thismonth', 'previousmonth', 'nextweek', 'nextmonth'];
+  const sources = buckets.map((bucket) => ({
+    provider: 'addon',
+    addonId: 'com.nuvio.calendar.archives.fr.coexist',
+    type: 'movie',
+    catalogId: `cinema-torrentio-${bucket}`
+  }));
+  return {
+    id: 'cinema-now-torrentio',
+    title: '🎬 Cinéma du moment',
+    backdropImageUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v1`,
+    pinToTop: true,
+    focusGlowEnabled: true,
+    viewMode: 'FOLLOW_LAYOUT',
+    showAllTab: false,
+    folders: [{
+      id: 'cinema-now-movies',
+      title: 'Films disponibles',
+      coverImageUrl: `${frOrigin}/platform-category-card.svg?provider=vod-fr&category=films&v=cinema-torrentio-v1`,
+      focusGifEnabled: false,
+      coverEmoji: '🎬',
+      tileShape: 'LANDSCAPE',
+      hideTitle: false,
+      heroBackdropUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v1`,
+      heroVideoUrl: null,
+      titleLogoUrl: `${frOrigin}/platform-logo?provider=vod-fr&type=movie&v=cinema-torrentio-v1`,
+      sources,
+      catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
+    }]
+  };
+}
+
 function combinedRawCollections(req) {
   const origin = originFromRequest(req);
   const nowUs = usHandler._internals.runtimeNow();
@@ -256,7 +291,7 @@ function combinedRawCollections(req) {
   // 🇫🇷 VOD France = first Digital release in FR
   // 🌍 VOD Mondiale = first Digital release in any country
   // 🇺🇸 VOD = first Digital release in US
-  return [...frCollections, ...globalCollections, ...trCollections, ...usCollections];
+  return [cinemaTorrentioCollection(req), ...frCollections, ...globalCollections, ...trCollections, ...usCollections];
 }
 
 function coexistenceReport(req) {
@@ -282,7 +317,7 @@ function coexistenceReport(req) {
     manifestUrls: [`${origin}/fr/manifest.json`, `${origin}/global/manifest.json`, `${origin}/tr/manifest.json`, `${origin}/us/manifest.json`],
     combinedCollectionsUrl: `${origin}/nuvio-collections-fr-global-tr-usa.json`,
     collectionCount: collections.length,
-    frCollectionCount: collections.filter((c) => c.title.startsWith('🇫🇷')).length,
+    frCollectionCount: collections.filter((c) => c.title.startsWith('🇫🇷') || c.id === 'cinema-now-torrentio').length,
     globalCollectionCount: collections.filter((c) => c.title.startsWith('🌍')).length,
     trCollectionCount: collections.filter((c) => c.title.startsWith('🇹🇷')).length,
     usCollectionCount: collections.filter((c) => c.title.startsWith('🇺🇸')).length,
@@ -373,6 +408,7 @@ module.exports._internals = {
   combinedCollections,
   combinedRawCollections,
   combinedDesktopCollections,
+  cinemaTorrentioCollection,
   shieldizeCollectionArt,
   shieldCollectionVisualUrl,
   generatedCoverStaticUrl,

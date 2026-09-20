@@ -49,34 +49,56 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12214);
+  assert.equal(fr.catalogs.length, 12222);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
 
-test('combined import has 49 unique collections: France, Global, Türkiye, then USA', async () => {
+test('combined import has 50 unique collections with Cinema first, then France, Global, Türkiye, and USA', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 49);
+  assert.equal(collections.length, 50);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
   assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 19);
   assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
-  assert.equal(collections[0].title, '🇫🇷 Netflix');
-  assert.equal(collections[13].title, '🇫🇷 VOD France');
-  assert.equal(collections[14].title, '🇫🇷 Genres · Films');
-  assert.equal(collections[15].title, '🇫🇷 Genres · Séries');
-  assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
-  assert.equal(collections[17].title, '🌍 VOD Mondiale');
-  assert.equal(collections[18].title, '🇹🇷 Netflix');
-  assert.equal(collections[36].title, '🇹🇷 VOD Türkiye');
-  assert.equal(collections[37].title, '🇺🇸 Netflix');
+  assert.equal(collections[0].title, '🎬 Cinéma du moment');
+  assert.equal(collections[1].title, '🇫🇷 Netflix');
+  assert.equal(collections[14].title, '🇫🇷 VOD France');
+  assert.equal(collections[15].title, '🇫🇷 Genres · Films');
+  assert.equal(collections[16].title, '🇫🇷 Genres · Séries');
+  assert.equal(collections[17].title, '🌍 Anime Japon + Corée');
+  assert.equal(collections[18].title, '🌍 VOD Mondiale');
+  assert.equal(collections[19].title, '🇹🇷 Netflix');
+  assert.equal(collections[37].title, '🇹🇷 VOD Türkiye');
+  assert.equal(collections[38].title, '🇺🇸 Netflix');
   assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
+});
+
+test('Cinema du moment is date-structured and reuses the installed France addon', async () => {
+  const collections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
+  const cinema = collections.find((collection) => collection.id === 'cinema-now-torrentio');
+  assert(cinema);
+  assert.equal(cinema.title, '🎬 Cinéma du moment');
+  assert.equal(cinema.folders.length, 1);
+  assert.deepEqual(cinema.folders[0].sources.map((source) => source.catalogId), [
+    'cinema-torrentio-today',
+    'cinema-torrentio-yesterday',
+    'cinema-torrentio-thisweek',
+    'cinema-torrentio-lastweek',
+    'cinema-torrentio-thismonth',
+    'cinema-torrentio-previousmonth',
+    'cinema-torrentio-nextweek',
+    'cinema-torrentio-nextmonth'
+  ]);
+  assert(cinema.folders[0].sources.every((source) =>
+    source.addonId === 'com.nuvio.calendar.archives.fr.coexist' && source.type === 'movie'
+  ));
 });
 
 
@@ -294,7 +316,7 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 49);
+  assert.equal(collections.length, 50);
 
   const targets = [
     collections.find((c) => c.title === '🇫🇷 Netflix'),
@@ -349,7 +371,7 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 86400);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 49);
+  assert.equal(collections.length, 50);
 
   const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
   const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');

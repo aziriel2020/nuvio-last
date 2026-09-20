@@ -1024,6 +1024,12 @@ function archiveProviderAllowed(expectedType, providerSlug) {
 function resolveArchiveCatalog(catalogId, type, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
   const raw = String(catalogId || '');
 
+  const cinema = raw.match(/^cinema-torrentio-(today|yesterday|thisweek|lastweek|thismonth|previousmonth|nextweek|nextmonth)$/);
+  if (cinema) {
+    if (type !== 'movie') return null;
+    return buildCinemaTorrentioCatalogEntries().find((entry) => entry.id === raw)?.catalog || null;
+  }
+
   const genreMonthly = raw.match(/^genres-fr-(series|movie)-(\d+)-(\d{4})-(\d{2})$/);
   if (genreMonthly) {
     const expectedType = genreMonthly[1] === 'movie' ? 'movie' : 'series';
@@ -1190,6 +1196,37 @@ const FILM_EXTRA_CATALOGS = Object.freeze([
   { label: 'Actuellement au cinéma', value: 'nowplaying' },
   { label: 'Upcoming Movies — 1 an', value: 'upcomingyear' }
 ]);
+const CINEMA_TORRENTIO_BUCKETS = Object.freeze([
+  { key: 'today', label: 'Aujourd’hui' },
+  { key: 'yesterday', label: 'Hier' },
+  { key: 'thisweek', label: 'Cette semaine' },
+  { key: 'lastweek', label: 'Semaine dernière' },
+  { key: 'thismonth', label: 'Ce mois-ci' },
+  { key: 'previousmonth', label: 'Mois dernier' },
+  { key: 'nextweek', label: 'Semaine prochaine' },
+  { key: 'nextmonth', label: 'Mois prochain' }
+]);
+const CINEMA_TORRENTIO_CACHE_MS = 6 * 60 * 60 * 1000;
+const CINEMA_TORRENTIO_NEGATIVE_CACHE_MS = 60 * 60 * 1000;
+const cinemaTorrentioCache = new Map();
+
+function buildCinemaTorrentioCatalogEntries() {
+  return CINEMA_TORRENTIO_BUCKETS.map(({ key, label }) => ({
+    id: `cinema-torrentio-${key}`,
+    catalog: {
+      type: 'movie',
+      name: label,
+      providerSlug: 'cinema-torrentio',
+      cardProvider: 'Cinéma · Torrentio',
+      period: key,
+      cinemaBucket: key,
+      source: 'torrentio-theatrical',
+      section: 'films',
+      noFilters: true,
+      explore: true
+    }
+  }));
+}
 const PERIOD_LABELS = new Map([...PERIOD_OPTIONS, ...FILM_EXTRA_CATALOGS].map((entry) => [entry.value, entry.label]));
 const STREAMING_PROVIDERS = Object.freeze(PROVIDERS.filter((provider) => provider.slug !== 'crunchyroll'));
 const SERIES_STREAMING_FILTERS = Object.freeze([
@@ -1953,7 +1990,7 @@ function requireTmdbConfig() {
 }
 
 function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
-  const catalogs = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)].map(({ id, catalog }) => {
+  const catalogs = [...buildCinemaTorrentioCatalogEntries(), ...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)].map(({ id, catalog }) => {
     const filters = filterOptionsForCatalog(catalog).map((entry) => entry.label);
     return {
       type: catalog.type,
@@ -2673,6 +2710,146 @@ async function fetchDetails(type, tmdbId) {
     append_to_response: append
   });
   return detailsCache.set(cacheKey, details, DETAILS_TTL_MS);
+}
+
+function cinemaMonthWindow(year, month) {
+  return {
+    start: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10),
+    end: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10)
+  };
+}
+
+function cinemaDateWindow(bucket, now = new Date(), timeZone = DEFAULT_TIMEZONE) {
+  const today = localIsoDate(now, timeZone);
+  const noon = new Date(`${today}T12:00:00Z`);
+  const daysSinceMonday = (noon.getUTCDay() + 6) % 7;
+  const monday = addIsoDays(today, -daysSinceMonday);
+  const [year, month] = today.split('-').map(Number);
+  if (bucket === 'today') return { start: today, end: today, today };
+  if (bucket === 'yesterday') {
+    const day = addIsoDays(today, -1);
+    return { start: day, end: day, today, allowPast: true };
+  }
+  if (bucket === 'thisweek') return { start: monday, end: addIsoDays(monday, 6), today, allowPast: true };
+  if (bucket === 'lastweek') return { start: addIsoDays(monday, -7), end: addIsoDays(monday, -1), today, allowPast: true };
+  if (bucket === 'thismonth') return { ...cinemaMonthWindow(year, month - 1), today, allowPast: true };
+  if (bucket === 'previousmonth') return { ...cinemaMonthWindow(year, month - 2), today, allowPast: true };
+  if (bucket === 'nextweek') return { start: addIsoDays(monday, 7), end: addIsoDays(monday, 13), today };
+  return { ...cinemaMonthWindow(year, month), today };
+}
+
+function cinemaRelease(details, window) {
+  const region = String(process.env.CINEMA_REGION || 'BE').trim().toUpperCase();
+  const country = (details?.release_dates?.results || []).find((entry) => entry?.iso_3166_1 === region);
+  const releases = (country?.release_dates || [])
+    .filter((entry) => [2, 3].includes(Number(entry?.type)))
+    .map((entry) => ({ type: Number(entry.type), date: normalizeIsoDate(entry?.release_date) }))
+    .filter((entry) => entry.date && entry.date >= window.start && entry.date <= window.end)
+    .sort((a, b) => a.date.localeCompare(b.date) || b.type - a.type);
+  return releases.find((entry) => entry.type === 3) || releases.find((entry) => entry.type === 2) || null;
+}
+
+async function discoverCinemaCandidates(window) {
+  const region = String(process.env.CINEMA_REGION || 'BE').trim().toUpperCase();
+  const limit = Math.max(10, Math.min(80, Number(process.env.CINEMA_MAX_CANDIDATES || 40)));
+  const items = [];
+  for (let page = 1; page <= 4 && items.length < limit; page += 1) {
+    const payload = await tmdbFetch('/discover/movie', {
+      language: getConfig().language,
+      page,
+      include_adult: false,
+      include_video: false,
+      region,
+      sort_by: 'popularity.desc',
+      with_release_type: '2|3',
+      'release_date.gte': window.start,
+      'release_date.lte': window.end
+    });
+    items.push(...(payload?.results || []));
+    if (page >= Number(payload?.total_pages || 1)) break;
+  }
+  return items.slice(0, limit);
+}
+
+async function torrentioHasStreams(imdbId) {
+  if (!/^tt\d+$/.test(String(imdbId || ''))) return false;
+  const cached = cinemaTorrentioCache.get(imdbId);
+  if (cached && cached.expiresAt > Date.now()) return cached.available;
+  const base = String(process.env.TORRENTIO_BASE || 'https://torrentio.strem.fun').replace(/\/+$/, '');
+  let available = false;
+  try {
+    const response = await fetch(`${base}/stream/movie/${encodeURIComponent(imdbId)}.json`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Stremio/4 NuvioCinema/1.0' },
+      signal: AbortSignal.timeout(Math.max(3000, Math.min(30000, Number(process.env.TORRENTIO_TIMEOUT_MS || 15000))))
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      available = Array.isArray(payload?.streams) && payload.streams.length > 0;
+    }
+  } catch {}
+  cinemaTorrentioCache.set(imdbId, {
+    available,
+    expiresAt: Date.now() + (available ? CINEMA_TORRENTIO_CACHE_MS : CINEMA_TORRENTIO_NEGATIVE_CACHE_MS)
+  });
+  if (cinemaTorrentioCache.size > 2000) {
+    for (const [key, value] of cinemaTorrentioCache) {
+      if (value.expiresAt <= Date.now()) cinemaTorrentioCache.delete(key);
+    }
+  }
+  return available;
+}
+
+async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  const window = cinemaDateWindow(catalog.cinemaBucket, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: 'cinema-torrentio',
+    type: 'movie',
+    period: catalog.cinemaBucket,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-cinema-torrentio-v1`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+  const stats = emptyStats({ label: 'Cinéma · Torrentio', ids: [] }, catalog, window, timeZone);
+  stats.excludedNoTorrentio = 0;
+  const candidates = await discoverCinemaCandidates(window);
+  stats.candidates = candidates.length;
+  const settled = await mapLimitSettled(candidates, 6, async (candidate) => {
+    const details = await fetchDetails('movie', candidate.id);
+    const release = cinemaRelease(details, window);
+    if (!release) return { reason: 'outside-window' };
+    const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
+    if (!imdbId) return { reason: 'no-imdb' };
+    if (!(await torrentioHasStreams(imdbId))) return { reason: 'no-torrentio' };
+    const meta = baseMeta(details, 'movie', release.date, `Sortie cinéma Belgique • ${humanCalendarDate(release.date)}`);
+    if (!meta.poster) return { reason: 'no-poster' };
+    meta.description = [
+      `Cinéma Belgique • ${humanCalendarDate(release.date)}`,
+      'Disponibilité vérifiée par Torrentio',
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._calendarProvider = 'Cinéma · Torrentio';
+    meta._calendarSource = 'torrentio-theatrical';
+    meta._dedupeKey = `cinema-torrentio:${imdbId}`;
+    return { meta };
+  });
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (result?.reason === 'no-imdb') { stats.excludedNoImdb += 1; continue; }
+    if (result?.reason === 'no-torrentio') { stats.excludedNoTorrentio += 1; continue; }
+    if (result?.reason) { countReason(stats, result.reason); continue; }
+    if (result?.meta) metas.push(result.meta);
+  }
+  const historical = ['yesterday', 'lastweek', 'thismonth', 'previousmonth'].includes(catalog.cinemaBucket);
+  const finalMetas = sortAndDedupeMetas(metas);
+  if (historical) finalMetas.reverse();
+  stats.final = finalMetas.length;
+  const result = { metas: finalMetas.slice(0, getConfig().maxItems), stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
 }
 
 async function fetchSeasonDetails(tmdbId, seasonNumber) {
@@ -3872,6 +4049,7 @@ async function buildCrunchyrollAnimeCatalog({ catalog, timeZone, now = new Date(
 
 async function buildCatalog(options) {
   const source = options.catalog.source;
+  if (source === 'torrentio-theatrical') return buildCinemaTorrentioCatalog(options);
   if (source === 'combined-calendar') return buildCombinedCatalog(options);
   if (source === 'crunchyroll-anime-combined') return buildCrunchyrollAnimeCatalog(options);
   if (source === 'tvmaze-broadcast') return buildTvBroadcastCatalog(options);

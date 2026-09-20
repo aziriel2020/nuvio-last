@@ -94,7 +94,11 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(manifest.version,'1.3.1');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192));
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+8);
+  assert.deepEqual(
+    manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
+    ['cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
+  );
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
 
