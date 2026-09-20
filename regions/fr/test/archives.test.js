@@ -26,6 +26,40 @@ test('France archive month windows roll automatically',()=>{
   assert.equal(calendar.dateWindow('archive-2026-09',fixedSep,tz).empty,false);
 });
 
+test('Cinema uses its own real week/month windows instead of the generic fallback',()=>{
+  const zone='Europe/Brussels';
+  assert.deepEqual(api._internals.cinemaDateWindow('thisweek',fixedNow,zone),{
+    start:'2026-08-24',end:'2026-08-30',today:'2026-08-24',allowPast:true
+  });
+  assert.deepEqual(api._internals.cinemaDateWindow('thismonth',fixedNow,zone),{
+    start:'2026-08-01',end:'2026-08-31',today:'2026-08-24',allowPast:true
+  });
+  assert.deepEqual(api._internals.cinemaDateWindow('previousmonth',fixedNow,zone),{
+    start:'2026-07-01',end:'2026-07-31',today:'2026-08-24',allowPast:true
+  });
+  assert.deepEqual(api._internals.cinemaDateWindow('nextmonth',fixedNow,zone),{
+    start:'2026-09-01',end:'2026-09-30',today:'2026-08-24'
+  });
+});
+
+test('Cinema runtime is bounded so a slow Torrentio cannot hold Nuvio open indefinitely',()=>{
+  assert(api._internals.CINEMA_RESPONSE_BUDGET_MS<=12000);
+  assert(api._internals.CINEMA_MAX_RUNTIME_CANDIDATES<=24);
+  assert(api._internals.CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS<=6000);
+  for(const period of ['thisweek','thismonth','previousmonth','nextmonth']){
+    assert.equal(api._internals.isHomeCalendarPeriod(period),true);
+  }
+  const cinema=api._internals.resolveArchiveCatalog('cinema-torrentio-thismonth','movie',fixedNow,'Europe/Brussels');
+  assert.equal(cinema.source,'torrentio-theatrical');
+  assert.equal(cinema.cinemaBucket,'thismonth');
+});
+
+test('Cinema card renderer uses a real Cinema label and no fake platform identity',()=>{
+  assert.equal(api._internals.platformCollectionTitle('cinema-torrentio'),'Cinéma · Torrentio');
+  assert.equal(api._internals.providerAccentColor('Cinéma · Torrentio'),'#e11d48');
+});
+
+
 test('France provider parents include French services and no US-only Hulu/Peacock',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
   assert.deepEqual(payload.map(c=>c.title),expectedParents);

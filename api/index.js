@@ -255,7 +255,7 @@ function cinemaTorrentioCollection(req) {
       type: 'movie',
       catalogId: `cinema-torrentio-${key}`
     };
-    const art = `${frOrigin}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23e11d48&v=cinema-torrentio-v2`;
+    const art = `${frOrigin}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23e11d48&v=cinema-torrentio-v3`;
     return {
       id: `cinema-now-${key}`,
       title,
@@ -264,9 +264,9 @@ function cinemaTorrentioCollection(req) {
       coverEmoji: '🎬',
       tileShape: 'LANDSCAPE',
       hideTitle: false,
-      heroBackdropUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v2`,
+      heroBackdropUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v3`,
       heroVideoUrl: null,
-      titleLogoUrl: null,
+      titleLogoUrl: `${frOrigin}/platform-logo?provider=cinema-torrentio&type=movie&v=cinema-torrentio-v3`,
       sources: [source],
       catalogSources: [{ addonId: source.addonId, type: source.type, catalogId: source.catalogId }]
     };
@@ -275,7 +275,7 @@ function cinemaTorrentioCollection(req) {
   return {
     id: 'cinema-now-torrentio',
     title: '🎬 Cinéma du moment',
-    backdropImageUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v2`,
+    backdropImageUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v3`,
     pinToTop: true,
     focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT',
