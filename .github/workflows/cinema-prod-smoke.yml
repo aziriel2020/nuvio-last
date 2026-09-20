@@ -18,7 +18,10 @@ jobs:
         run: |
           set -uo pipefail
           BASE="https://141-145-215-202.nip.io"
-          for URL in             "$BASE/fr/manifest.json"             "$BASE/fr/catalog/movie/cinema-torrentio-today.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-yesterday.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-thisweek.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-lastweek.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-thismonth.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-previousmonth.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-nextweek.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-nextmonth.json?probe=rev8"
+          echo "===== Oracle health ====="
+          curl -k -sS -L --connect-timeout 8 --max-time 15 "$BASE/_oracle/health" || true
+          echo
+          for URL in             "$BASE/fr/manifest.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-nowplaying.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-today.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-thisweek.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-thismonth.json?probe=v8"             "$BASE/nuvio-collections-shield.json?probe=v8"             "$BASE/nuvio-collections-desktop.json?probe=v8"
           do
             echo "===== $URL ====="
             OUT="$(mktemp)"
@@ -38,6 +41,9 @@ jobs:
               jq -r 'if (.metas|type)=="array" then (.metas|length) else "n/a" end' "$OUT"
               echo -n "first_meta="
               jq -c '.metas[0] // empty' "$OUT" | head -c 1200
+              echo
+              echo -n "cinema_collection="
+              jq -c 'if type=="array" then ([.[] | select(.id=="cinema-now-torrentio")][0] // null | {id,title,folders:[.folders[]? | {id,title,catalogId:(.sources[0].catalogId // null)}]}) else null end' "$OUT" | head -c 3000
               echo
             else
               echo "json_ok=0"
