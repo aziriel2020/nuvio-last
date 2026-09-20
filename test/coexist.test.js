@@ -136,6 +136,18 @@ test('Cinema live collection filtering never exposes empty clickable folders', (
   assert.equal(withoutCinema.some((collection) => collection.id === 'cinema-now-torrentio'), false);
 });
 
+test('Cinema live availability fails closed instead of exposing unverified folders', async () => {
+  const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
+  const original = handler._internals.frHandler._internals.cinemaAvailableBucketKeys;
+  handler._internals.frHandler._internals.cinemaAvailableBucketKeys = async () => null;
+  try {
+    const collections = await handler._internals.combinedRawCollectionsLive(req);
+    assert.equal(collections.some((collection) => collection.id === 'cinema-now-torrentio'), false);
+  } finally {
+    handler._internals.frHandler._internals.cinemaAvailableBucketKeys = original;
+  }
+});
+
 test('Oracle health collection counts follow the same live-filtered collection payload', () => {
   const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
   const liveFiltered = handler._internals.combinedRawCollections(req, new Set())
