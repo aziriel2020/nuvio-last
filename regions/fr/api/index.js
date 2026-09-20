@@ -2831,32 +2831,57 @@ async function discoverCinemaCandidates(window) {
   return items.slice(0, CINEMA_MAX_DISCOVERY_CANDIDATES);
 }
 
-async function torrentioHasStreams(imdbId) {
-  if (!/^tt\d+$/.test(String(imdbId || ''))) return false;
+async function torrentioAvailability(imdbId) {
+  if (!/^tt\d+$/.test(String(imdbId || ''))) {
+    return { available: false, reason: 'invalid-imdb', status: 0 };
+  }
   const cached = cinemaTorrentioCache.get(imdbId);
-  if (cached && cached.expiresAt > Date.now()) return cached.available;
+  if (cached && cached.expiresAt > Date.now()) return cached;
+
   const base = String(process.env.TORRENTIO_BASE || 'https://torrentio.strem.fun').replace(/\/+$/, '');
-  let available = false;
+  let result = { available: false, reason: 'network', status: 0 };
   try {
     const response = await fetch(`${base}/stream/movie/${encodeURIComponent(imdbId)}.json`, {
       headers: { Accept: 'application/json', 'User-Agent': 'Stremio/4 NuvioCinema/1.0' },
       signal: AbortSignal.timeout(CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS)
     });
-    if (response.ok) {
+    if (!response.ok) {
+      result = { available: false, reason: `http-${response.status}`, status: response.status };
+    } else {
       const payload = await response.json();
-      available = Array.isArray(payload?.streams) && payload.streams.length > 0;
+      const count = Array.isArray(payload?.streams) ? payload.streams.length : 0;
+      result = {
+        available: count > 0,
+        reason: count > 0 ? 'available' : 'empty',
+        status: response.status,
+        count
+      };
     }
-  } catch {}
-  cinemaTorrentioCache.set(imdbId, {
-    available,
-    expiresAt: Date.now() + (available ? CINEMA_TORRENTIO_CACHE_MS : CINEMA_TORRENTIO_NEGATIVE_CACHE_MS)
-  });
+  } catch (error) {
+    const name = String(error?.name || '');
+    result = {
+      available: false,
+      reason: /abort|timeout/i.test(name) ? 'timeout' : 'network',
+      status: 0
+    };
+  }
+
+  const transient = result.reason === 'timeout' || result.reason === 'network' || result.reason.startsWith('http-');
+  const ttl = result.available
+    ? CINEMA_TORRENTIO_CACHE_MS
+    : (transient ? 30 * 1000 : CINEMA_TORRENTIO_NEGATIVE_CACHE_MS);
+  const stored = { ...result, expiresAt: Date.now() + ttl };
+  cinemaTorrentioCache.set(imdbId, stored);
   if (cinemaTorrentioCache.size > 2000) {
     for (const [key, value] of cinemaTorrentioCache) {
       if (value.expiresAt <= Date.now()) cinemaTorrentioCache.delete(key);
     }
   }
-  return available;
+  return stored;
+}
+
+async function torrentioHasStreams(imdbId) {
+  return (await torrentioAvailability(imdbId)).available;
 }
 
 function cinemaBroadWindow(now = new Date(), timeZone = DEFAULT_TIMEZONE) {
@@ -2882,6 +2907,12 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
     scannedCandidates: 0,
     excludedNoImdb: 0,
     excludedNoTorrentio: 0,
+    excludedTorrentioEmpty: 0,
+    torrentioHttp403: 0,
+    torrentioHttp429: 0,
+    torrentioHttpOther: 0,
+    torrentioTimeouts: 0,
+    torrentioNetworkErrors: 0,
     excludedOutsideWindow: 0,
     enrichmentErrors: 0,
     budgetExceeded: 0,
@@ -2926,7 +2957,8 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
 
     const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
     if (!imdbId) return { reason: 'no-imdb' };
-    if (!(await torrentioHasStreams(imdbId))) return { reason: 'no-torrentio' };
+    const torrentio = await torrentioAvailability(imdbId);
+    if (!torrentio.available) return { reason: 'no-torrentio', torrentioReason: torrentio.reason };
 
     const meta = baseMeta(
       details,
@@ -2976,7 +3008,17 @@ async function buildCinemaTorrentioIndex({ timeZone, now = new Date(), useCache 
       }
       const result = settledResult?.value;
       if (result?.reason === 'no-imdb') { stats.excludedNoImdb += 1; continue; }
-      if (result?.reason === 'no-torrentio') { stats.excludedNoTorrentio += 1; continue; }
+      if (result?.reason === 'no-torrentio') {
+        stats.excludedNoTorrentio += 1;
+        const torrentioReason = String(result?.torrentioReason || '');
+        if (torrentioReason === 'empty') stats.excludedTorrentioEmpty += 1;
+        else if (torrentioReason === 'http-403') stats.torrentioHttp403 += 1;
+        else if (torrentioReason === 'http-429') stats.torrentioHttp429 += 1;
+        else if (torrentioReason.startsWith('http-')) stats.torrentioHttpOther += 1;
+        else if (torrentioReason === 'timeout') stats.torrentioTimeouts += 1;
+        else if (torrentioReason === 'network') stats.torrentioNetworkErrors += 1;
+        continue;
+      }
       if (result?.reason === 'outside-window') { stats.excludedOutsideWindow += 1; continue; }
       if (result?.reason === 'candidate-timeout') { stats.enrichmentErrors += 1; continue; }
       if (result?.meta) metas.push(result.meta);
@@ -4315,11 +4357,17 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   res.setHeader('X-Nuvio-Calendar-Total', String(allMetas.length));
   res.setHeader('X-Nuvio-Calendar-Source-Errors', String(Number(result.stats?.sourceErrors || 0)));
   if (catalog.source === 'torrentio-theatrical') {
-    res.setHeader('X-Nuvio-Cinema-Debug-Rev', '6');
+    res.setHeader('X-Nuvio-Cinema-Debug-Rev', '9');
     res.setHeader('X-Nuvio-Cinema-Candidates', String(Number(result.stats?.candidates || 0)));
     res.setHeader('X-Nuvio-Cinema-Scanned', String(Number(result.stats?.scannedCandidates || 0)));
     res.setHeader('X-Nuvio-Cinema-No-Imdb', String(Number(result.stats?.excludedNoImdb || 0)));
     res.setHeader('X-Nuvio-Cinema-No-Torrentio', String(Number(result.stats?.excludedNoTorrentio || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-Empty', String(Number(result.stats?.excludedTorrentioEmpty || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-403', String(Number(result.stats?.torrentioHttp403 || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-429', String(Number(result.stats?.torrentioHttp429 || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-Http-Other', String(Number(result.stats?.torrentioHttpOther || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-Timeout', String(Number(result.stats?.torrentioTimeouts || 0)));
+    res.setHeader('X-Nuvio-Cinema-Torrentio-Network', String(Number(result.stats?.torrentioNetworkErrors || 0)));
     res.setHeader('X-Nuvio-Cinema-Outside-Window', String(Number(result.stats?.excludedOutsideWindow || 0)));
     res.setHeader('X-Nuvio-Cinema-Enrichment-Errors', String(Number(result.stats?.enrichmentErrors || 0)));
     res.setHeader('X-Nuvio-Cinema-Budget-Exceeded', String(Number(result.stats?.budgetExceeded || 0)));
