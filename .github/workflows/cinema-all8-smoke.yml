@@ -18,7 +18,8 @@ jobs:
         run: |
           set -uo pipefail
           BASE="https://141-145-215-202.nip.io"
-          for KEY in today yesterday thisweek lastweek thismonth previousmonth nextweek nextmonth
+          echo "HEALTH=$(curl -k -sS -L --connect-timeout 8 --max-time 15 "$BASE/_oracle/health" || true)"
+          for KEY in nowplaying today yesterday thisweek lastweek thismonth previousmonth nextweek nextmonth
           do
             URL="$BASE/fr/catalog/movie/cinema-torrentio-$KEY.json?probe=all8"
             HDR="$(mktemp)"
@@ -35,4 +36,12 @@ jobs:
               jq -r '.metas[] | [.name,.id,.released] | @tsv' "$OUT" | head -10
             fi
             rm -f "$HDR" "$OUT"
+          done
+          for FILE in nuvio-collections-shield.json nuvio-collections-desktop.json
+          do
+            OUT="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -o "$OUT" -w '%{http_code}' "$BASE/$FILE?probe=final")"
+            echo -n "COLLECTION_FILE=$FILE HTTP=$CODE CINEMA="
+            jq -c '[.[] | select(.id=="cinema-now-torrentio")][0] // null | if .==null then null else {id,title,folders:[.folders[]? | {id,title,catalogId:(.sources[0].catalogId // null)}]} end' "$OUT"
+            rm -f "$OUT"
           done
