@@ -35,7 +35,7 @@ const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
 
-const VERSION = '1.3.1';
+const VERSION = '1.3.2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -53,8 +53,8 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-fr-v1.3.1-modern-shield';
-const VISUAL_REV = 'coex-fr131-cinematic';
+const SOURCE_VERSION = 'calendar-archives-fr-v1.3.2-modern-shield-cinema';
+const VISUAL_REV = 'coex-fr132-cinema';
 
 const REGION_ART_KEY = 'fr';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/fr');
