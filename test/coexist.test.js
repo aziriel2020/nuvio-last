@@ -136,6 +136,17 @@ test('Cinema live collection filtering never exposes empty clickable folders', (
   assert.equal(withoutCinema.some((collection) => collection.id === 'cinema-now-torrentio'), false);
 });
 
+test('Oracle health collection counts follow the same live-filtered collection payload', () => {
+  const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
+  const liveFiltered = handler._internals.combinedRawCollections(req, new Set())
+    .map(handler._internals.shieldizeCollectionArt);
+  const report = handler._internals.coexistenceReport(req, liveFiltered);
+  assert.equal(report.collectionCount, liveFiltered.length);
+  assert.equal(report.frCollectionCount, liveFiltered.filter((c) => c.title.startsWith('🇫🇷')).length);
+  assert.equal(liveFiltered.some((c) => c.id === 'cinema-now-torrentio'), false);
+});
+
+
 test('France stays first, Global is next, Türkiye follows, and USA remains last on Modern Shield', async () => {
   const collections = JSON.parse((await call('/nuvio-collections-fr-global-tr-usa.json')).text);
   const fr = collections.filter((c) => c.title.startsWith('🇫🇷 '));
