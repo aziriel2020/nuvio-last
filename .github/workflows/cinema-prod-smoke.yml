@@ -1,0 +1,46 @@
+name: Cinema Production Smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cinema-prod-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Oracle manifest and cinema catalogs
+        shell: bash
+        run: |
+          set -uo pipefail
+          BASE="https://141-145-215-202.nip.io"
+          for URL in             "$BASE/fr/manifest.json"             "$BASE/fr/catalog/movie/cinema-torrentio-today.json"             "$BASE/fr/catalog/movie/cinema-torrentio-thisweek.json"             "$BASE/fr/catalog/movie/cinema-torrentio-thismonth.json"
+          do
+            echo "===== $URL ====="
+            OUT="$(mktemp)"
+            HDR="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -D "$HDR" -o "$OUT" -w '%{http_code}' "$URL" || true)"
+            echo "HTTP=$CODE"
+            echo "--- headers ---"
+            cat "$HDR" || true
+            echo "--- body first 2000 chars ---"
+            head -c 2000 "$OUT" || true
+            echo
+            if jq -e . "$OUT" >/dev/null 2>&1; then
+              echo "json_ok=1"
+              echo -n "version="
+              jq -r '.version // empty' "$OUT"
+              echo -n "metas_count="
+              jq -r 'if (.metas|type)=="array" then (.metas|length) else "n/a" end' "$OUT"
+              echo -n "first_meta="
+              jq -c '.metas[0] // empty' "$OUT" | head -c 1200
+              echo
+            else
+              echo "json_ok=0"
+            fi
+            rm -f "$OUT" "$HDR"
+          done
