@@ -44,8 +44,11 @@ test('Cinema uses its own real week/month windows instead of the generic fallbac
 
 test('Cinema runtime is bounded so a slow Torrentio cannot hold Nuvio open indefinitely',()=>{
   assert(api._internals.CINEMA_RESPONSE_BUDGET_MS<=12000);
-  assert(api._internals.CINEMA_MAX_RUNTIME_CANDIDATES<=24);
-  assert(api._internals.CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS<=6000);
+  assert(api._internals.CINEMA_MAX_DISCOVERY_CANDIDATES<=80);
+  assert(api._internals.CINEMA_SCAN_BATCH_SIZE<=16);
+  assert(api._internals.CINEMA_TARGET_ITEMS<=24);
+  assert(api._internals.CINEMA_CANDIDATE_TIMEOUT_MS<=5000);
+  assert(api._internals.CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS<=5000);
   for(const period of ['thisweek','thismonth','previousmonth','nextmonth']){
     assert.equal(api._internals.isHomeCalendarPeriod(period),true);
   }
