@@ -80,7 +80,7 @@ test('combined import has 50 unique collections with Cinema first, then France, 
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
-test('Cinema du moment exposes eight dedicated dated tiles and reuses the installed France addon', async () => {
+test('Cinema du moment exposes À l’affiche plus dated tiles and reuses the installed France addon', async () => {
   const desktopCollections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
   const shieldCollections = JSON.parse((await call('/nuvio-collections-shield.json')).text);
   const cinema = desktopCollections.find((collection) => collection.id === 'cinema-now-torrentio');
@@ -88,10 +88,11 @@ test('Cinema du moment exposes eight dedicated dated tiles and reuses the instal
   assert(cinema);
   assert(shieldCinema);
   assert.equal(cinema.title, '🎬 Cinéma du moment');
-  assert.equal(cinema.folders.length, 8);
-  assert.equal(shieldCinema.folders.length, 8);
+  assert.equal(cinema.folders.length, 9);
+  assert.equal(shieldCinema.folders.length, 9);
 
   const expected = [
+    ['cinema-now-nowplaying', 'À l’affiche', 'cinema-torrentio-nowplaying'],
     ['cinema-now-today', 'Aujourd’hui', 'cinema-torrentio-today'],
     ['cinema-now-yesterday', 'Hier', 'cinema-torrentio-yesterday'],
     ['cinema-now-thisweek', 'Cette semaine', 'cinema-torrentio-thisweek'],
@@ -122,6 +123,17 @@ test('Cinema du moment exposes eight dedicated dated tiles and reuses the instal
     folder.titleLogoUrl?.includes('/fr/platform-logo?provider=cinema-torrentio') &&
     folder.hideTitle === true
   ));
+});
+
+test('Cinema live collection filtering never exposes empty clickable folders', () => {
+  const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
+  const filtered = handler._internals.cinemaTorrentioCollection(req, new Set(['nowplaying', 'previousmonth']));
+  assert.deepEqual(filtered.folders.map((folder) => folder.id), [
+    'cinema-now-nowplaying',
+    'cinema-now-previousmonth'
+  ]);
+  const withoutCinema = handler._internals.combinedRawCollections(req, new Set());
+  assert.equal(withoutCinema.some((collection) => collection.id === 'cinema-now-torrentio'), false);
 });
 
 test('France stays first, Global is next, Türkiye follows, and USA remains last on Modern Shield', async () => {
