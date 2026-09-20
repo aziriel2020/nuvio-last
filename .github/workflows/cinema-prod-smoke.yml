@@ -44,3 +44,23 @@ jobs:
             fi
             rm -f "$OUT" "$HDR"
           done
+
+          echo "===== Torrentio direct probes ====="
+          for ID in tt1375666 tt15398776 tt15239678
+          do
+            URL="https://torrentio.strem.fun/stream/movie/$ID.json"
+            OUT="$(mktemp)"
+            CODE="$(curl -sS -L --connect-timeout 8 --max-time 15 -o "$OUT" -w '%{http_code}' "$URL" || true)"
+            echo "torrentio id=$ID http=$CODE bytes=$(wc -c < "$OUT")"
+            if jq -e . "$OUT" >/dev/null 2>&1; then
+              echo -n "streams_count="
+              jq -r 'if (.streams|type)=="array" then (.streams|length) else "n/a" end' "$OUT"
+              echo -n "first_stream="
+              jq -c '.streams[0] // empty' "$OUT" | head -c 500
+              echo
+            else
+              head -c 500 "$OUT" || true
+              echo
+            fi
+            rm -f "$OUT"
+          done
