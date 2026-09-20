@@ -54,6 +54,12 @@ test('Cinema runtime is bounded so a slow Torrentio cannot hold Nuvio open indef
   assert.equal(cinema.cinemaBucket,'thismonth');
 });
 
+test('Cinema card renderer uses a real Cinema label and no fake platform identity',()=>{
+  assert.equal(api._internals.platformCollectionTitle('cinema-torrentio'),'Cinéma · Torrentio');
+  assert.equal(api._internals.providerAccentColor('Cinéma · Torrentio'),'#e11d48');
+});
+
+
 test('France provider parents include French services and no US-only Hulu/Peacock',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
   assert.deepEqual(payload.map(c=>c.title),expectedParents);
