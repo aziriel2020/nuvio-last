@@ -80,27 +80,48 @@ test('combined import has 50 unique collections with Cinema first, then France, 
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
-test('Cinema du moment is date-structured and reuses the installed France addon', async () => {
-  const collections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
-  const cinema = collections.find((collection) => collection.id === 'cinema-now-torrentio');
+test('Cinema du moment exposes eight dedicated dated tiles and reuses the installed France addon', async () => {
+  const desktopCollections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
+  const shieldCollections = JSON.parse((await call('/nuvio-collections-shield.json')).text);
+  const cinema = desktopCollections.find((collection) => collection.id === 'cinema-now-torrentio');
+  const shieldCinema = shieldCollections.find((collection) => collection.id === 'cinema-now-torrentio');
   assert(cinema);
+  assert(shieldCinema);
   assert.equal(cinema.title, '🎬 Cinéma du moment');
-  assert.equal(cinema.folders.length, 1);
-  assert.deepEqual(cinema.folders[0].sources.map((source) => source.catalogId), [
-    'cinema-torrentio-today',
-    'cinema-torrentio-yesterday',
-    'cinema-torrentio-thisweek',
-    'cinema-torrentio-lastweek',
-    'cinema-torrentio-thismonth',
-    'cinema-torrentio-previousmonth',
-    'cinema-torrentio-nextweek',
-    'cinema-torrentio-nextmonth'
-  ]);
-  assert(cinema.folders[0].sources.every((source) =>
-    source.addonId === 'com.nuvio.calendar.archives.fr.coexist' && source.type === 'movie'
+  assert.equal(cinema.folders.length, 8);
+  assert.equal(shieldCinema.folders.length, 8);
+
+  const expected = [
+    ['cinema-now-today', 'Aujourd’hui', 'cinema-torrentio-today'],
+    ['cinema-now-yesterday', 'Hier', 'cinema-torrentio-yesterday'],
+    ['cinema-now-thisweek', 'Cette semaine', 'cinema-torrentio-thisweek'],
+    ['cinema-now-lastweek', 'Semaine dernière', 'cinema-torrentio-lastweek'],
+    ['cinema-now-thismonth', 'Ce mois-ci', 'cinema-torrentio-thismonth'],
+    ['cinema-now-previousmonth', 'Mois dernier', 'cinema-torrentio-previousmonth'],
+    ['cinema-now-nextweek', 'Semaine prochaine', 'cinema-torrentio-nextweek'],
+    ['cinema-now-nextmonth', 'Mois prochain', 'cinema-torrentio-nextmonth']
+  ];
+
+  assert.deepEqual(
+    cinema.folders.map((folder) => [folder.id, folder.title, folder.sources[0]?.catalogId]),
+    expected
+  );
+  assert(cinema.folders.every((folder) =>
+    folder.sources.length === 1 &&
+    folder.catalogSources.length === 1 &&
+    folder.sources[0].addonId === 'com.nuvio.calendar.archives.fr.coexist' &&
+    folder.sources[0].type === 'movie' &&
+    folder.coverImageUrl.includes('/desktop-folder-card.jpg') &&
+    folder.coverImageUrl.includes('dynamic=1') &&
+    folder.coverImageUrl.includes('label=%F0%9F%8E%AC+Cin%C3%A9ma+du+moment')
+  ));
+  assert(shieldCinema.folders.every((folder) =>
+    folder.sources.length === 1 &&
+    folder.coverImageUrl.includes('/shield-folder-card.jpg') &&
+    folder.coverImageUrl.includes('dynamic=1') &&
+    folder.hideTitle === true
   ));
 });
-
 
 test('France stays first, Global is next, Türkiye follows, and USA remains last on Modern Shield', async () => {
   const collections = JSON.parse((await call('/nuvio-collections-fr-global-tr-usa.json')).text);
