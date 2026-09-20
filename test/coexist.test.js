@@ -119,6 +119,7 @@ test('Cinema du moment exposes eight dedicated dated tiles and reuses the instal
     folder.sources.length === 1 &&
     folder.coverImageUrl.includes('/shield-folder-card.jpg') &&
     folder.coverImageUrl.includes('dynamic=1') &&
+    folder.titleLogoUrl?.includes('/fr/platform-logo?provider=cinema-torrentio') &&
     folder.hideTitle === true
   ));
 });
