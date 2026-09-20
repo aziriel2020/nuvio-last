@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE='https://141-145-215-202.nip.io';
-const EXPECTED='0042e2cd2584e03b5dad0611a47062d7b99eb4f0';
+const EXPECTED='0fd2e96d9befa8795f71bb58241bb2cb8e9965e0';
 
 async function j(path){
   const r=await fetch(BASE+path,{signal:AbortSignal.timeout(25000),headers:{'accept':'application/json','user-agent':'NuvioFinalProdCheck/1.0'}});
