@@ -843,7 +843,9 @@ function detailsToGenreMeta(details, catalog, window) {
 }
 
 async function buildGenreStreamingCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
-  const window = dateWindow(period, now, timeZone);
+  const window = catalog.source === 'torrentio-theatrical'
+    ? cinemaDateWindow(catalog.cinemaBucket, now, timeZone)
+    : dateWindow(period, now, timeZone);
   const key = catalogCacheKey({ providerSlug: `${TMDB_GENRE_COLLECTION.slug}:${catalog.type}:${catalog.tmdbGenreId}`, type: catalog.type, period, timeZone, today: window.today, sourceVersion: `${SOURCE_VERSION}-genres-periods-v2` });
   if (useCache) {
     const cached = catalogCache.get(key);
@@ -1208,7 +1210,22 @@ const CINEMA_TORRENTIO_BUCKETS = Object.freeze([
 ]);
 const CINEMA_TORRENTIO_CACHE_MS = 6 * 60 * 60 * 1000;
 const CINEMA_TORRENTIO_NEGATIVE_CACHE_MS = 60 * 60 * 1000;
+const CINEMA_RESPONSE_BUDGET_MS = Math.max(3000, Math.min(12000, Number(process.env.CINEMA_RESPONSE_BUDGET_MS || 8000)));
+const CINEMA_MAX_RUNTIME_CANDIDATES = Math.max(8, Math.min(24, Number(process.env.CINEMA_MAX_RUNTIME_CANDIDATES || 16)));
+const CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS = Math.max(1500, Math.min(6000, Number(process.env.TORRENTIO_TIMEOUT_MS || 3500)));
 const cinemaTorrentioCache = new Map();
+
+function softDeadline(promise, timeoutMs, fallbackValue) {
+  let timer = null;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallbackValue), timeoutMs);
+    })
+  ]);
+}
 
 function buildCinemaTorrentioCatalogEntries() {
   return CINEMA_TORRENTIO_BUCKETS.map(({ key, label }) => ({
@@ -1652,7 +1669,7 @@ function isHomeCalendarPeriod(period) {
   if (/^archive-\d{4}-\d{2}$/.test(String(period || ''))) return true;
   // Archive rows must use exactly the same Shield / Android TV Modern landscape
   // decoration as the live Calendar project, even though showInHome=false in this addon.
-  return ['lastmonth', 'month', 'lastweek', 'past7', 'today', 'tomorrow', 'yesterday', 'nextweek', 'next7', 'nowplaying', 'upcomingyear', 'week'].includes(period);
+  return ['lastmonth', 'month', 'lastweek', 'past7', 'today', 'tomorrow', 'yesterday', 'nextweek', 'next7', 'nowplaying', 'upcomingyear', 'week', 'thisweek', 'thismonth', 'previousmonth', 'nextmonth'].includes(period);
 }
 
 function calendarCardUrl(origin, meta, catalog, timeZone, layout = 'portrait', sourceOverride = null) {
@@ -2751,9 +2768,9 @@ function cinemaRelease(details, window) {
 
 async function discoverCinemaCandidates(window) {
   const region = String(process.env.CINEMA_REGION || 'BE').trim().toUpperCase();
-  const limit = Math.max(10, Math.min(80, Number(process.env.CINEMA_MAX_CANDIDATES || 40)));
+  const limit = Math.max(8, Math.min(24, Number(process.env.CINEMA_MAX_CANDIDATES || CINEMA_MAX_RUNTIME_CANDIDATES)));
   const items = [];
-  for (let page = 1; page <= 4 && items.length < limit; page += 1) {
+  for (let page = 1; page <= 2 && items.length < limit; page += 1) {
     const payload = await tmdbFetch('/discover/movie', {
       language: getConfig().language,
       page,
@@ -2780,7 +2797,7 @@ async function torrentioHasStreams(imdbId) {
   try {
     const response = await fetch(`${base}/stream/movie/${encodeURIComponent(imdbId)}.json`, {
       headers: { Accept: 'application/json', 'User-Agent': 'Stremio/4 NuvioCinema/1.0' },
-      signal: AbortSignal.timeout(Math.max(3000, Math.min(30000, Number(process.env.TORRENTIO_TIMEOUT_MS || 15000))))
+      signal: AbortSignal.timeout(CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS)
     });
     if (response.ok) {
       const payload = await response.json();
@@ -2815,9 +2832,15 @@ async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date()
   }
   const stats = emptyStats({ label: 'Cinéma · Torrentio', ids: [] }, catalog, window, timeZone);
   stats.excludedNoTorrentio = 0;
-  const candidates = await discoverCinemaCandidates(window);
+  const candidates = (await softDeadline(
+    discoverCinemaCandidates(window),
+    Math.min(3500, CINEMA_RESPONSE_BUDGET_MS - 1000),
+    []
+  )).slice(0, CINEMA_MAX_RUNTIME_CANDIDATES);
   stats.candidates = candidates.length;
-  const settled = await mapLimitSettled(candidates, 6, async (candidate) => {
+  const remainingBudget = Math.max(1500, CINEMA_RESPONSE_BUDGET_MS - 3500);
+  const settled = await softDeadline(
+    Promise.allSettled(candidates.map(async (candidate) => {
     const details = await fetchDetails('movie', candidate.id);
     const release = cinemaRelease(details, window);
     if (!release) return { reason: 'outside-window' };
@@ -2835,9 +2858,17 @@ async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date()
     meta._calendarSource = 'torrentio-theatrical';
     meta._dedupeKey = `cinema-torrentio:${imdbId}`;
     return { meta };
-  });
+  })),
+    remainingBudget,
+    []
+  );
   const metas = [];
-  for (const result of settled) {
+  for (const settledResult of settled) {
+    if (settledResult?.status === 'rejected') {
+      stats.enrichmentErrors += 1;
+      continue;
+    }
+    const result = settledResult?.value;
     if (result?.error) { stats.enrichmentErrors += 1; continue; }
     if (result?.reason === 'no-imdb') { stats.excludedNoImdb += 1; continue; }
     if (result?.reason === 'no-torrentio') { stats.excludedNoTorrentio += 1; continue; }
