@@ -240,7 +240,9 @@ async function cinemaAvailableKeys(req) {
     const now = frHandler._internals.runtimeNow();
     const timeZone = frHandler._internals.requestTimeZone(req);
     const keys = await frHandler._internals.cinemaAvailableBucketKeys(timeZone, now);
-    return keys instanceof Set ? keys : null;
+    // Live imports must fail closed: if availability cannot be evaluated,
+    // do not expose clickable Cinema folders that may be empty.
+    return keys instanceof Set ? keys : new Set();
   } catch (error) {
     console.error('[cinema-collection-availability]', error);
     return new Set();
