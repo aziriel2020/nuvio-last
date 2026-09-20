@@ -54,39 +54,37 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.catalogs.length, 6895);
 });
 
-test('combined import has 50 unique collections with Cinema first, then France, Global, Türkiye, and USA', async () => {
+test('combined live import fails closed without Cinema availability and keeps regional ordering', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 50);
+  assert.equal(collections.length, 49);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
+  assert.equal(collections.some((c) => c.id === 'cinema-now-torrentio'), false);
   assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
   assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 19);
   assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
-  assert.equal(collections[0].title, '🎬 Cinéma du moment');
-  assert.equal(collections[1].title, '🇫🇷 Netflix');
-  assert.equal(collections[14].title, '🇫🇷 VOD France');
-  assert.equal(collections[15].title, '🇫🇷 Genres · Films');
-  assert.equal(collections[16].title, '🇫🇷 Genres · Séries');
-  assert.equal(collections[17].title, '🌍 Anime Japon + Corée');
-  assert.equal(collections[18].title, '🌍 VOD Mondiale');
-  assert.equal(collections[19].title, '🇹🇷 Netflix');
-  assert.equal(collections[37].title, '🇹🇷 VOD Türkiye');
-  assert.equal(collections[38].title, '🇺🇸 Netflix');
+  assert.equal(collections[0].title, '🇫🇷 Netflix');
+  assert.equal(collections[13].title, '🇫🇷 VOD France');
+  assert.equal(collections[14].title, '🇫🇷 Genres · Films');
+  assert.equal(collections[15].title, '🇫🇷 Genres · Séries');
+  assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
+  assert.equal(collections[17].title, '🌍 VOD Mondiale');
+  assert.equal(collections[18].title, '🇹🇷 Netflix');
+  assert.equal(collections[36].title, '🇹🇷 VOD Türkiye');
+  assert.equal(collections[37].title, '🇺🇸 Netflix');
   assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
-test('Cinema du moment exposes À l’affiche plus dated tiles and reuses the installed France addon', async () => {
-  const desktopCollections = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
-  const shieldCollections = JSON.parse((await call('/nuvio-collections-shield.json')).text);
-  const cinema = desktopCollections.find((collection) => collection.id === 'cinema-now-torrentio');
-  const shieldCinema = shieldCollections.find((collection) => collection.id === 'cinema-now-torrentio');
-  assert(cinema);
-  assert(shieldCinema);
+test('Cinema du moment static schema exposes À l’affiche plus dated tiles and reuses the France addon', () => {
+  const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
+  const raw = handler._internals.cinemaTorrentioCollection(req);
+  const cinema = handler._internals.desktopizeCollectionArt(raw);
+  const shieldCinema = handler._internals.shieldizeCollectionArt(raw);
   assert.equal(cinema.title, '🎬 Cinéma du moment');
   assert.equal(cinema.folders.length, 9);
   assert.equal(shieldCinema.folders.length, 9);
