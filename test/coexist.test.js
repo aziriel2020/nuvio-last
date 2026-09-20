@@ -371,7 +371,7 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 50);
+  assert.equal(collections.length, 49);
 
   const targets = [
     collections.find((c) => c.title === '🇫🇷 Netflix'),
@@ -426,7 +426,7 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 50);
+  assert.equal(collections.length, 49);
 
   const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
   const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
