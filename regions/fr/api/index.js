@@ -1211,8 +1211,11 @@ const CINEMA_TORRENTIO_BUCKETS = Object.freeze([
 const CINEMA_TORRENTIO_CACHE_MS = 6 * 60 * 60 * 1000;
 const CINEMA_TORRENTIO_NEGATIVE_CACHE_MS = 60 * 60 * 1000;
 const CINEMA_RESPONSE_BUDGET_MS = Math.max(3000, Math.min(12000, Number(process.env.CINEMA_RESPONSE_BUDGET_MS || 8000)));
-const CINEMA_MAX_RUNTIME_CANDIDATES = Math.max(8, Math.min(24, Number(process.env.CINEMA_MAX_RUNTIME_CANDIDATES || 16)));
-const CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS = Math.max(1500, Math.min(6000, Number(process.env.TORRENTIO_TIMEOUT_MS || 3500)));
+const CINEMA_MAX_DISCOVERY_CANDIDATES = Math.max(20, Math.min(80, Number(process.env.CINEMA_MAX_CANDIDATES || 60)));
+const CINEMA_SCAN_BATCH_SIZE = Math.max(6, Math.min(16, Number(process.env.CINEMA_SCAN_BATCH_SIZE || 12)));
+const CINEMA_TARGET_ITEMS = Math.max(4, Math.min(24, Number(process.env.CINEMA_TARGET_ITEMS || 12)));
+const CINEMA_CANDIDATE_TIMEOUT_MS = Math.max(1800, Math.min(5000, Number(process.env.CINEMA_CANDIDATE_TIMEOUT_MS || 3200)));
+const CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS = Math.max(1500, Math.min(5000, Number(process.env.TORRENTIO_TIMEOUT_MS || 2800)));
 const cinemaTorrentioCache = new Map();
 
 function softDeadline(promise, timeoutMs, fallbackValue) {
@@ -2770,9 +2773,9 @@ function cinemaRelease(details, window) {
 
 async function discoverCinemaCandidates(window) {
   const region = String(process.env.CINEMA_REGION || 'BE').trim().toUpperCase();
-  const limit = Math.max(8, Math.min(24, Number(process.env.CINEMA_MAX_CANDIDATES || CINEMA_MAX_RUNTIME_CANDIDATES)));
+  const limit = CINEMA_MAX_DISCOVERY_CANDIDATES;
   const items = [];
-  for (let page = 1; page <= 2 && items.length < limit; page += 1) {
+  for (let page = 1; page <= 4 && items.length < limit; page += 1) {
     const payload = await tmdbFetch('/discover/movie', {
       language: getConfig().language,
       page,
@@ -2826,81 +2829,95 @@ async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date()
     period: catalog.cinemaBucket,
     timeZone,
     today: window.today,
-    sourceVersion: `${SOURCE_VERSION}-cinema-torrentio-v2-fast`
+    sourceVersion: `${SOURCE_VERSION}-cinema-torrentio-v3-progressive`
   });
   if (useCache) {
     const cached = catalogCache.get(key);
     if (cached) return cached;
   }
 
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + CINEMA_RESPONSE_BUDGET_MS;
   const stats = emptyStats({ label: 'Cinéma · Torrentio', ids: [] }, catalog, window, timeZone);
   stats.excludedNoTorrentio = 0;
   stats.budgetExceeded = 0;
+  stats.scannedCandidates = 0;
 
-  const discovered = await softDeadline(
-    discoverCinemaCandidates(window),
-    Math.min(3500, Math.max(1500, CINEMA_RESPONSE_BUDGET_MS - 1500)),
-    null
-  );
+  const discoveryBudget = Math.min(3000, Math.max(1200, CINEMA_RESPONSE_BUDGET_MS - 2000));
+  const discovered = await softDeadline(discoverCinemaCandidates(window), discoveryBudget, null);
   if (!Array.isArray(discovered)) {
     stats.budgetExceeded = 1;
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, 30 * 1000) : result;
   }
 
-  const candidates = discovered.slice(0, CINEMA_MAX_RUNTIME_CANDIDATES);
-  stats.candidates = candidates.length;
-  const remainingBudget = Math.max(1500, CINEMA_RESPONSE_BUDGET_MS - 3500);
-
-  const settled = await softDeadline(
-    Promise.allSettled(candidates.map(async (candidate) => {
-      const details = await fetchDetails('movie', candidate.id);
-      const release = cinemaRelease(details, window);
-      if (!release) return { reason: 'outside-window' };
-
-      const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
-      if (!imdbId) return { reason: 'no-imdb' };
-      if (!(await torrentioHasStreams(imdbId))) return { reason: 'no-torrentio' };
-
-      const meta = baseMeta(
-        details,
-        'movie',
-        release.date,
-        `Sortie cinéma Belgique • ${humanCalendarDate(release.date)}`
-      );
-      if (!meta.poster) return { reason: 'no-poster' };
-
-      meta.description = [
-        `Cinéma Belgique • ${humanCalendarDate(release.date)}`,
-        'Disponibilité vérifiée par Torrentio',
-        meta.description
-      ].filter(Boolean).join('\n\n');
-      meta._calendarProvider = 'Cinéma · Torrentio';
-      meta._calendarSource = 'torrentio-theatrical';
-      meta._dedupeKey = `cinema-torrentio:${imdbId}`;
-      return { meta };
-    })),
-    remainingBudget,
-    null
-  );
-
-  if (!Array.isArray(settled)) {
-    stats.budgetExceeded = 1;
-    const result = { metas: [], stats };
-    return useCache ? catalogCache.set(key, result, 30 * 1000) : result;
-  }
-
+  stats.candidates = discovered.length;
   const metas = [];
-  for (const settledResult of settled) {
-    if (settledResult?.status === 'rejected') {
-      stats.enrichmentErrors += 1;
-      continue;
+
+  const processCandidate = async (candidate) => {
+    const details = await fetchDetails('movie', candidate.id);
+    const release = cinemaRelease(details, window);
+    if (!release) return { reason: 'outside-window' };
+
+    const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
+    if (!imdbId) return { reason: 'no-imdb' };
+    if (!(await torrentioHasStreams(imdbId))) return { reason: 'no-torrentio' };
+
+    const meta = baseMeta(
+      details,
+      'movie',
+      release.date,
+      `Sortie cinéma Belgique • ${humanCalendarDate(release.date)}`
+    );
+    if (!meta.poster) return { reason: 'no-poster' };
+
+    meta.description = [
+      `Cinéma Belgique • ${humanCalendarDate(release.date)}`,
+      'Disponibilité vérifiée par Torrentio',
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._calendarProvider = 'Cinéma · Torrentio';
+    meta._calendarSource = 'torrentio-theatrical';
+    meta._dedupeKey = `cinema-torrentio:${imdbId}`;
+    return { meta };
+  };
+
+  for (let offset = 0; offset < discovered.length && metas.length < CINEMA_TARGET_ITEMS; offset += CINEMA_SCAN_BATCH_SIZE) {
+    const remaining = deadlineAt - Date.now();
+    if (remaining < 700) {
+      stats.budgetExceeded = 1;
+      break;
     }
-    const result = settledResult?.value;
-    if (result?.reason === 'no-imdb') { stats.excludedNoImdb += 1; continue; }
-    if (result?.reason === 'no-torrentio') { stats.excludedNoTorrentio += 1; continue; }
-    if (result?.reason) { countReason(stats, result.reason); continue; }
-    if (result?.meta) metas.push(result.meta);
+
+    const batch = discovered.slice(offset, offset + CINEMA_SCAN_BATCH_SIZE);
+    const perCandidateBudget = Math.min(CINEMA_CANDIDATE_TIMEOUT_MS, Math.max(900, remaining - 250));
+    const settled = await softDeadline(
+      Promise.allSettled(batch.map((candidate) =>
+        softDeadline(processCandidate(candidate), perCandidateBudget, { reason: 'candidate-timeout' })
+      )),
+      Math.max(900, remaining),
+      null
+    );
+
+    if (!Array.isArray(settled)) {
+      stats.budgetExceeded = 1;
+      break;
+    }
+
+    stats.scannedCandidates += batch.length;
+
+    for (const settledResult of settled) {
+      if (settledResult?.status === 'rejected') {
+        stats.enrichmentErrors += 1;
+        continue;
+      }
+      const result = settledResult?.value;
+      if (result?.reason === 'no-imdb') { stats.excludedNoImdb += 1; continue; }
+      if (result?.reason === 'no-torrentio') { stats.excludedNoTorrentio += 1; continue; }
+      if (result?.reason === 'candidate-timeout') { stats.enrichmentErrors += 1; continue; }
+      if (result?.reason) { countReason(stats, result.reason); continue; }
+      if (result?.meta) metas.push(result.meta);
+    }
   }
 
   const historical = ['yesterday', 'lastweek', 'thismonth', 'previousmonth'].includes(catalog.cinemaBucket);
@@ -4188,6 +4205,7 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   if (catalog.source === 'torrentio-theatrical') {
     res.setHeader('X-Nuvio-Cinema-Debug-Rev', '6');
     res.setHeader('X-Nuvio-Cinema-Candidates', String(Number(result.stats?.candidates || 0)));
+    res.setHeader('X-Nuvio-Cinema-Scanned', String(Number(result.stats?.scannedCandidates || 0)));
     res.setHeader('X-Nuvio-Cinema-No-Imdb', String(Number(result.stats?.excludedNoImdb || 0)));
     res.setHeader('X-Nuvio-Cinema-No-Torrentio', String(Number(result.stats?.excludedNoTorrentio || 0)));
     res.setHeader('X-Nuvio-Cinema-Outside-Window', String(Number(result.stats?.excludedOutsideWindow || 0)));
@@ -4650,7 +4668,10 @@ module.exports._internals = {
   torrentioHasStreams,
   buildCinemaTorrentioCatalog,
   CINEMA_RESPONSE_BUDGET_MS,
-  CINEMA_MAX_RUNTIME_CANDIDATES,
+  CINEMA_MAX_DISCOVERY_CANDIDATES,
+  CINEMA_SCAN_BATCH_SIZE,
+  CINEMA_TARGET_ITEMS,
+  CINEMA_CANDIDATE_TIMEOUT_MS,
   CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS,
   fetchSeasonDetails,
   seasonCandidatesForWindow,
