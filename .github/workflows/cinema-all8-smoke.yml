@@ -19,7 +19,7 @@ jobs:
           set -uo pipefail
           BASE="https://141-145-215-202.nip.io"
           echo "HEALTH=$(curl -k -sS -L --connect-timeout 8 --max-time 15 "$BASE/_oracle/health" || true)"
-          for KEY in nowplaying today yesterday thisweek lastweek thismonth previousmonth nextweek nextmonth
+          for KEY in nowplaying recent today yesterday thisweek lastweek thismonth previousmonth nextweek nextmonth
           do
             URL="$BASE/fr/catalog/movie/cinema-torrentio-$KEY.json?probe=all8"
             HDR="$(mktemp)"
@@ -31,7 +31,13 @@ jobs:
             NOTOR="$(grep -i '^x-nuvio-cinema-no-torrentio:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
             NOIMDB="$(grep -i '^x-nuvio-cinema-no-imdb:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
             BUDGET="$(grep -i '^x-nuvio-cinema-budget-exceeded:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
-            echo "BUCKET=$KEY HTTP=$CODE METAS=$TOTAL CANDIDATES=${CAND:-na} SCANNED=${SCAN:-na} NO_TORRENTIO=${NOTOR:-na} NO_IMDB=${NOIMDB:-na} BUDGET=${BUDGET:-na}"
+            EMPTY="$(grep -i '^x-nuvio-cinema-torrentio-empty:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
+            HTTP403="$(grep -i '^x-nuvio-cinema-torrentio-403:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
+            HTTP429="$(grep -i '^x-nuvio-cinema-torrentio-429:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
+            HTTPOTHER="$(grep -i '^x-nuvio-cinema-torrentio-http-other:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
+            TIMEOUT="$(grep -i '^x-nuvio-cinema-torrentio-timeout:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
+            NETWORK="$(grep -i '^x-nuvio-cinema-torrentio-network:' "$HDR" | tail -1 | tr -d '\r' | awk '{print $2}')"
+            echo "BUCKET=$KEY HTTP=$CODE METAS=$TOTAL CANDIDATES=${CAND:-na} SCANNED=${SCAN:-na} NO_TORRENTIO=${NOTOR:-na} EMPTY=${EMPTY:-na} HTTP403=${HTTP403:-na} HTTP429=${HTTP429:-na} HTTPOTHER=${HTTPOTHER:-na} TIMEOUT=${TIMEOUT:-na} NETWORK=${NETWORK:-na} NO_IMDB=${NOIMDB:-na} BUDGET=${BUDGET:-na}"
             if [ "$TOTAL" != "0" ] && [ "$TOTAL" != "-1" ]; then
               jq -r '.metas[] | [.name,.id,.released] | @tsv' "$OUT" | head -10
             fi
