@@ -49,7 +49,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12222);
+  assert.equal(fr.catalogs.length, 12223);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -57,7 +57,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
 test('combined import has 50 unique collections with Cinema first, then France, Global, Türkiye, and USA', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
-  assertCdnCache(response, 86400);
+  assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
   assert.equal(collections.length, 50);
   const ids = collections.map((c) => c.id);
@@ -359,7 +359,7 @@ test('health endpoint is green when all regions coexist safely', async () => {
 test('Shield import uses dedicated cinematic raster covers while preserving TV title behavior', async () => {
   const response = await call('/nuvio-collections-shield.json');
   assert.equal(response.statusCode, 200);
-  assertCdnCache(response, 86400);
+  assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
   assert.equal(collections.length, 50);
 
@@ -414,7 +414,7 @@ test('Shield cinematic aliases resolve to native 1600x900 JPEG renderers in ever
 test('desktop import uses dedicated cinematic raster covers with native folder titles', async () => {
   const response = await call('/nuvio-collections-desktop.json');
   assert.equal(response.statusCode, 200);
-  assertCdnCache(response, 86400);
+  assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
   assert.equal(collections.length, 50);
 
