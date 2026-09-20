@@ -2824,44 +2824,70 @@ async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date()
     period: catalog.cinemaBucket,
     timeZone,
     today: window.today,
-    sourceVersion: `${SOURCE_VERSION}-cinema-torrentio-v1`
+    sourceVersion: `${SOURCE_VERSION}-cinema-torrentio-v2-fast`
   });
   if (useCache) {
     const cached = catalogCache.get(key);
     if (cached) return cached;
   }
+
   const stats = emptyStats({ label: 'Cinéma · Torrentio', ids: [] }, catalog, window, timeZone);
   stats.excludedNoTorrentio = 0;
-  const candidates = (await softDeadline(
+  stats.budgetExceeded = 0;
+
+  const discovered = await softDeadline(
     discoverCinemaCandidates(window),
-    Math.min(3500, CINEMA_RESPONSE_BUDGET_MS - 1000),
-    []
-  )).slice(0, CINEMA_MAX_RUNTIME_CANDIDATES);
+    Math.min(3500, Math.max(1500, CINEMA_RESPONSE_BUDGET_MS - 1500)),
+    null
+  );
+  if (!Array.isArray(discovered)) {
+    stats.budgetExceeded = 1;
+    const result = { metas: [], stats };
+    return useCache ? catalogCache.set(key, result, 30 * 1000) : result;
+  }
+
+  const candidates = discovered.slice(0, CINEMA_MAX_RUNTIME_CANDIDATES);
   stats.candidates = candidates.length;
   const remainingBudget = Math.max(1500, CINEMA_RESPONSE_BUDGET_MS - 3500);
+
   const settled = await softDeadline(
     Promise.allSettled(candidates.map(async (candidate) => {
-    const details = await fetchDetails('movie', candidate.id);
-    const release = cinemaRelease(details, window);
-    if (!release) return { reason: 'outside-window' };
-    const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
-    if (!imdbId) return { reason: 'no-imdb' };
-    if (!(await torrentioHasStreams(imdbId))) return { reason: 'no-torrentio' };
-    const meta = baseMeta(details, 'movie', release.date, `Sortie cinéma Belgique • ${humanCalendarDate(release.date)}`);
-    if (!meta.poster) return { reason: 'no-poster' };
-    meta.description = [
-      `Cinéma Belgique • ${humanCalendarDate(release.date)}`,
-      'Disponibilité vérifiée par Torrentio',
-      meta.description
-    ].filter(Boolean).join('\n\n');
-    meta._calendarProvider = 'Cinéma · Torrentio';
-    meta._calendarSource = 'torrentio-theatrical';
-    meta._dedupeKey = `cinema-torrentio:${imdbId}`;
-    return { meta };
-  })),
+      const details = await fetchDetails('movie', candidate.id);
+      const release = cinemaRelease(details, window);
+      if (!release) return { reason: 'outside-window' };
+
+      const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
+      if (!imdbId) return { reason: 'no-imdb' };
+      if (!(await torrentioHasStreams(imdbId))) return { reason: 'no-torrentio' };
+
+      const meta = baseMeta(
+        details,
+        'movie',
+        release.date,
+        `Sortie cinéma Belgique • ${humanCalendarDate(release.date)}`
+      );
+      if (!meta.poster) return { reason: 'no-poster' };
+
+      meta.description = [
+        `Cinéma Belgique • ${humanCalendarDate(release.date)}`,
+        'Disponibilité vérifiée par Torrentio',
+        meta.description
+      ].filter(Boolean).join('\n\n');
+      meta._calendarProvider = 'Cinéma · Torrentio';
+      meta._calendarSource = 'torrentio-theatrical';
+      meta._dedupeKey = `cinema-torrentio:${imdbId}`;
+      return { meta };
+    })),
     remainingBudget,
-    []
+    null
   );
+
+  if (!Array.isArray(settled)) {
+    stats.budgetExceeded = 1;
+    const result = { metas: [], stats };
+    return useCache ? catalogCache.set(key, result, 30 * 1000) : result;
+  }
+
   const metas = [];
   for (const settledResult of settled) {
     if (settledResult?.status === 'rejected') {
@@ -2869,16 +2895,17 @@ async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date()
       continue;
     }
     const result = settledResult?.value;
-    if (result?.error) { stats.enrichmentErrors += 1; continue; }
     if (result?.reason === 'no-imdb') { stats.excludedNoImdb += 1; continue; }
     if (result?.reason === 'no-torrentio') { stats.excludedNoTorrentio += 1; continue; }
     if (result?.reason) { countReason(stats, result.reason); continue; }
     if (result?.meta) metas.push(result.meta);
   }
+
   const historical = ['yesterday', 'lastweek', 'thismonth', 'previousmonth'].includes(catalog.cinemaBucket);
   const finalMetas = sortAndDedupeMetas(metas);
   if (historical) finalMetas.reverse();
   stats.final = finalMetas.length;
+
   const result = { metas: finalMetas.slice(0, getConfig().maxItems), stats };
   return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
 }
@@ -4094,6 +4121,7 @@ async function buildCatalog(options) {
 
 function catalogResponseCacheControl(catalog, window) {
   if (window.empty) return EMPTY_CATALOG_CACHE;
+  if (catalog.source === 'torrentio-theatrical') return DYNAMIC_CATALOG_CACHE;
   const currentMonth = catalog.period === `archive-${window.today.slice(0, 7)}`;
   const dynamicPeriod = Boolean(catalog.archivePeriodKey);
   return dynamicPeriod || currentMonth ? DYNAMIC_CATALOG_CACHE : ARCHIVE_CATALOG_CACHE;
@@ -4108,7 +4136,9 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   // Period is fixed by the archive catalog ID. Dynamic periods have stable IDs
   // whose windows move with the viewer-local day; month IDs stay month-scoped.
   const period = catalog.period;
-  const window = dateWindow(period, now, timeZone);
+  const window = catalog.source === 'torrentio-theatrical'
+    ? cinemaDateWindow(catalog.cinemaBucket, now, timeZone)
+    : dateWindow(period, now, timeZone);
   const outsideRollingTwoYears = Number.isInteger(catalog.archiveYear)
     ? !archiveYearIsVisible(catalog.archiveYear, now, timeZone)
     : false;
@@ -4603,6 +4633,13 @@ module.exports._internals = {
   providerDirectory,
   resolveProvider,
   fetchDetails,
+  cinemaDateWindow,
+  discoverCinemaCandidates,
+  torrentioHasStreams,
+  buildCinemaTorrentioCatalog,
+  CINEMA_RESPONSE_BUDGET_MS,
+  CINEMA_MAX_RUNTIME_CANDIDATES,
+  CINEMA_TORRENTIO_REQUEST_TIMEOUT_MS,
   fetchSeasonDetails,
   seasonCandidatesForWindow,
   archiveEpisodeToMeta,
