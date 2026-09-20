@@ -39,3 +39,5 @@ test('live Oracle serves Cinema v8 and no clickable Cinema folder is empty', asy
     assert(Array.isArray(cat.metas) && cat.metas.length>0,'Empty clickable Cinema folder: '+folder.title);
   }
 });
+
+// sync trigger
