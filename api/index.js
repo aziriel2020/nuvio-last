@@ -10,6 +10,7 @@ const trHandler = require('../regions/tr/api/index');
 
 const VERSION = '1.4.0';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
+const CINEMA_COLLECTION_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 
 function publicOriginFromRequest(req) {
   const raw = String(req?.headers?.['x-nuvio-public-origin'] || '').trim();
@@ -234,10 +235,36 @@ function combinedCollections(req) {
   return combinedRawCollections(req).map(shieldizeCollectionArt);
 }
 
-function cinemaTorrentioCollection(req) {
+async function cinemaAvailableKeys(req) {
+  try {
+    const now = frHandler._internals.runtimeNow();
+    const timeZone = frHandler._internals.requestTimeZone(req);
+    const keys = await frHandler._internals.cinemaAvailableBucketKeys(timeZone, now);
+    return keys instanceof Set ? keys : null;
+  } catch (error) {
+    console.error('[cinema-collection-availability]', error);
+    return new Set();
+  }
+}
+
+async function combinedRawCollectionsLive(req) {
+  const keys = await cinemaAvailableKeys(req);
+  return combinedRawCollections(req, keys);
+}
+
+async function combinedCollectionsLive(req) {
+  return (await combinedRawCollectionsLive(req)).map(shieldizeCollectionArt);
+}
+
+async function combinedDesktopCollectionsLive(req) {
+  return (await combinedRawCollectionsLive(req)).map(desktopizeCollectionArt);
+}
+
+function cinemaTorrentioCollection(req, availableKeys = null) {
   const origin = originFromRequest(req);
   const frOrigin = `${origin}/fr`;
   const buckets = [
+    { key: 'nowplaying', title: 'À l’affiche' },
     { key: 'today', title: 'Aujourd’hui' },
     { key: 'yesterday', title: 'Hier' },
     { key: 'thisweek', title: 'Cette semaine' },
@@ -248,7 +275,11 @@ function cinemaTorrentioCollection(req) {
     { key: 'nextmonth', title: 'Mois prochain' }
   ];
 
-  const folders = buckets.map(({ key, title }) => {
+  const visibleBuckets = availableKeys instanceof Set
+    ? buckets.filter(({ key }) => availableKeys.has(key))
+    : buckets;
+
+  const folders = visibleBuckets.map(({ key, title }) => {
     const source = {
       provider: 'addon',
       addonId: 'com.nuvio.calendar.archives.fr.coexist',
@@ -284,7 +315,7 @@ function cinemaTorrentioCollection(req) {
   };
 }
 
-function combinedRawCollections(req) {
+function combinedRawCollections(req, cinemaKeys = null) {
   const origin = originFromRequest(req);
   const nowUs = usHandler._internals.runtimeNow();
   const nowFr = frHandler._internals.runtimeNow();
@@ -308,7 +339,8 @@ function combinedRawCollections(req) {
   // 🇫🇷 VOD France = first Digital release in FR
   // 🌍 VOD Mondiale = first Digital release in any country
   // 🇺🇸 VOD = first Digital release in US
-  return [cinemaTorrentioCollection(req), ...frCollections, ...globalCollections, ...trCollections, ...usCollections];
+  const cinema = cinemaTorrentioCollection(req, cinemaKeys);
+  return [...(cinema.folders.length ? [cinema] : []), ...frCollections, ...globalCollections, ...trCollections, ...usCollections];
 }
 
 function coexistenceReport(req) {
@@ -364,10 +396,10 @@ module.exports = async function handler(req, res) {
   }
   if (path === '/coexistence-check.json') return sendJson(res, 200, coexistenceReport(req), 'no-store');
   if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-shield.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
-    return sendJson(res, 200, combinedCollections(req), LARGE_JSON_CACHE);
+    return sendJson(res, 200, await combinedCollectionsLive(req), CINEMA_COLLECTION_CACHE);
   }
   if (path === '/nuvio-collections-desktop.json') {
-    return sendJson(res, 200, combinedDesktopCollections(req), LARGE_JSON_CACHE);
+    return sendJson(res, 200, await combinedDesktopCollectionsLive(req), CINEMA_COLLECTION_CACHE);
   }
   if (path === '/nuvio-collections-global.json') {
     const origin = originFromRequest(req);
@@ -425,6 +457,10 @@ module.exports._internals = {
   combinedCollections,
   combinedRawCollections,
   combinedDesktopCollections,
+  combinedRawCollectionsLive,
+  combinedCollectionsLive,
+  combinedDesktopCollectionsLive,
+  cinemaAvailableKeys,
   cinemaTorrentioCollection,
   shieldizeCollectionArt,
   shieldCollectionVisualUrl,
