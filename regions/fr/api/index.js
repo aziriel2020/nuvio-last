@@ -4185,6 +4185,16 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   res.setHeader('X-Nuvio-Calendar-Skip', String(skip));
   res.setHeader('X-Nuvio-Calendar-Total', String(allMetas.length));
   res.setHeader('X-Nuvio-Calendar-Source-Errors', String(Number(result.stats?.sourceErrors || 0)));
+  if (catalog.source === 'torrentio-theatrical') {
+    res.setHeader('X-Nuvio-Cinema-Debug-Rev', '6');
+    res.setHeader('X-Nuvio-Cinema-Candidates', String(Number(result.stats?.candidates || 0)));
+    res.setHeader('X-Nuvio-Cinema-No-Imdb', String(Number(result.stats?.excludedNoImdb || 0)));
+    res.setHeader('X-Nuvio-Cinema-No-Torrentio', String(Number(result.stats?.excludedNoTorrentio || 0)));
+    res.setHeader('X-Nuvio-Cinema-Outside-Window', String(Number(result.stats?.excludedOutsideWindow || 0)));
+    res.setHeader('X-Nuvio-Cinema-Enrichment-Errors', String(Number(result.stats?.enrichmentErrors || 0)));
+    res.setHeader('X-Nuvio-Cinema-Budget-Exceeded', String(Number(result.stats?.budgetExceeded || 0)));
+    res.setHeader('X-Nuvio-Cinema-Final', String(Number(result.stats?.final || 0)));
+  }
   res.setHeader('Server-Timing', `calendar;dur=${Date.now() - startedAt}`);
   const cacheControl = catalogResponseCacheControl(catalog, window);
   return json(res, 200, { metas: decoratedMetas }, cacheControl);
