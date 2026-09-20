@@ -134,10 +134,10 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+9);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+10);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
-    ['cinema-torrentio-nowplaying','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
+    ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
   );
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
@@ -296,6 +296,7 @@ test('France manifest 1.3.2 explicitly publishes every Cinema du moment catalog'
   const cinemaIds=manifest.catalogs.filter(c=>c.type==='movie'&&c.id.startsWith('cinema-torrentio-')).map(c=>c.id);
   assert.deepEqual(cinemaIds,[
     'cinema-torrentio-nowplaying',
+    'cinema-torrentio-recent',
     'cinema-torrentio-today',
     'cinema-torrentio-yesterday',
     'cinema-torrentio-thisweek',

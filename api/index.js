@@ -267,6 +267,7 @@ function cinemaTorrentioCollection(req, availableKeys = null) {
   const frOrigin = `${origin}/fr`;
   const buckets = [
     { key: 'nowplaying', title: 'À l’affiche' },
+    { key: 'recent', title: 'Sorties cinéma récentes' },
     { key: 'today', title: 'Aujourd’hui' },
     { key: 'yesterday', title: 'Hier' },
     { key: 'thisweek', title: 'Cette semaine' },

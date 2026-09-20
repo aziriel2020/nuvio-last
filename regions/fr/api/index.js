@@ -1026,7 +1026,7 @@ function archiveProviderAllowed(expectedType, providerSlug) {
 function resolveArchiveCatalog(catalogId, type, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
   const raw = String(catalogId || '');
 
-  const cinema = raw.match(/^cinema-torrentio-(nowplaying|today|yesterday|thisweek|lastweek|thismonth|previousmonth|nextweek|nextmonth)$/);
+  const cinema = raw.match(/^cinema-torrentio-(nowplaying|recent|today|yesterday|thisweek|lastweek|thismonth|previousmonth|nextweek|nextmonth)$/);
   if (cinema) {
     if (type !== 'movie') return null;
     return buildCinemaTorrentioCatalogEntries().find((entry) => entry.id === raw)?.catalog || null;
@@ -1200,6 +1200,7 @@ const FILM_EXTRA_CATALOGS = Object.freeze([
 ]);
 const CINEMA_TORRENTIO_BUCKETS = Object.freeze([
   { key: 'nowplaying', label: 'À l’affiche' },
+  { key: 'recent', label: 'Sorties cinéma récentes' },
   { key: 'today', label: 'Aujourd’hui' },
   { key: 'yesterday', label: 'Hier' },
   { key: 'thisweek', label: 'Cette semaine' },
@@ -2750,7 +2751,7 @@ function cinemaDateWindow(bucket, now = new Date(), timeZone = DEFAULT_TIMEZONE)
   const daysSinceMonday = (noon.getUTCDay() + 6) % 7;
   const monday = addIsoDays(today, -daysSinceMonday);
   const [year, month] = today.split('-').map(Number);
-  if (bucket === 'nowplaying') return { start: addIsoDays(today, -120), end: today, today, allowPast: true };
+  if (bucket === 'nowplaying' || bucket === 'recent') return { start: addIsoDays(today, -120), end: today, today, allowPast: true };
   if (bucket === 'today') return { start: today, end: today, today };
   if (bucket === 'yesterday') {
     const day = addIsoDays(today, -1);
@@ -2859,9 +2860,9 @@ async function torrentioHasStreams(imdbId) {
 }
 
 function cinemaBroadWindow(now = new Date(), timeZone = DEFAULT_TIMEZONE) {
-  const previousMonth = cinemaDateWindow('previousmonth', now, timeZone);
+  const recent = cinemaDateWindow('recent', now, timeZone);
   const nextMonth = cinemaDateWindow('nextmonth', now, timeZone);
-  return { start: previousMonth.start, end: nextMonth.end, today: previousMonth.today };
+  return { start: recent.start, end: nextMonth.end, today: recent.today };
 }
 
 function cinemaIndexCacheKey(now, timeZone) {
@@ -3027,7 +3028,7 @@ async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date()
 
   const index = await buildCinemaTorrentioIndex({ timeZone, now, useCache });
   let metas = index.metas.filter((meta) => cinemaMetaInBucket(meta, catalog.cinemaBucket, now, timeZone));
-  const historical = ['yesterday', 'lastweek', 'thismonth', 'previousmonth'].includes(catalog.cinemaBucket);
+  const historical = ['recent', 'yesterday', 'lastweek', 'thismonth', 'previousmonth'].includes(catalog.cinemaBucket);
   metas = sortAndDedupeMetas(metas);
   if (historical) metas.reverse();
 

@@ -49,7 +49,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12223);
+  assert.equal(fr.catalogs.length, 12224);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -86,11 +86,12 @@ test('Cinema du moment static schema exposes À l’affiche plus dated tiles and
   const cinema = handler._internals.desktopizeCollectionArt(raw);
   const shieldCinema = handler._internals.shieldizeCollectionArt(raw);
   assert.equal(cinema.title, '🎬 Cinéma du moment');
-  assert.equal(cinema.folders.length, 9);
-  assert.equal(shieldCinema.folders.length, 9);
+  assert.equal(cinema.folders.length, 10);
+  assert.equal(shieldCinema.folders.length, 10);
 
   const expected = [
     ['cinema-now-nowplaying', 'À l’affiche', 'cinema-torrentio-nowplaying'],
+    ['cinema-now-recent', 'Sorties cinéma récentes', 'cinema-torrentio-recent'],
     ['cinema-now-today', 'Aujourd’hui', 'cinema-torrentio-today'],
     ['cinema-now-yesterday', 'Hier', 'cinema-torrentio-yesterday'],
     ['cinema-now-thisweek', 'Cette semaine', 'cinema-torrentio-thisweek'],
