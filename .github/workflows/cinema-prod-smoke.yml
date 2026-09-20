@@ -18,7 +18,7 @@ jobs:
         run: |
           set -uo pipefail
           BASE="https://141-145-215-202.nip.io"
-          for URL in             "$BASE/fr/manifest.json"             "$BASE/fr/catalog/movie/cinema-torrentio-today.json?probe=rev6"             "$BASE/fr/catalog/movie/cinema-torrentio-thisweek.json?probe=rev6"             "$BASE/fr/catalog/movie/cinema-torrentio-thismonth.json?probe=rev6"
+          for URL in             "$BASE/fr/manifest.json"             "$BASE/fr/catalog/movie/cinema-torrentio-today.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-yesterday.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-thisweek.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-lastweek.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-thismonth.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-previousmonth.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-nextweek.json?probe=rev8"             "$BASE/fr/catalog/movie/cinema-torrentio-nextmonth.json?probe=rev8"
           do
             echo "===== $URL ====="
             OUT="$(mktemp)"
