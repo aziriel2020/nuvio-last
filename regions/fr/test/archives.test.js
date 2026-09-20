@@ -282,3 +282,20 @@ test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG backgro
   assert.match(decorated.banner, /desktop-content-card\.jpg/);
   assert.notEqual(decorated.banner, decorated.background);
 });
+
+
+test('France manifest 1.3.2 explicitly publishes every Cinema du moment catalog',()=>{
+  const manifest=api._internals.buildManifest('https://example.invalid/fr',fixedNow,'Europe/Brussels');
+  assert.equal(manifest.version,'1.3.2');
+  const cinemaIds=manifest.catalogs.filter(c=>c.type==='movie'&&c.id.startsWith('cinema-torrentio-')).map(c=>c.id);
+  assert.deepEqual(cinemaIds,[
+    'cinema-torrentio-today',
+    'cinema-torrentio-yesterday',
+    'cinema-torrentio-thisweek',
+    'cinema-torrentio-lastweek',
+    'cinema-torrentio-thismonth',
+    'cinema-torrentio-previousmonth',
+    'cinema-torrentio-nextweek',
+    'cinema-torrentio-nextmonth'
+  ]);
+});
