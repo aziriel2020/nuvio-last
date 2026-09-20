@@ -126,7 +126,7 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.3.1');
+  assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
   assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+8);
   assert.deepEqual(
@@ -281,4 +281,21 @@ test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG backgro
   assert.match(decorated.background, /calendar-card\.svg/);
   assert.match(decorated.banner, /desktop-content-card\.jpg/);
   assert.notEqual(decorated.banner, decorated.background);
+});
+
+
+test('France manifest 1.3.2 explicitly publishes every Cinema du moment catalog',()=>{
+  const manifest=api._internals.buildManifest('https://example.invalid/fr',fixedNow,'Europe/Brussels');
+  assert.equal(manifest.version,'1.3.2');
+  const cinemaIds=manifest.catalogs.filter(c=>c.type==='movie'&&c.id.startsWith('cinema-torrentio-')).map(c=>c.id);
+  assert.deepEqual(cinemaIds,[
+    'cinema-torrentio-today',
+    'cinema-torrentio-yesterday',
+    'cinema-torrentio-thisweek',
+    'cinema-torrentio-lastweek',
+    'cinema-torrentio-thismonth',
+    'cinema-torrentio-previousmonth',
+    'cinema-torrentio-nextweek',
+    'cinema-torrentio-nextmonth'
+  ]);
 });
