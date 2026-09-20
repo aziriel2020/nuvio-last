@@ -1796,6 +1796,7 @@ function providerAccentColor(provider = '') {
   if (value.includes('crunchyroll')) return '#f97316';
   if (value.includes('tv france')) return '#38bdf8';
   if (value.includes('anime')) return '#a855f7';
+  if (value.includes('cinema') || value.includes('torrentio')) return '#e11d48';
   return '#38bdf8';
 }
 
@@ -2370,6 +2371,7 @@ function hasProviderAccess(details, provider) {
 
 function platformCollectionTitle(providerSlug) {
   if (providerSlug === 'crunchyroll') return 'Crunchyroll + AniList';
+  if (providerSlug === 'cinema-torrentio') return 'Cinéma · Torrentio';
   return platformProviderDefinition(providerSlug)?.label || 'Streaming';
 }
 
@@ -2389,7 +2391,7 @@ function platformWordmarkSvg(providerSlug, logoDataUri = null, type = 'movie') {
 }
 
 async function platformLogoAsset(providerSlug, type = 'movie') {
-  if (providerSlug === ARCHIVE_VOD_PROVIDER.slug) return null;
+  if (providerSlug === ARCHIVE_VOD_PROVIDER.slug || providerSlug === 'cinema-torrentio') return null;
   const cacheKey = `${providerSlug}:${type === 'series' ? 'series' : 'movie'}`;
   if (platformLogoAssetCache.has(cacheKey)) return platformLogoAssetCache.get(cacheKey);
   try {
