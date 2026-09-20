@@ -343,13 +343,13 @@ function combinedRawCollections(req, cinemaKeys = null) {
   return [...(cinema.folders.length ? [cinema] : []), ...frCollections, ...globalCollections, ...trCollections, ...usCollections];
 }
 
-function coexistenceReport(req) {
+function coexistenceReport(req, collectionsOverride = null) {
   const origin = originFromRequest(req);
   const usManifest = usHandler._internals.buildManifest(`${origin}/us`, usHandler._internals.runtimeNow(), usHandler._internals.requestTimeZone(req));
   const frManifest = frHandler._internals.buildManifest(`${origin}/fr`, frHandler._internals.runtimeNow(), frHandler._internals.requestTimeZone(req));
   const globalManifest = globalHandler._internals.buildManifest(`${origin}/global`, globalHandler._internals.runtimeNow(), globalHandler._internals.requestTimeZone(req));
   const trManifest = trHandler._internals.buildManifest(`${origin}/tr`, trHandler._internals.runtimeNow(), trHandler._internals.requestTimeZone(req));
-  const collections = combinedCollections(req);
+  const collections = collectionsOverride || combinedCollections(req);
   const collectionIds = collections.map((c) => c.id);
   const folderKeys = collections.flatMap((c) => c.folders.map((f) => `${c.id}/${f.id}`));
   const usCatalogIds = usManifest.catalogs.map((c) => `${usManifest.id}:${c.type}:${c.id}`);
@@ -380,6 +380,11 @@ function coexistenceReport(req) {
   };
 }
 
+async function coexistenceReportLive(req) {
+  const collections = await combinedCollectionsLive(req);
+  return coexistenceReport(req, collections);
+}
+
 function landing(req) {
   const origin = originFromRequest(req);
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nuvio France + Türkiye + Cinéma Total + Anime/VOD + USA</title><style>body{margin:0;background:#05080f;color:#eef4ff;font-family:system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}.card{max-width:960px;margin:24px;padding:32px;border:1px solid #243247;border-radius:24px;background:#0b111b}h1{margin-top:0}code{display:block;padding:12px;margin:8px 0;background:#02050a;border-radius:10px;overflow-wrap:anywhere}.ok{color:#77e1a6}a{color:#72c7ff}</style></head><body><main class="card"><h1>🇫🇷 France · 🌍 Anime + VOD · 🇹🇷 Türkiye · 🇺🇸 USA</h1><p>Une seule production Oracle avec <b>quatre addons isolés</b>. Les VOD régionales sont conservées et la VOD Mondiale est ajoutée en plus.</p><p>1. France :</p><code>${origin}/fr/manifest.json</code><p>2. VOD Mondiale :</p><code>${origin}/global/manifest.json</code><p>3. Türkiye :</p><code>${origin}/tr/manifest.json</code><p>4. USA :</p><code>${origin}/us/manifest.json</code><p>5. Collections combinées :</p><code>${origin}/nuvio-collections-fr-global-tr-usa.json</code><p><a href="${origin}/coexistence-check.json">Vérification automatique des collisions</a></p><p class="ok">Ordre Modern Shield : 🇫🇷 France, puis 🌍 Global, puis 🇹🇷 Türkiye, puis 🇺🇸 USA.</p></main></body></html>`;
@@ -391,10 +396,10 @@ module.exports = async function handler(req, res) {
 
   if (path === '/' || path === '/index.html') return sendHtml(res, landing(req));
   if (path === '/health') {
-    const report = coexistenceReport(req);
+    const report = await coexistenceReportLive(req);
     return sendJson(res, report.safe ? 200 : 500, { ok: report.safe, ...report }, 'no-store');
   }
-  if (path === '/coexistence-check.json') return sendJson(res, 200, coexistenceReport(req), 'no-store');
+  if (path === '/coexistence-check.json') return sendJson(res, 200, await coexistenceReportLive(req), 'no-store');
   if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-shield.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
     return sendJson(res, 200, await combinedCollectionsLive(req), CINEMA_COLLECTION_CACHE);
   }
@@ -467,6 +472,7 @@ module.exports._internals = {
   generatedCoverStaticUrl,
   desktopizeCollectionArt,
   coexistenceReport,
+  coexistenceReportLive,
   delegate,
   usHandler,
   frHandler,
