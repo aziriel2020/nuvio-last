@@ -126,7 +126,7 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.3.1');
+  assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
   assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+8);
   assert.deepEqual(
