@@ -71,6 +71,8 @@ function generatedCoverStaticUrl(urlValue, folder = null, variant = 'card', mode
   if (!value) return null;
   let url;
   try { url = new URL(value); } catch (_) { return null; }
+  // Force live-rendered artwork when the folder title itself must be baked into the card.
+  if (url.searchParams.get('dynamic') === '1') return null;
   const region = url.pathname.match(/^\/(fr|global|tr|us)\//)?.[1];
   if (!region) return null;
 
@@ -235,35 +237,50 @@ function combinedCollections(req) {
 function cinemaTorrentioCollection(req) {
   const origin = originFromRequest(req);
   const frOrigin = `${origin}/fr`;
-  const buckets = ['today', 'yesterday', 'thisweek', 'lastweek', 'thismonth', 'previousmonth', 'nextweek', 'nextmonth'];
-  const sources = buckets.map((bucket) => ({
-    provider: 'addon',
-    addonId: 'com.nuvio.calendar.archives.fr.coexist',
-    type: 'movie',
-    catalogId: `cinema-torrentio-${bucket}`
-  }));
-  return {
-    id: 'cinema-now-torrentio',
-    title: '🎬 Cinéma du moment',
-    backdropImageUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v1`,
-    pinToTop: true,
-    focusGlowEnabled: true,
-    viewMode: 'FOLLOW_LAYOUT',
-    showAllTab: false,
-    folders: [{
-      id: 'cinema-now-movies',
-      title: 'Films disponibles',
-      coverImageUrl: `${frOrigin}/platform-category-card.svg?provider=vod-fr&category=films&v=cinema-torrentio-v1`,
+  const buckets = [
+    { key: 'today', title: 'Aujourd’hui' },
+    { key: 'yesterday', title: 'Hier' },
+    { key: 'thisweek', title: 'Cette semaine' },
+    { key: 'lastweek', title: 'Semaine dernière' },
+    { key: 'thismonth', title: 'Ce mois-ci' },
+    { key: 'previousmonth', title: 'Mois dernier' },
+    { key: 'nextweek', title: 'Semaine prochaine' },
+    { key: 'nextmonth', title: 'Mois prochain' }
+  ];
+
+  const folders = buckets.map(({ key, title }) => {
+    const source = {
+      provider: 'addon',
+      addonId: 'com.nuvio.calendar.archives.fr.coexist',
+      type: 'movie',
+      catalogId: `cinema-torrentio-${key}`
+    };
+    const art = `${frOrigin}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23e11d48&v=cinema-torrentio-v2`;
+    return {
+      id: `cinema-now-${key}`,
+      title,
+      coverImageUrl: art,
       focusGifEnabled: false,
       coverEmoji: '🎬',
       tileShape: 'LANDSCAPE',
       hideTitle: false,
-      heroBackdropUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v1`,
+      heroBackdropUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v2`,
       heroVideoUrl: null,
-      titleLogoUrl: `${frOrigin}/platform-logo?provider=vod-fr&type=movie&v=cinema-torrentio-v1`,
-      sources,
-      catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
-    }]
+      titleLogoUrl: null,
+      sources: [source],
+      catalogSources: [{ addonId: source.addonId, type: source.type, catalogId: source.catalogId }]
+    };
+  });
+
+  return {
+    id: 'cinema-now-torrentio',
+    title: '🎬 Cinéma du moment',
+    backdropImageUrl: `${frOrigin}/platform-backdrop.svg?provider=vod-fr&type=movie&v=cinema-torrentio-v2`,
+    pinToTop: true,
+    focusGlowEnabled: true,
+    viewMode: 'FOLLOW_LAYOUT',
+    showAllTab: false,
+    folders
   };
 }
 
