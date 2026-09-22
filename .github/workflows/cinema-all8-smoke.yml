@@ -46,6 +46,25 @@ jobs:
           for FILE in nuvio-collections-shield.json nuvio-collections-desktop.json
           do
             OUT="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -o "$OUT" -w '%{http_code}' "$BASE/$FILE?probe=labels-safe-covers")"
+            echo "EDITORIAL_FILE=$FILE HTTP=$CODE"
+            jq -c '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0] // null | {id,title,folders:[.folders[]? | {id,title,coverImageUrl,sources:[.sources[]? | {catalogId,type,genre}]}]}' "$OUT"
+            LABELS="$(jq -r '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0] | [.folders[0].sources[].genre,.folders[1].sources[].genre,.folders[2].sources[].genre] | @tsv' "$OUT")"
+            echo "SOURCE_LABELS=$LABELS"
+            jq -r '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0].folders[]?.coverImageUrl' "$OUT" | while read -r COVER
+            do
+              [ -z "$COVER" ] && continue
+              CTYPE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -o /dev/null -w '%{http_code} %{content_type}' "$COVER")"
+              echo "COVER=$CTYPE URL=$COVER"
+            done
+            rm -f "$OUT"
+          done
+
+          echo "MANIFEST_NAMES=$(curl -k -fsSL --connect-timeout 8 --max-time 25 "$BASE/fr/manifest.json?probe=labels" | jq -c '[.catalogs[] | select(.id|startswith("editorial-")) | {id,name}]')"
+
+          for FILE in nuvio-collections-shield.json nuvio-collections-desktop.json
+          do
+            OUT="$(mktemp)"
             CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -o "$OUT" -w '%{http_code}' "$BASE/$FILE?probe=final")"
             echo -n "COLLECTION_FILE=$FILE HTTP=$CODE CINEMA="
             jq -c '[.[] | select(.id=="cinema-now-torrentio")][0] // null | if .==null then null else {id,title,folders:[.folders[]? | {id,title,catalogId:(.sources[0].catalogId // null)}]} end' "$OUT"
