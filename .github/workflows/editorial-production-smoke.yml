@@ -1,0 +1,55 @@
+name: Editorial Production Smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/editorial-production-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Probe editorial production
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          BASE="https://141-145-215-202.nip.io"
+          echo "HEALTH=$(curl -k -sS -L --connect-timeout 8 --max-time 15 "$BASE/_oracle/health" || true)"
+
+          probe_catalog() {
+            TYPE="$1"
+            ID="$2"
+            OUT="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 30 -o "$OUT" -w '%{http_code}' "$BASE/fr/catalog/$TYPE/$ID.json?probe=editorial")"
+            TOTAL="$(jq -r 'if (.metas|type)=="array" then (.metas|length) else -1 end' "$OUT")"
+            echo "CATALOG=$ID HTTP=$CODE METAS=$TOTAL"
+            jq -r '.metas[0:5][]? | ["ITEM",.name,.id,.released,.releaseInfo] | @tsv' "$OUT"
+            rm -f "$OUT"
+          }
+
+          probe_catalog series editorial-series-top-rated-yesterday
+          probe_catalog series editorial-series-top-rated-lastweek
+          probe_catalog series editorial-series-top-rated-lastmonth
+          probe_catalog series editorial-series-trendy-yesterday
+          probe_catalog series editorial-series-trendy-lastweek
+          probe_catalog series editorial-series-trendy-lastmonth
+          probe_catalog movie editorial-movies-cinema-now
+
+          for FILE in nuvio-collections-shield.json nuvio-collections-desktop.json
+          do
+            OUT="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 30 -o "$OUT" -w '%{http_code}' "$BASE/$FILE?probe=editorial")"
+            echo "COLLECTION_FILE=$FILE HTTP=$CODE"
+            jq -c '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0] // null | {id,title,folders:[.folders[]? | {id,title,coverImageUrl,sources:[.sources[]? | {type,catalogId}]}]}' "$OUT"
+            jq -r '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0].folders[]?.coverImageUrl' "$OUT" | while read -r COVER
+            do
+              [ -z "$COVER" ] && continue
+              CTYPE="$(curl -k -sS -L --connect-timeout 8 --max-time 30 -o /dev/null -w '%{http_code} %{content_type}' "$COVER")"
+              echo "COVER=$CTYPE URL=$COVER"
+            done
+            rm -f "$OUT"
+          done
