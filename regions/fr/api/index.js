@@ -1163,9 +1163,77 @@ function buildPlatformCollection(definition, entries, origin = null) {
   };
 }
 
+function buildEditorialCollection(origin = null) {
+  const entries = buildEditorialCatalogEntries();
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const sourceSet = (ids) => ids.map((id) => byId.get(id)).filter(Boolean);
+
+  const folder = ({ id, title, emoji, ids, art, hero, logo }) => {
+    const sourceEntries = sourceSet(ids);
+    return {
+      id,
+      title,
+      coverImageUrl: origin ? art(origin) : null,
+      focusGifEnabled: false,
+      coverEmoji: emoji,
+      tileShape: 'LANDSCAPE',
+      hideTitle: true,
+      heroBackdropUrl: origin ? hero(origin) : null,
+      heroVideoUrl: null,
+      titleLogoUrl: origin ? logo(origin) : null,
+      sources: sourceEntries.map(collectionAddonSource),
+      catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
+    };
+  };
+
+  const ratedIds = EDITORIAL_PERIODS.map(({ key }) => `editorial-series-top-rated-${key}`);
+  const trendyIds = EDITORIAL_PERIODS.map(({ key }) => `editorial-series-trendy-${key}`);
+
+  const folders = [
+    folder({
+      id: 'editorial-series-top-rated',
+      title: '⭐ Séries les mieux notées',
+      emoji: '⭐',
+      ids: ratedIds,
+      art: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=card&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&dynamic=1&v=editorial-v1`,
+      hero: (base) => `${base}/genre-backdrop.jpg?genre=drama&v=editorial-v1`,
+      logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
+    }),
+    folder({
+      id: 'editorial-series-trendy',
+      title: '🔥 Séries les plus trendy',
+      emoji: '🔥',
+      ids: trendyIds,
+      art: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=card&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&dynamic=1&v=editorial-v1`,
+      hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-v1`,
+      logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
+    }),
+    folder({
+      id: 'editorial-cinema-now',
+      title: '🎬 Films au cinéma actuellement',
+      emoji: '🎬',
+      ids: ['editorial-movies-cinema-now'],
+      art: (base) => `${base}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23e11d48&v=editorial-v1`,
+      hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-v1`,
+      logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
+    })
+  ];
+
+  return {
+    id: 'calendar-archives-fr-editorial-now',
+    title: '🇫🇷 Tendances & Cinéma',
+    backdropImageUrl: origin ? `${origin}/genre-backdrop.jpg?genre=drama&v=editorial-v1` : null,
+    pinToTop: true,
+    focusGlowEnabled: true,
+    viewMode: 'FOLLOW_LAYOUT',
+    showAllTab: false,
+    folders
+  };
+}
+
 function buildNuvioCollectionsImport(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
   const entries = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)];
-  return [...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), ...buildGenreCollections(entries, origin)];
+  return [buildEditorialCollection(origin), ...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), ...buildGenreCollections(entries, origin)];
 }
 
 function buildArchiveBlueprint(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
@@ -5020,6 +5088,7 @@ module.exports._internals = {
   resolveArchiveCatalog,
   platformCollectionId,
   platformImageUrls,
+  buildEditorialCollection,
   buildNuvioCollectionsImport,
   buildGenreCatalogEntries,
   buildGenreCollection,
