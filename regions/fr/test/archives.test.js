@@ -217,6 +217,95 @@ test('periods then month+years are descending and import is stable across Septem
 });
 
 
+test('Editorial series uses period air-date filters and keeps only new or active shows',async()=>{
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname.endsWith('/discover/tv')){
+      assert.equal(u.searchParams.get('air_date.gte'),'2026-08-23');
+      assert.equal(u.searchParams.get('air_date.lte'),'2026-08-23');
+      assert.equal(u.searchParams.get('sort_by'),'vote_average.desc');
+      assert.equal(u.searchParams.get('vote_count.gte'),'200');
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        page:1,total_pages:1,results:[
+          {id:701,vote_average:8.7,vote_count:1200,popularity:80},
+          {id:702,vote_average:9.1,vote_count:400,popularity:40},
+          {id:703,vote_average:9.8,vote_count:900,popularity:20}
+        ]
+      })};
+    }
+    const m=u.pathname.match(/\/tv\/(701|702|703)$/);
+    if(m){
+      const id=Number(m[1]);
+      const defs={
+        701:{name:'Active Hit',status:'Returning Series',first_air_date:'2024-01-01',last_air_date:'2026-08-23',vote_average:8.7,vote_count:1200,popularity:80,imdb:'tt7000001'},
+        702:{name:'New Limited',status:'Ended',first_air_date:'2026-08-23',last_air_date:'2026-08-23',vote_average:9.1,vote_count:400,popularity:40,imdb:'tt7000002'},
+        703:{name:'Old Ended',status:'Ended',first_air_date:'2020-01-01',last_air_date:'2020-02-01',vote_average:9.8,vote_count:900,popularity:20,imdb:'tt7000003'}
+      }[id];
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id,name:defs.name,overview:'Test',status:defs.status,first_air_date:defs.first_air_date,last_air_date:defs.last_air_date,
+        last_episode_to_air:{air_date:defs.last_air_date},next_episode_to_air:null,
+        vote_average:defs.vote_average,vote_count:defs.vote_count,popularity:defs.popularity,
+        poster_path:'/p.jpg',backdrop_path:'/b.jpg',genres:[{name:'Drama'}],external_ids:{imdb_id:defs.imdb}
+      })};
+    }
+    throw new Error('unexpected '+u.pathname);
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
+    const result=await api._internals.buildEditorialSeriesCatalog({catalog,timeZone:tz,now:fixedNow,useCache:false});
+    assert.deepEqual(result.metas.map((m)=>m.name),['New Limited','Active Hit']);
+    assert.equal(result.stats.final,2);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+  }
+});
+
+test('Editorial cinema uses Belgian TMDb now-playing and does not require Torrentio',async()=>{
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname.endsWith('/movie/now_playing')){
+      assert.equal(u.searchParams.get('region'),'BE');
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        page:1,total_pages:1,results:[{id:801,popularity:333,release_date:'2026-08-20'}]
+      })};
+    }
+    if(u.pathname.endsWith('/movie/801')){
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id:801,title:'Cinema Belgium',overview:'Test',release_date:'2026-08-20',popularity:333,
+        vote_average:7.4,vote_count:500,poster_path:'/p.jpg',backdrop_path:'/b.jpg',
+        external_ids:{imdb_id:'tt8000001'},
+        release_dates:{results:[{iso_3166_1:'BE',release_dates:[{type:3,release_date:'2026-08-20T00:00:00.000Z'}]}]}
+      })};
+    }
+    throw new Error('unexpected '+u.pathname);
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog=api._internals.resolveArchiveCatalog('editorial-movies-cinema-now','movie',fixedNow,'Europe/Brussels');
+    const result=await api._internals.buildEditorialCinemaCatalog({catalog,timeZone:'Europe/Brussels',now:fixedNow,useCache:false});
+    assert.equal(result.metas.length,1);
+    assert.equal(result.metas[0].name,'Cinema Belgium');
+    assert.match(result.metas[0].releaseInfo,/À l’affiche en Belgique/);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+  }
+});
+
 test('VOD is based on FR Digital release dates only, not buy/rent providers',async()=>{
   const params=api._internals.vodDiscoverParams({start:'2026-08-24',end:'2026-08-24'},1);
   assert.equal(params.region,'FR');
