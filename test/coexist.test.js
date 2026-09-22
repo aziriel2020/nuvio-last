@@ -432,7 +432,7 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
       assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
       const heroUrl = new URL(folder.heroBackdropUrl);
       assert(heroUrl.searchParams.get('type'), 'real-content backdrop type missing');
-      assert.match(heroUrl.searchParams.get('v') || '', /real-content/, 'real-content backdrop revision missing');
+      assert.equal(heroUrl.searchParams.get('v'), 'shield15-safe-badges', 'safe-zone backdrop revision missing');
     }
   }
 
