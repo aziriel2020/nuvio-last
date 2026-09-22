@@ -49,7 +49,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12224);
+  assert.equal(fr.catalogs.length, 12231);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -59,25 +59,61 @@ test('combined live import fails closed without Cinema availability and keeps re
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 49);
+  assert.equal(collections.length, 50);
   const ids = collections.map((c) => c.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(collections.some((c) => c.id === 'cinema-now-torrentio'), false);
-  assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 16);
+  assert.equal(collections.filter((c) => c.title.startsWith('🇫🇷 ')).length, 17);
   assert.equal(collections.filter((c) => c.title.startsWith('🌍 ')).length, 2);
   assert.equal(collections.filter((c) => c.title.startsWith('🇹🇷 ')).length, 19);
   assert.equal(collections.filter((c) => c.title.startsWith('🇺🇸 ')).length, 12);
-  assert.equal(collections[0].title, '🇫🇷 Netflix');
-  assert.equal(collections[13].title, '🇫🇷 VOD France');
-  assert.equal(collections[14].title, '🇫🇷 Genres · Films');
-  assert.equal(collections[15].title, '🇫🇷 Genres · Séries');
-  assert.equal(collections[16].title, '🌍 Anime Japon + Corée');
-  assert.equal(collections[17].title, '🌍 VOD Mondiale');
-  assert.equal(collections[18].title, '🇹🇷 Netflix');
-  assert.equal(collections[36].title, '🇹🇷 VOD Türkiye');
-  assert.equal(collections[37].title, '🇺🇸 Netflix');
+  assert.equal(collections[0].title, '🇫🇷 Tendances & Cinéma');
+  assert.equal(collections[1].title, '🇫🇷 Netflix');
+  assert.equal(collections[14].title, '🇫🇷 VOD France');
+  assert.equal(collections[15].title, '🇫🇷 Genres · Films');
+  assert.equal(collections[16].title, '🇫🇷 Genres · Séries');
+  assert.equal(collections[17].title, '🌍 Anime Japon + Corée');
+  assert.equal(collections[18].title, '🌍 VOD Mondiale');
+  assert.equal(collections[19].title, '🇹🇷 Netflix');
+  assert.equal(collections[37].title, '🇹🇷 VOD Türkiye');
+  assert.equal(collections[38].title, '🇺🇸 Netflix');
   assert.equal(collections.at(-2).title, '🇺🇸 Genres · Films');
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
+});
+
+test('Editorial trends collection keeps periods as catalog sources inside three folders', async () => {
+  const shield = JSON.parse((await call('/nuvio-collections-shield.json')).text);
+  const editorial = shield.find((c) => c.id === 'calendar-archives-fr-editorial-now');
+  assert(editorial);
+  assert.equal(editorial.title, '🇫🇷 Tendances & Cinéma');
+  assert.deepEqual(editorial.folders.map((f) => f.title), [
+    '⭐ Séries les mieux notées',
+    '🔥 Séries les plus trendy',
+    '🎬 Films au cinéma actuellement'
+  ]);
+  assert.deepEqual(editorial.folders[0].sources.map((x) => x.catalogId), [
+    'editorial-series-top-rated-yesterday',
+    'editorial-series-top-rated-lastweek',
+    'editorial-series-top-rated-lastmonth'
+  ]);
+  assert.deepEqual(editorial.folders[1].sources.map((x) => x.catalogId), [
+    'editorial-series-trendy-yesterday',
+    'editorial-series-trendy-lastweek',
+    'editorial-series-trendy-lastmonth'
+  ]);
+  assert.deepEqual(editorial.folders[2].sources.map((x) => x.catalogId), [
+    'editorial-movies-cinema-now'
+  ]);
+  assert.match(editorial.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=drama/);
+  assert.match(editorial.folders[1].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
+  assert.match(editorial.folders[2].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
+
+  const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
+  const desktopEditorial = desktop.find((c) => c.id === 'calendar-archives-fr-editorial-now');
+  assert(desktopEditorial);
+  assert.match(desktopEditorial.folders[0].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=drama/);
+  assert.match(desktopEditorial.folders[1].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
+  assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
 });
 
 test('Cinema du moment static schema exposes À l’affiche plus dated tiles and reuses the France addon', () => {
@@ -164,7 +200,7 @@ test('France stays first, Global is next, Türkiye follows, and USA remains last
   const globalVod = collections.filter((c) => c.title.startsWith('🌍 '));
   const tr = collections.filter((c) => c.title.startsWith('🇹🇷 '));
   const us = collections.filter((c) => c.title.startsWith('🇺🇸 '));
-  assert.equal(fr.length, 16);
+  assert.equal(fr.length, 17);
   assert.equal(globalVod.length, 2);
   assert.equal(tr.length, 19);
   assert.equal(us.length, 12);
@@ -372,7 +408,7 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 49);
+  assert.equal(collections.length, 50);
 
   const targets = [
     collections.find((c) => c.title === '🇫🇷 Netflix'),
@@ -427,7 +463,7 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   assert.equal(response.statusCode, 200);
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
-  assert.equal(collections.length, 49);
+  assert.equal(collections.length, 50);
 
   const frNetflix = collections.find((c) => c.title === '🇫🇷 Netflix');
   const globalVod = collections.find((c) => c.title === '🌍 VOD Mondiale');
