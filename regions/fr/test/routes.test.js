@@ -23,7 +23,7 @@ test('collections route exposes French platform parents and hosted Modern images
   process.env.NUVIO_NOW_OVERRIDE='2026-08-24T12:28:00Z';
   try{
     const r=await call('/nuvio-collections.json');assert.equal(r.statusCode,200);const p=JSON.parse(r.text);
-    assert.deepEqual(p.map(x=>x.title),['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries']);
+    assert.deepEqual(p.map(x=>x.title),['🇫🇷 Tendances & Cinéma','🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries']);
     const canal=p.find(x=>x.title==='🇫🇷 CANAL+');
     assert.deepEqual(canal.folders.map(f=>f.title),['Séries','Films']);
     assert.match(canal.folders[0].coverImageUrl,/platform-category-card\.svg\?provider=canal-plus&category=series&v=coex-fr132-cinema&asset=2$/);
