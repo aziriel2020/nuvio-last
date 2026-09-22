@@ -112,7 +112,7 @@ function cleanVisualQuery(url, removeKeys) {
     .replace(/[?&]+$/, '');
 }
 
-const DESKTOP_VISUAL_REV = 'desktop13-real-content';
+const DESKTOP_VISUAL_REV = 'desktop14-safe-badges';
 
 function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const generated = generatedCoverStaticUrl(url, folder, variant, 'desktop', collectionTitle);
@@ -153,7 +153,7 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
   return value;
 }
 
-const SHIELD_VISUAL_REV = 'shield14-real-content';
+const SHIELD_VISUAL_REV = 'shield15-safe-badges';
 
 function shieldCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
   const generated = generatedCoverStaticUrl(url, folder, variant, 'shield', collectionTitle);
