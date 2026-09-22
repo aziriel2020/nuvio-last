@@ -21,7 +21,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           gh run list --repo "$GITHUB_REPOSITORY" --workflow "Deploy Oracle Production" --branch main --limit 5 --json databaseId,headSha,status,conclusion,createdAt,displayTitle
-          RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "Deploy Oracle Production" --branch main --limit 10 --json databaseId,headSha --jq '.[] | select(.headSha=="f4d187f8b43211b5384841b9b7be46937d60106e") | .databaseId' | head -1)"
+          RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "Deploy Oracle Production" --branch main --limit 10 --json databaseId,headSha --jq '.[] | select(.headSha=="57fa47f5ea57db9949e1483fcd4d42f4fd001887") | .databaseId' | head -1)"
           echo "TARGET_RUN=$RUN_ID"
           if [ -n "$RUN_ID" ]; then
             gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json status,conclusion,jobs
