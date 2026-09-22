@@ -5218,6 +5218,7 @@ module.exports._internals = {
   isAllowedPosterSource,
   normalizedCardLayout,
   optimizedCardSource,
+  desktopOverlaySvg,
   calendarCardUrl,
   calendarCardEventInfo,
   frenchCardDate,
