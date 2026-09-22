@@ -250,8 +250,11 @@ async function cinemaAvailableKeys(req) {
 }
 
 async function combinedRawCollectionsLive(req) {
-  const keys = await cinemaAvailableKeys(req);
-  return combinedRawCollections(req, keys);
+  // The legacy Torrentio Cinema parent remains callable for backwards compatibility,
+  // but it is no longer injected into combined imports. The editorial France
+  // collection owns the current-cinema folder now, so all aliases share one
+  // deterministic collection payload.
+  return combinedRawCollections(req);
 }
 
 async function combinedCollectionsLive(req) {
@@ -342,8 +345,11 @@ function combinedRawCollections(req, cinemaKeys = null) {
   // 🇫🇷 VOD France = first Digital release in FR
   // 🌍 VOD Mondiale = first Digital release in any country
   // 🇺🇸 VOD = first Digital release in US
-  const cinema = cinemaTorrentioCollection(req, cinemaKeys);
-  return [...(cinema.folders.length ? [cinema] : []), ...frCollections, ...globalCollections, ...trCollections, ...usCollections];
+  // Do not inject the legacy top-level Cinema parent here. It caused the
+  // standard/Shield/Desktop aliases to disagree while availability was changing.
+  // Current cinema is now the "🎬 Films au cinéma actuellement" folder inside
+  // the France editorial collection.
+  return [...frCollections, ...globalCollections, ...trCollections, ...usCollections];
 }
 
 function coexistenceReport(req, collectionsOverride = null) {
