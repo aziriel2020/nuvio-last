@@ -171,8 +171,8 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
   const subtitlePath = desktopPathText(subtitle, 102, 774, 1040, 46, { minSize: 34, fill: '#eef5ff', opacity: .98 });
   const bottomPath = desktopPathText(bottomTag, 102, 842, 760, 42, { minSize: 32, fill: accent });
   const typeIcon = movie
-    ? '<path d="M1440 57h58v50h-58z" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M1440 75h58M1459 57v50M1478 57v50" stroke="#fff" stroke-width="4.5"/><path d="M1456 67l24 15-24 15z" fill="#fff"/>'
-    : '<rect x="1437" y="61" width="62" height="45" rx="7" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M1453 118h30" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>';
+    ? '<path d="M1429 82h54v46h-54z" fill="none" stroke="#fff" stroke-width="6"/><path d="M1429 99h54M1447 82v46M1465 82v46" stroke="#fff" stroke-width="4"/><path d="M1444 91l23 14-23 14z" fill="#fff"/>'
+    : '<rect x="1427" y="84" width="58" height="42" rx="7" fill="none" stroke="#fff" stroke-width="6"/><path d="M1441 137h30" stroke="#fff" stroke-width="6" stroke-linecap="round"/>';
 
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
     <defs>
@@ -189,8 +189,8 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
     </defs>
     <rect width="1600" height="900" fill="url(#shade)"/>
     <rect y="330" width="1600" height="570" fill="url(#bottom)"/>
-    <rect x="1018" y="32" width="362" height="124" rx="28" fill="#02050a" fill-opacity=".92" stroke="${accent}" stroke-width="6"/>
-    <rect x="1392" y="32" width="174" height="124" rx="28" fill="${accent}" fill-opacity=".99"/>
+    <rect x="1022" y="56" width="344" height="112" rx="26" fill="#02050a" fill-opacity=".92" stroke="${accent}" stroke-width="6"/>
+    <rect x="1378" y="56" width="164" height="112" rx="26" fill="${accent}" fill-opacity=".99"/>
     ${typeIcon}
     <rect x="58" y="585" width="14" height="220" rx="7" fill="${accent}"/>
     ${titlePath}
@@ -217,21 +217,21 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   if (options.logoBuffer) {
     try {
       const logo = await sharp(options.logoBuffer)
-        .resize({ width: 290, height: 86, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 268, height: 72, fit: 'inside', withoutEnlargement: true })
         .png()
         .toBuffer();
       const meta = await sharp(logo).metadata();
-      const width = Math.min(290, meta.width || 290);
-      composites.push({ input: logo, left: 1199 - Math.round(width / 2), top: 51 });
+      const width = Math.min(268, meta.width || 268);
+      composites.push({ input: logo, left: 1194 - Math.round(width / 2), top: 76 });
     } catch (_) {}
   } else if (options.providerLabel) {
     const providerFallback = desktopCenteredPathText(
       normalizedDesktopText(options.providerLabel).replace(/^[^\p{L}\p{N}]+/u, '').toUpperCase(),
-      1199,
-      114,
-      310,
-      36,
-      { minSize: 27 }
+      1194,
+      130,
+      280,
+      34,
+      { minSize: 24 }
     );
     if (providerFallback) {
       composites.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">${providerFallback}</svg>`), left: 0, top: 0 });
@@ -1168,6 +1168,19 @@ function buildEditorialCollection(origin = null) {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   const sourceSet = (ids) => ids.map((id) => byId.get(id)).filter(Boolean);
 
+  const editorialPeriodLabel = (entry) => {
+    if (entry.id === 'editorial-movies-cinema-now') return 'À l’affiche actuellement';
+    return EDITORIAL_PERIODS.find(({ key }) => entry.id.endsWith(`-${key}`))?.label || null;
+  };
+  const editorialAddonSource = (entry) => ({
+    ...collectionAddonSource(entry),
+    genre: editorialPeriodLabel(entry)
+  });
+  const editorialLegacySource = (entry) => ({
+    ...collectionLegacyCatalogSource(entry),
+    genre: editorialPeriodLabel(entry)
+  });
+
   const folder = ({ id, title, emoji, ids, art, hero, logo }) => {
     const sourceEntries = sourceSet(ids);
     return {
@@ -1181,8 +1194,8 @@ function buildEditorialCollection(origin = null) {
       heroBackdropUrl: origin ? hero(origin) : null,
       heroVideoUrl: null,
       titleLogoUrl: origin ? logo(origin) : null,
-      sources: sourceEntries.map(collectionAddonSource),
-      catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
+      sources: sourceEntries.map(editorialAddonSource),
+      catalogSources: sourceEntries.map(editorialLegacySource)
     };
   };
 
@@ -1335,7 +1348,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-top-rated-${key}`,
       catalog: {
         type: 'series',
-        name: label,
+        name: 'Séries',
         providerSlug: 'editorial-top-rated',
         cardProvider: 'Séries les mieux notées',
         period,
@@ -1350,7 +1363,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-trendy-${key}`,
       catalog: {
         type: 'series',
-        name: label,
+        name: 'Séries',
         providerSlug: 'editorial-trendy',
         cardProvider: 'Séries les plus trendy',
         period,
@@ -1368,7 +1381,7 @@ function buildEditorialCatalogEntries() {
       id: 'editorial-movies-cinema-now',
       catalog: {
         type: 'movie',
-        name: 'À l’affiche actuellement',
+        name: 'Films',
         providerSlug: 'editorial-cinema',
         cardProvider: 'Films au cinéma actuellement',
         period: 'nowplaying',
@@ -3196,7 +3209,86 @@ async function cinemaAvailableBucketKeys(timeZone, now = new Date()) {
   return keys;
 }
 
+async function buildTargetedCinemaHistoricalCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  const window = cinemaDateWindow(catalog.cinemaBucket, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: 'cinema-torrentio-targeted',
+    type: 'movie',
+    period: catalog.cinemaBucket,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-cinema-targeted-v1`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = emptyStats({ label: 'Cinéma · Torrentio', ids: [] }, catalog, window, timeZone);
+  const raw = await discoverCinemaCandidates(window);
+  stats.candidates = raw.length;
+
+  const settled = await mapLimitSettled(raw.slice(0, CINEMA_MAX_DISCOVERY_CANDIDATES), ENRICH_CONCURRENCY, async (candidate) => {
+    const details = await fetchDetails('movie', candidate.id);
+    const release = cinemaPreferredRelease(details, window.today, window, false);
+    if (!release || release.date < window.start || release.date > window.end) return { meta: null, reason: 'outside-window' };
+
+    const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
+    if (!imdbId) return { meta: null, reason: 'no-imdb' };
+
+    const torrentio = await torrentioAvailability(imdbId);
+    const verifierUnavailable = !torrentio.available && (
+      ['http-403', 'http-429', 'timeout', 'network'].includes(torrentio.reason) ||
+      Number(torrentio.status || 0) >= 500
+    );
+    if (!torrentio.available && !verifierUnavailable) return { meta: null, reason: 'no-torrentio' };
+
+    const meta = baseMeta(details, 'movie', release.date, `Sortie cinéma Belgique • ${humanCalendarDate(release.date)}`);
+    if (!meta.poster) return { meta: null, reason: 'no-poster' };
+    meta.description = [
+      'Sortie cinéma Belgique',
+      `Date cinéma Belgique : ${humanCalendarDate(release.date)}`,
+      torrentio.available
+        ? 'Disponibilité vérifiée par Torrentio'
+        : 'Vérification serveur indisponible ; Nuvio contrôle les sources avec tes addons à l’ouverture',
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._calendarProvider = 'Cinéma · Torrentio';
+    meta._calendarSource = 'torrentio-theatrical';
+    meta._dedupeKey = `cinema-torrentio:${imdbId}`;
+    meta._cinemaReleaseDate = release.date;
+    meta._cinemaTorrentioVerified = Boolean(torrentio.available);
+    meta._cinemaPopularity = Number(details?.popularity || candidate?.popularity || 0);
+    return { meta };
+  });
+
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) {
+      if (result?.reason === 'no-imdb') stats.excludedNoImdb += 1;
+      else if (result?.reason === 'outside-window') stats.excludedOutsideWindow += 1;
+      continue;
+    }
+    metas.push(result.meta);
+  }
+
+  const deduped = [...new Map(metas.map((meta) => [meta._dedupeKey || meta.id, meta])).values()];
+  deduped.sort((a, b) => (
+    String(b._cinemaReleaseDate || b.released || '').localeCompare(String(a._cinemaReleaseDate || a.released || '')) ||
+    Number(b._cinemaPopularity || 0) - Number(a._cinemaPopularity || 0)
+  ));
+  const finalMetas = deduped.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  stats.duplicatesRemoved = Math.max(0, metas.length - deduped.length);
+  stats.final = finalMetas.length;
+  const result = { metas: finalMetas, stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
 async function buildCinemaTorrentioCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  if (['yesterday', 'lastweek'].includes(catalog.cinemaBucket)) {
+    return buildTargetedCinemaHistoricalCatalog({ catalog, timeZone, now, useCache });
+  }
   const window = cinemaDateWindow(catalog.cinemaBucket, now, timeZone);
   const key = catalogCacheKey({
     providerSlug: 'cinema-torrentio',
@@ -5126,6 +5218,7 @@ module.exports._internals = {
   isAllowedPosterSource,
   normalizedCardLayout,
   optimizedCardSource,
+  desktopOverlaySvg,
   calendarCardUrl,
   calendarCardEventInfo,
   frenchCardDate,
@@ -5172,6 +5265,7 @@ module.exports._internals = {
   torrentioHasStreams,
   buildCinemaTorrentioIndex,
   cinemaAvailableBucketKeys,
+  buildTargetedCinemaHistoricalCatalog,
   buildCinemaTorrentioCatalog,
   EDITORIAL_PERIODS,
   buildEditorialCatalogEntries,

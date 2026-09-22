@@ -80,13 +80,22 @@ test('Editorial collection has three folders and periods are catalogs inside eac
     'editorial-series-top-rated-lastweek',
     'editorial-series-top-rated-lastmonth'
   ]);
+  assert.deepEqual(editorial.folders[0].sources.map((x)=>x.genre),[
+    'Hier','Semaine passée','Mois dernier'
+  ]);
   assert.deepEqual(editorial.folders[1].sources.map((x)=>x.catalogId),[
     'editorial-series-trendy-yesterday',
     'editorial-series-trendy-lastweek',
     'editorial-series-trendy-lastmonth'
   ]);
+  assert.deepEqual(editorial.folders[1].sources.map((x)=>x.genre),[
+    'Hier','Semaine passée','Mois dernier'
+  ]);
   assert.deepEqual(editorial.folders[2].sources.map((x)=>x.catalogId),[
     'editorial-movies-cinema-now'
+  ]);
+  assert.deepEqual(editorial.folders[2].sources.map((x)=>x.genre),[
+    'À l’affiche actuellement'
   ]);
   assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl&&f.titleLogoUrl));
   assert.match(editorial.folders[0].coverImageUrl,/genre-folder-art\.svg/);
@@ -187,6 +196,8 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
       'editorial-movies-cinema-now'
     ]
   );
+  assert(manifest.catalogs.filter(c=>c.id.startsWith('editorial-series-')).every(c=>c.name==='Séries'));
+  assert.equal(manifest.catalogs.find(c=>c.id==='editorial-movies-cinema-now')?.name,'Films');
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
 
@@ -266,6 +277,69 @@ test('Editorial series uses period air-date filters and keeps only new or active
     api._internals.catalogCache.clear?.();
     api._internals.detailsCache.clear?.();
   }
+});
+
+test('Cinema Yesterday and Last Week use targeted Belgian release discovery when shared index misses them',async()=>{
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.hostname==='torrentio.strem.fun'){
+      return {ok:false,status:403,headers:{get:()=>null},json:async()=>({})};
+    }
+    if(u.pathname.endsWith('/discover/movie')){
+      assert.equal(u.searchParams.get('region'),'BE');
+      assert.equal(u.searchParams.get('with_release_type'),'2|3');
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        page:1,total_pages:1,results:[{id:901,popularity:123,release_date:'2026-08-23'}]
+      })};
+    }
+    if(u.pathname.endsWith('/movie/901')){
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id:901,title:'Historical Cinema',overview:'Test',release_date:'2026-08-23',popularity:123,
+        vote_average:7.1,vote_count:321,poster_path:'/p.jpg',backdrop_path:'/b.jpg',
+        external_ids:{imdb_id:'tt9000001'},
+        release_dates:{results:[{iso_3166_1:'BE',release_dates:[{type:3,release_date:'2026-08-23T00:00:00.000Z'}]}]}
+      })};
+    }
+    throw new Error('unexpected '+u.toString());
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+
+    const yesterday=api._internals.resolveArchiveCatalog('cinema-torrentio-yesterday','movie',fixedNow,'Europe/Brussels');
+    const y=await api._internals.buildTargetedCinemaHistoricalCatalog({
+      catalog:yesterday,timeZone:'Europe/Brussels',now:fixedNow,useCache:false
+    });
+    assert.equal(y.metas.length,1);
+    assert.equal(y.metas[0].name,'Historical Cinema');
+
+    const lastweek=api._internals.resolveArchiveCatalog('cinema-torrentio-lastweek','movie',fixedNow,'Europe/Brussels');
+    const w=await api._internals.buildTargetedCinemaHistoricalCatalog({
+      catalog:lastweek,timeZone:'Europe/Brussels',now:fixedNow,useCache:false
+    });
+    assert.equal(w.metas.length,1);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+  }
+});
+
+test('Top cover badges stay fully inside the 1600x900 safe frame',()=>{
+  const svg=api._internals.desktopOverlaySvg('series','#ff5a36',{
+    title:'Séries les plus trendy',
+    subtitle:'Tendances & Cinéma',
+    providerLabel:'Tendances & Cinéma',
+    bottomTag:'Tendances & Cinéma'
+  }).toString('utf8');
+  assert.match(svg,/x="1022" y="56" width="344" height="112"/);
+  assert.match(svg,/x="1378" y="56" width="164" height="112"/);
+  assert.doesNotMatch(svg,/x="1392" y="32"/);
+  assert.doesNotMatch(svg,/x="1018" y="32"/);
 });
 
 test('Editorial cinema uses Belgian TMDb now-playing and does not require Torrentio',async()=>{
