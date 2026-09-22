@@ -7,7 +7,7 @@ const api=require('../api/index');
 const fixedNow=new Date('2026-08-24T12:28:00Z');
 const fixedSep=new Date('2026-09-01T12:28:00Z');
 const tz='Europe/Paris';
-const expectedParents=['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'];
+const expectedParents=['🇫🇷 Tendances & Cinéma','🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'];
 
 function collection(title, now=fixedNow, origin='https://fr-archives.example'){
   return api._internals.buildNuvioCollectionsImport(now,tz,origin).find(c=>c.title===title||c.title.endsWith(` ${title}`));
@@ -66,6 +66,45 @@ test('Cinema card renderer uses a real Cinema label and no fake platform identit
 });
 
 
+test('Editorial collection has three folders and periods are catalogs inside each folder',()=>{
+  const editorial=api._internals.buildEditorialCollection('https://fr-archives.example');
+  assert.equal(editorial.id,'calendar-archives-fr-editorial-now');
+  assert.equal(editorial.title,'🇫🇷 Tendances & Cinéma');
+  assert.deepEqual(editorial.folders.map((f)=>f.title),[
+    '⭐ Séries les mieux notées',
+    '🔥 Séries les plus trendy',
+    '🎬 Films au cinéma actuellement'
+  ]);
+  assert.deepEqual(editorial.folders[0].sources.map((x)=>x.catalogId),[
+    'editorial-series-top-rated-yesterday',
+    'editorial-series-top-rated-lastweek',
+    'editorial-series-top-rated-lastmonth'
+  ]);
+  assert.deepEqual(editorial.folders[1].sources.map((x)=>x.catalogId),[
+    'editorial-series-trendy-yesterday',
+    'editorial-series-trendy-lastweek',
+    'editorial-series-trendy-lastmonth'
+  ]);
+  assert.deepEqual(editorial.folders[2].sources.map((x)=>x.catalogId),[
+    'editorial-movies-cinema-now'
+  ]);
+  assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl&&f.titleLogoUrl));
+  assert.match(editorial.folders[0].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[1].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[2].coverImageUrl,/platform-category-card\.svg/);
+
+  const top=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
+  const trendy=api._internals.resolveArchiveCatalog('editorial-series-trendy-lastweek','series',fixedNow,tz);
+  const cinema=api._internals.resolveArchiveCatalog('editorial-movies-cinema-now','movie',fixedNow,tz);
+  assert.equal(top.source,'editorial-series');
+  assert.equal(top.editorialMode,'top-rated');
+  assert.equal(trendy.source,'editorial-series');
+  assert.equal(trendy.editorialMode,'trendy');
+  assert.equal(cinema.source,'editorial-cinema');
+  assert.equal(cinema.editorialMode,'cinema-now');
+});
+
+
 test('France provider parents include French services and no US-only Hulu/Peacock',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
   assert.deepEqual(payload.map(c=>c.title),expectedParents);
@@ -80,7 +119,7 @@ test('France provider parents include French services and no US-only Hulu/Peacoc
 
 test('all normal France platforms have Series and Films; VOD France is Films only',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
-  for(const parent of payload.filter(c=>!['🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
+  for(const parent of payload.filter(c=>!['🇫🇷 Tendances & Cinéma','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
   assert.deepEqual(collection('VOD France').folders.map(f=>f.title),['Films']);
   assert.equal(collection('Genres · Films').folders.length,19); assert.equal(collection('Genres · Séries').folders.length,16);
 });
@@ -134,10 +173,19 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+10);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+17);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
     ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
+  );
+  assert.deepEqual(
+    manifest.catalogs.filter(c=>c.id.startsWith('editorial-')).map(c=>c.id),
+    [
+      'editorial-series-top-rated-yesterday','editorial-series-trendy-yesterday',
+      'editorial-series-top-rated-lastweek','editorial-series-trendy-lastweek',
+      'editorial-series-top-rated-lastmonth','editorial-series-trendy-lastmonth',
+      'editorial-movies-cinema-now'
+    ]
   );
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
@@ -160,13 +208,103 @@ test('periods then month+years are descending and import is stable across Septem
   const august=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
   const september=api._internals.buildNuvioCollectionsImport(fixedSep,tz,'https://fr-archives.example');
   assert.deepEqual(september,august);
-  const sources=folder(august[0],'Séries').sources.map(s=>s.catalogId);
+  const netflix=august.find((c)=>c.title==='🇫🇷 Netflix');
+  const sources=folder(netflix,'Séries').sources.map(s=>s.catalogId);
   assert.deepEqual(sources.slice(0,5),[
     'archives-fr-v1-series-netflix-today','archives-fr-v1-series-netflix-tomorrow','archives-fr-v1-series-netflix-yesterday','archives-fr-v1-series-netflix-lastweek','archives-fr-v1-series-netflix-nextweek'
   ]);
   assert(sources.indexOf('archives-fr-v1-series-netflix-2026-09')<sources.indexOf('archives-fr-v1-series-netflix-2026-08'));
 });
 
+
+test('Editorial series uses period air-date filters and keeps only new or active shows',async()=>{
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname.endsWith('/discover/tv')){
+      assert.equal(u.searchParams.get('air_date.gte'),'2026-08-23');
+      assert.equal(u.searchParams.get('air_date.lte'),'2026-08-23');
+      assert.equal(u.searchParams.get('sort_by'),'vote_average.desc');
+      assert.equal(u.searchParams.get('vote_count.gte'),'200');
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        page:1,total_pages:1,results:[
+          {id:701,vote_average:8.7,vote_count:1200,popularity:80},
+          {id:702,vote_average:9.1,vote_count:400,popularity:40},
+          {id:703,vote_average:9.8,vote_count:900,popularity:20}
+        ]
+      })};
+    }
+    const m=u.pathname.match(/\/tv\/(701|702|703)$/);
+    if(m){
+      const id=Number(m[1]);
+      const defs={
+        701:{name:'Active Hit',status:'Returning Series',first_air_date:'2024-01-01',last_air_date:'2026-08-23',vote_average:8.7,vote_count:1200,popularity:80,imdb:'tt7000001'},
+        702:{name:'New Limited',status:'Ended',first_air_date:'2026-08-23',last_air_date:'2026-08-23',vote_average:9.1,vote_count:400,popularity:40,imdb:'tt7000002'},
+        703:{name:'Old Ended',status:'Ended',first_air_date:'2020-01-01',last_air_date:'2020-02-01',vote_average:9.8,vote_count:900,popularity:20,imdb:'tt7000003'}
+      }[id];
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id,name:defs.name,overview:'Test',status:defs.status,first_air_date:defs.first_air_date,last_air_date:defs.last_air_date,
+        last_episode_to_air:{air_date:defs.last_air_date},next_episode_to_air:null,
+        vote_average:defs.vote_average,vote_count:defs.vote_count,popularity:defs.popularity,
+        poster_path:'/p.jpg',backdrop_path:'/b.jpg',genres:[{name:'Drama'}],external_ids:{imdb_id:defs.imdb}
+      })};
+    }
+    throw new Error('unexpected '+u.pathname);
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
+    const result=await api._internals.buildEditorialSeriesCatalog({catalog,timeZone:tz,now:fixedNow,useCache:false});
+    assert.deepEqual(result.metas.map((m)=>m.name),['New Limited','Active Hit']);
+    assert.equal(result.stats.final,2);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+  }
+});
+
+test('Editorial cinema uses Belgian TMDb now-playing and does not require Torrentio',async()=>{
+  const oldFetch=global.fetch;
+  const oldKey=process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY='test-key';
+  global.fetch=async(url)=>{
+    const u=new URL(String(url));
+    if(u.pathname.endsWith('/movie/now_playing')){
+      assert.equal(u.searchParams.get('region'),'BE');
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        page:1,total_pages:1,results:[{id:801,popularity:333,release_date:'2026-08-20'}]
+      })};
+    }
+    if(u.pathname.endsWith('/movie/801')){
+      return {ok:true,status:200,headers:{get:()=>null},json:async()=>({
+        id:801,title:'Cinema Belgium',overview:'Test',release_date:'2026-08-20',popularity:333,
+        vote_average:7.4,vote_count:500,poster_path:'/p.jpg',backdrop_path:'/b.jpg',
+        external_ids:{imdb_id:'tt8000001'},
+        release_dates:{results:[{iso_3166_1:'BE',release_dates:[{type:3,release_date:'2026-08-20T00:00:00.000Z'}]}]}
+      })};
+    }
+    throw new Error('unexpected '+u.pathname);
+  };
+  try{
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+    const catalog=api._internals.resolveArchiveCatalog('editorial-movies-cinema-now','movie',fixedNow,'Europe/Brussels');
+    const result=await api._internals.buildEditorialCinemaCatalog({catalog,timeZone:'Europe/Brussels',now:fixedNow,useCache:false});
+    assert.equal(result.metas.length,1);
+    assert.equal(result.metas[0].name,'Cinema Belgium');
+    assert.match(result.metas[0].releaseInfo,/À l’affiche en Belgique/);
+  }finally{
+    global.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY=oldKey;
+    api._internals.catalogCache.clear?.();
+    api._internals.detailsCache.clear?.();
+  }
+});
 
 test('VOD is based on FR Digital release dates only, not buy/rent providers',async()=>{
   const params=api._internals.vodDiscoverParams({start:'2026-08-24',end:'2026-08-24'},1);
