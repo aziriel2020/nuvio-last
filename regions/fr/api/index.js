@@ -5264,6 +5264,7 @@ module.exports._internals = {
   torrentioHasStreams,
   buildCinemaTorrentioIndex,
   cinemaAvailableBucketKeys,
+  buildTargetedCinemaHistoricalCatalog,
   buildCinemaTorrentioCatalog,
   EDITORIAL_PERIODS,
   buildEditorialCatalogEntries,
