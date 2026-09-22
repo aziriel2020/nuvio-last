@@ -7,7 +7,7 @@ const api=require('../api/index');
 const fixedNow=new Date('2026-08-24T12:28:00Z');
 const fixedSep=new Date('2026-09-01T12:28:00Z');
 const tz='Europe/Paris';
-const expectedParents=['🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'];
+const expectedParents=['🇫🇷 Tendances & Cinéma','🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'];
 
 function collection(title, now=fixedNow, origin='https://fr-archives.example'){
   return api._internals.buildNuvioCollectionsImport(now,tz,origin).find(c=>c.title===title||c.title.endsWith(` ${title}`));
@@ -66,6 +66,45 @@ test('Cinema card renderer uses a real Cinema label and no fake platform identit
 });
 
 
+test('Editorial collection has three folders and periods are catalogs inside each folder',()=>{
+  const editorial=api._internals.buildEditorialCollection('https://fr-archives.example');
+  assert.equal(editorial.id,'calendar-archives-fr-editorial-now');
+  assert.equal(editorial.title,'🇫🇷 Tendances & Cinéma');
+  assert.deepEqual(editorial.folders.map((f)=>f.title),[
+    '⭐ Séries les mieux notées',
+    '🔥 Séries les plus trendy',
+    '🎬 Films au cinéma actuellement'
+  ]);
+  assert.deepEqual(editorial.folders[0].sources.map((x)=>x.catalogId),[
+    'editorial-series-top-rated-yesterday',
+    'editorial-series-top-rated-lastweek',
+    'editorial-series-top-rated-lastmonth'
+  ]);
+  assert.deepEqual(editorial.folders[1].sources.map((x)=>x.catalogId),[
+    'editorial-series-trendy-yesterday',
+    'editorial-series-trendy-lastweek',
+    'editorial-series-trendy-lastmonth'
+  ]);
+  assert.deepEqual(editorial.folders[2].sources.map((x)=>x.catalogId),[
+    'editorial-movies-cinema-now'
+  ]);
+  assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl&&f.titleLogoUrl));
+  assert.match(editorial.folders[0].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[1].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[2].coverImageUrl,/platform-category-card\.svg/);
+
+  const top=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
+  const trendy=api._internals.resolveArchiveCatalog('editorial-series-trendy-lastweek','series',fixedNow,tz);
+  const cinema=api._internals.resolveArchiveCatalog('editorial-movies-cinema-now','movie',fixedNow,tz);
+  assert.equal(top.source,'editorial-series');
+  assert.equal(top.editorialMode,'top-rated');
+  assert.equal(trendy.source,'editorial-series');
+  assert.equal(trendy.editorialMode,'trendy');
+  assert.equal(cinema.source,'editorial-cinema');
+  assert.equal(cinema.editorialMode,'cinema-now');
+});
+
+
 test('France provider parents include French services and no US-only Hulu/Peacock',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
   assert.deepEqual(payload.map(c=>c.title),expectedParents);
@@ -80,7 +119,7 @@ test('France provider parents include French services and no US-only Hulu/Peacoc
 
 test('all normal France platforms have Series and Films; VOD France is Films only',()=>{
   const payload=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
-  for(const parent of payload.filter(c=>!['🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
+  for(const parent of payload.filter(c=>!['🇫🇷 Tendances & Cinéma','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries'].includes(c.title))) assert.deepEqual(parent.folders.map(f=>f.title),['Séries','Films']);
   assert.deepEqual(collection('VOD France').folders.map(f=>f.title),['Films']);
   assert.equal(collection('Genres · Films').folders.length,19); assert.equal(collection('Genres · Séries').folders.length,16);
 });
@@ -134,10 +173,19 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+10);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+17);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
     ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
+  );
+  assert.deepEqual(
+    manifest.catalogs.filter(c=>c.id.startsWith('editorial-')).map(c=>c.id),
+    [
+      'editorial-series-top-rated-yesterday','editorial-series-trendy-yesterday',
+      'editorial-series-top-rated-lastweek','editorial-series-trendy-lastweek',
+      'editorial-series-top-rated-lastmonth','editorial-series-trendy-lastmonth',
+      'editorial-movies-cinema-now'
+    ]
   );
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
@@ -160,7 +208,8 @@ test('periods then month+years are descending and import is stable across Septem
   const august=api._internals.buildNuvioCollectionsImport(fixedNow,tz,'https://fr-archives.example');
   const september=api._internals.buildNuvioCollectionsImport(fixedSep,tz,'https://fr-archives.example');
   assert.deepEqual(september,august);
-  const sources=folder(august[0],'Séries').sources.map(s=>s.catalogId);
+  const netflix=august.find((c)=>c.title==='🇫🇷 Netflix');
+  const sources=folder(netflix,'Séries').sources.map(s=>s.catalogId);
   assert.deepEqual(sources.slice(0,5),[
     'archives-fr-v1-series-netflix-today','archives-fr-v1-series-netflix-tomorrow','archives-fr-v1-series-netflix-yesterday','archives-fr-v1-series-netflix-lastweek','archives-fr-v1-series-netflix-nextweek'
   ]);
