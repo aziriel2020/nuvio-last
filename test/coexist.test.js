@@ -116,41 +116,6 @@ test('Editorial trends collection keeps periods as catalog sources inside three 
   assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
 });
 
-test('Editorial trends collection keeps periods as catalog sources inside three folders', async () => {
-  const shield = JSON.parse((await call('/nuvio-collections-shield.json')).text);
-  const editorial = shield.find((c) => c.id === 'calendar-archives-fr-editorial-now');
-  assert(editorial);
-  assert.equal(editorial.title, '🇫🇷 Tendances & Cinéma');
-  assert.deepEqual(editorial.folders.map((f) => f.title), [
-    '⭐ Séries les mieux notées',
-    '🔥 Séries les plus trendy',
-    '🎬 Films au cinéma actuellement'
-  ]);
-  assert.deepEqual(editorial.folders[0].sources.map((x) => x.catalogId), [
-    'editorial-series-top-rated-yesterday',
-    'editorial-series-top-rated-lastweek',
-    'editorial-series-top-rated-lastmonth'
-  ]);
-  assert.deepEqual(editorial.folders[1].sources.map((x) => x.catalogId), [
-    'editorial-series-trendy-yesterday',
-    'editorial-series-trendy-lastweek',
-    'editorial-series-trendy-lastmonth'
-  ]);
-  assert.deepEqual(editorial.folders[2].sources.map((x) => x.catalogId), [
-    'editorial-movies-cinema-now'
-  ]);
-  assert.match(editorial.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=drama/);
-  assert.match(editorial.folders[1].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
-  assert.match(editorial.folders[2].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
-
-  const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
-  const desktopEditorial = desktop.find((c) => c.id === 'calendar-archives-fr-editorial-now');
-  assert(desktopEditorial);
-  assert.match(desktopEditorial.folders[0].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=drama/);
-  assert.match(desktopEditorial.folders[1].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
-  assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
-});
-
 test('Cinema du moment static schema exposes À l’affiche plus dated tiles and reuses the France addon', () => {
   const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
   const raw = handler._internals.cinemaTorrentioCollection(req);
@@ -204,6 +169,9 @@ test('Cinema live collection filtering never exposes empty clickable folders', (
   ]);
   const withoutCinema = handler._internals.combinedRawCollections(req, new Set());
   assert.equal(withoutCinema.some((collection) => collection.id === 'cinema-now-torrentio'), false);
+  const withLegacyAvailability = handler._internals.combinedRawCollections(req, new Set(['nowplaying', 'recent']));
+  assert.equal(withLegacyAvailability.some((collection) => collection.id === 'cinema-now-torrentio'), false);
+  assert(withLegacyAvailability.some((collection) => collection.id === 'calendar-archives-fr-editorial-now'));
 });
 
 test('Cinema live availability fails closed instead of exposing unverified folders', async () => {
