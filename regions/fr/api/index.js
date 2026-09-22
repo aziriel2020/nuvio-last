@@ -1026,6 +1026,9 @@ function archiveProviderAllowed(expectedType, providerSlug) {
 function resolveArchiveCatalog(catalogId, type, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
   const raw = String(catalogId || '');
 
+  const editorial = buildEditorialCatalogEntries().find((entry) => entry.id === raw);
+  if (editorial) return editorial.catalog.type === type ? editorial.catalog : null;
+
   const cinema = raw.match(/^cinema-torrentio-(nowplaying|recent|today|yesterday|thisweek|lastweek|thismonth|previousmonth|nextweek|nextmonth)$/);
   if (cinema) {
     if (type !== 'movie') return null;
@@ -1250,6 +1253,65 @@ function buildCinemaTorrentioCatalogEntries() {
       explore: true
     }
   }));
+}
+
+const EDITORIAL_PERIODS = Object.freeze([
+  { key: 'yesterday', label: 'Hier', period: 'yesterday' },
+  { key: 'lastweek', label: 'Semaine passée', period: 'lastweek' },
+  { key: 'lastmonth', label: 'Mois dernier', period: 'lastmonth' }
+]);
+
+function buildEditorialCatalogEntries() {
+  const series = EDITORIAL_PERIODS.flatMap(({ key, label, period }) => ([
+    {
+      id: `editorial-series-top-rated-${key}`,
+      catalog: {
+        type: 'series',
+        name: `⭐ Séries les mieux notées · ${label}`,
+        providerSlug: 'editorial-top-rated',
+        cardProvider: 'Séries les mieux notées',
+        period,
+        editorialMode: 'top-rated',
+        source: 'editorial-series',
+        section: 'series-streaming',
+        noFilters: true,
+        explore: true
+      }
+    },
+    {
+      id: `editorial-series-trendy-${key}`,
+      catalog: {
+        type: 'series',
+        name: `🔥 Séries les plus trendy · ${label}`,
+        providerSlug: 'editorial-trendy',
+        cardProvider: 'Séries les plus trendy',
+        period,
+        editorialMode: 'trendy',
+        source: 'editorial-series',
+        section: 'series-streaming',
+        noFilters: true,
+        explore: true
+      }
+    }
+  ]));
+  return [
+    ...series,
+    {
+      id: 'editorial-movies-cinema-now',
+      catalog: {
+        type: 'movie',
+        name: '🎬 Films au cinéma · À l’affiche actuellement',
+        providerSlug: 'editorial-cinema',
+        cardProvider: 'Films au cinéma actuellement',
+        period: 'nowplaying',
+        editorialMode: 'cinema-now',
+        source: 'editorial-cinema',
+        section: 'films',
+        noFilters: true,
+        explore: true
+      }
+    }
+  ];
 }
 const PERIOD_LABELS = new Map([...PERIOD_OPTIONS, ...FILM_EXTRA_CATALOGS].map((entry) => [entry.value, entry.label]));
 const STREAMING_PROVIDERS = Object.freeze(PROVIDERS.filter((provider) => provider.slug !== 'crunchyroll'));
@@ -2015,7 +2077,7 @@ function requireTmdbConfig() {
 }
 
 function buildManifest(origin, now = runtimeNow(), timeZone = DEFAULT_TIMEZONE) {
-  const catalogs = [...buildCinemaTorrentioCatalogEntries(), ...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)].map(({ id, catalog }) => {
+  const catalogs = [...buildEditorialCatalogEntries(), ...buildCinemaTorrentioCatalogEntries(), ...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)].map(({ id, catalog }) => {
     const filters = filterOptionsForCatalog(catalog).map((entry) => entry.label);
     return {
       type: catalog.type,
@@ -4291,8 +4353,205 @@ async function buildCrunchyrollAnimeCatalog({ catalog, timeZone, now = new Date(
   return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
 }
 
+function editorialSeriesIsEligible(details, window) {
+  const status = String(details?.status || '').trim().toLowerCase();
+  const active = new Set(['returning series', 'in production', 'planned']).has(status);
+  const firstAir = normalizeIsoDate(details?.first_air_date);
+  const newInPeriod = Boolean(firstAir && firstAir >= window.start && firstAir <= window.end);
+  return active || newInPeriod;
+}
+
+function editorialSeriesActivityDate(details, window) {
+  const candidates = [
+    details?.last_episode_to_air?.air_date,
+    details?.next_episode_to_air?.air_date,
+    details?.last_air_date,
+    details?.first_air_date
+  ].map(normalizeIsoDate).filter(Boolean);
+  return candidates.find((date) => date >= window.start && date <= window.end) || window.end;
+}
+
+async function discoverEditorialSeriesCandidates(catalog, window, timeZone) {
+  const items = [];
+  const sortBy = catalog.editorialMode === 'top-rated' ? 'vote_average.desc' : 'popularity.desc';
+  const voteFloor = catalog.editorialMode === 'top-rated' ? 200 : 20;
+  for (let page = 1; page <= 4 && items.length < getConfig().maxCandidates; page += 1) {
+    const payload = await tmdbFetch('/discover/tv', {
+      language: getConfig().language,
+      page,
+      include_adult: false,
+      include_null_first_air_dates: false,
+      sort_by: sortBy,
+      'air_date.gte': window.start,
+      'air_date.lte': window.end,
+      'vote_count.gte': voteFloor,
+      timezone: timeZone
+    });
+    items.push(...(payload?.results || []));
+    if (page >= Number(payload?.total_pages || 1)) break;
+  }
+  const unique = new Map();
+  for (const item of items) {
+    const id = Number(item?.id);
+    if (Number.isFinite(id) && !unique.has(id)) unique.set(id, item);
+  }
+  return [...unique.values()].slice(0, getConfig().maxCandidates);
+}
+
+async function buildEditorialSeriesCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
+  const window = dateWindow(period, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: catalog.providerSlug,
+    type: 'series',
+    period,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-editorial-series-v1`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = emptyStats({ label: catalog.cardProvider, ids: [] }, catalog, window, timeZone);
+  const raw = await discoverEditorialSeriesCandidates(catalog, window, timeZone);
+  stats.candidates = raw.length;
+
+  const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
+    const details = await fetchDetails('series', candidate.id);
+    if (!editorialSeriesIsEligible(details, window)) return { meta: null, reason: 'not-active-or-new' };
+    const date = editorialSeriesActivityDate(details, window);
+    const voteAverage = Number(details?.vote_average || candidate?.vote_average || 0);
+    const voteCount = Number(details?.vote_count || candidate?.vote_count || 0);
+    const popularity = Number(details?.popularity || candidate?.popularity || 0);
+    const metric = catalog.editorialMode === 'top-rated'
+      ? `Note TMDb ${voteAverage.toFixed(1)}/10 · ${voteCount.toLocaleString('fr-FR')} votes`
+      : `Tendance TMDb · popularité ${Math.round(popularity)}`;
+    const meta = baseMeta(details, 'series', date, metric);
+    if (!meta.poster) return { meta: null, reason: 'no-poster' };
+    meta.description = [
+      catalog.editorialMode === 'top-rated' ? 'Sélection des séries les mieux notées' : 'Sélection des séries les plus trendy',
+      `Activité de diffusion : ${humanCalendarDate(window.start)} → ${humanCalendarDate(window.end)}`,
+      activeSeriesEditorialLabel(details),
+      metric,
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._editorialScore = catalog.editorialMode === 'top-rated' ? voteAverage : popularity;
+    meta._editorialVoteCount = voteCount;
+    meta._calendarProvider = catalog.cardProvider;
+    meta._calendarSource = catalog.source;
+    meta._dedupeKey = `editorial:${catalog.editorialMode}:${details.id}`;
+    return { meta };
+  });
+
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) continue;
+    metas.push(result.meta);
+  }
+
+  const deduped = [...new Map(metas.map((meta) => [meta._dedupeKey || meta.id, meta])).values()];
+  deduped.sort((a, b) => (
+    Number(b._editorialScore || 0) - Number(a._editorialScore || 0) ||
+    Number(b._editorialVoteCount || 0) - Number(a._editorialVoteCount || 0) ||
+    String(b.name || '').localeCompare(String(a.name || ''))
+  ));
+  const finalMetas = deduped.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  stats.duplicatesRemoved = Math.max(0, metas.length - deduped.length);
+  stats.final = finalMetas.length;
+  const result = { metas: finalMetas, stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
+function activeSeriesEditorialLabel(details) {
+  const firstAir = normalizeIsoDate(details?.first_air_date);
+  const status = String(details?.status || '').trim();
+  const active = ['Returning Series', 'In Production', 'Planned'].includes(status);
+  if (active) return `Statut : ${status}`;
+  return firstAir ? `Nouvelle série · première diffusion ${humanCalendarDate(firstAir)}` : null;
+}
+
+async function discoverEditorialCinemaCandidates() {
+  const region = cinemaRegion();
+  const items = [];
+  for (let page = 1; page <= 4 && items.length < getConfig().maxCandidates; page += 1) {
+    const payload = await tmdbFetch('/movie/now_playing', {
+      language: getConfig().language,
+      region,
+      page
+    });
+    items.push(...(payload?.results || []));
+    if (page >= Number(payload?.total_pages || 1)) break;
+  }
+  const unique = new Map();
+  for (const item of items) {
+    const id = Number(item?.id);
+    if (Number.isFinite(id) && !unique.has(id)) unique.set(id, item);
+  }
+  return [...unique.values()].slice(0, getConfig().maxCandidates);
+}
+
+async function buildEditorialCinemaCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  const window = cinemaDateWindow('nowplaying', now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: 'editorial-cinema',
+    type: 'movie',
+    period: 'nowplaying',
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-editorial-cinema-v1`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = emptyStats({ label: 'Films au cinéma actuellement', ids: [] }, catalog, window, timeZone);
+  const raw = await discoverEditorialCinemaCandidates();
+  stats.candidates = raw.length;
+
+  const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
+    const details = await fetchDetails('movie', candidate.id);
+    const release = cinemaPreferredRelease(details, window.today, { start: window.start, end: window.end, today: window.today }, true);
+    const date = release?.date || normalizeIsoDate(details?.release_date || candidate?.release_date);
+    if (!date) return { meta: null, reason: 'date-unknown' };
+    const meta = baseMeta(details, 'movie', date, `À l’affiche en Belgique · ${humanCalendarDate(date)}`);
+    if (!meta.poster) return { meta: null, reason: 'no-poster' };
+    meta.description = [
+      'Actuellement au cinéma en Belgique',
+      `Sortie cinéma : ${humanCalendarDate(date)}`,
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._editorialScore = Number(details?.popularity || candidate?.popularity || 0);
+    meta._calendarProvider = 'Films au cinéma actuellement';
+    meta._calendarSource = catalog.source;
+    meta._dedupeKey = `editorial-cinema:${details.id}`;
+    return { meta };
+  });
+
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) { countReason(stats, result?.reason); continue; }
+    metas.push(result.meta);
+  }
+  const deduped = [...new Map(metas.map((meta) => [meta._dedupeKey || meta.id, meta])).values()];
+  deduped.sort((a, b) => (
+    Number(b._editorialScore || 0) - Number(a._editorialScore || 0) ||
+    String(b.released || '').localeCompare(String(a.released || ''))
+  ));
+  const finalMetas = deduped.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  stats.duplicatesRemoved = Math.max(0, metas.length - deduped.length);
+  stats.final = finalMetas.length;
+  const result = { metas: finalMetas, stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
 async function buildCatalog(options) {
   const source = options.catalog.source;
+  if (source === 'editorial-series') return buildEditorialSeriesCatalog(options);
+  if (source === 'editorial-cinema') return buildEditorialCinemaCatalog(options);
   if (source === 'torrentio-theatrical') return buildCinemaTorrentioCatalog(options);
   if (source === 'combined-calendar') return buildCombinedCatalog(options);
   if (source === 'crunchyroll-anime-combined') return buildCrunchyrollAnimeCatalog(options);
@@ -4307,7 +4566,7 @@ async function buildCatalog(options) {
 
 function catalogResponseCacheControl(catalog, window) {
   if (window.empty) return EMPTY_CATALOG_CACHE;
-  if (catalog.source === 'torrentio-theatrical') return DYNAMIC_CATALOG_CACHE;
+  if (catalog.source === 'torrentio-theatrical' || String(catalog.source || '').startsWith('editorial-')) return DYNAMIC_CATALOG_CACHE;
   const currentMonth = catalog.period === `archive-${window.today.slice(0, 7)}`;
   const dynamicPeriod = Boolean(catalog.archivePeriodKey);
   return dynamicPeriod || currentMonth ? DYNAMIC_CATALOG_CACHE : ARCHIVE_CATALOG_CACHE;
@@ -4845,6 +5104,13 @@ module.exports._internals = {
   buildCinemaTorrentioIndex,
   cinemaAvailableBucketKeys,
   buildCinemaTorrentioCatalog,
+  EDITORIAL_PERIODS,
+  buildEditorialCatalogEntries,
+  editorialSeriesIsEligible,
+  discoverEditorialSeriesCandidates,
+  buildEditorialSeriesCatalog,
+  discoverEditorialCinemaCandidates,
+  buildEditorialCinemaCatalog,
   CINEMA_RESPONSE_BUDGET_MS,
   CINEMA_MAX_DISCOVERY_CANDIDATES,
   CINEMA_SCAN_BATCH_SIZE,
