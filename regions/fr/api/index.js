@@ -1335,7 +1335,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-top-rated-${key}`,
       catalog: {
         type: 'series',
-        name: `⭐ Séries les mieux notées · ${label}`,
+        name: label,
         providerSlug: 'editorial-top-rated',
         cardProvider: 'Séries les mieux notées',
         period,
@@ -1350,7 +1350,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-trendy-${key}`,
       catalog: {
         type: 'series',
-        name: `🔥 Séries les plus trendy · ${label}`,
+        name: label,
         providerSlug: 'editorial-trendy',
         cardProvider: 'Séries les plus trendy',
         period,
@@ -1368,7 +1368,7 @@ function buildEditorialCatalogEntries() {
       id: 'editorial-movies-cinema-now',
       catalog: {
         type: 'movie',
-        name: '🎬 Films au cinéma · À l’affiche actuellement',
+        name: 'À l’affiche actuellement',
         providerSlug: 'editorial-cinema',
         cardProvider: 'Films au cinéma actuellement',
         period: 'nowplaying',
