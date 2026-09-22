@@ -38,13 +38,39 @@ jobs:
           probe_catalog series editorial-series-trendy-lastweek
           probe_catalog series editorial-series-trendy-lastmonth
           probe_catalog movie editorial-movies-cinema-now
+          probe_catalog movie cinema-torrentio-yesterday
+          probe_catalog movie cinema-torrentio-lastweek
+
+          MANIFEST="$(mktemp)"
+          curl -k -fsSL --connect-timeout 8 --max-time 30 "$BASE/fr/manifest.json?probe=period-labels" -o "$MANIFEST"
+          echo "MANIFEST_EDITORIAL_NAMES=$(jq -c '[.catalogs[] | select(.id|startswith("editorial-")) | {id,name}]' "$MANIFEST")"
+          test "$(jq -r '[.catalogs[] | select(.id|startswith("editorial-series-")) | .name=="Séries"] | all' "$MANIFEST")" = "true"
+          test "$(jq -r '.catalogs[] | select(.id=="editorial-movies-cinema-now") | .name' "$MANIFEST")" = "Films"
+          rm -f "$MANIFEST"
 
           for FILE in nuvio-collections-shield.json nuvio-collections-desktop.json
           do
             OUT="$(mktemp)"
             CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 30 -o "$OUT" -w '%{http_code}' "$BASE/$FILE?probe=editorial")"
             echo "COLLECTION_FILE=$FILE HTTP=$CODE"
-            jq -c '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0] // null | {id,title,folders:[.folders[]? | {id,title,coverImageUrl,sources:[.sources[]? | {type,catalogId}]}]}' "$OUT"
+            jq -c '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0] // null | {id,title,folders:[.folders[]? | {id,title,coverImageUrl,sources:[.sources[]? | {type,catalogId,genre}]}]}' "$OUT"
+            LABELS="$(jq -r '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0] | [.folders[0].sources[].genre,.folders[1].sources[].genre,.folders[2].sources[].genre] | @tsv' "$OUT")"
+            echo "SOURCE_LABELS=$LABELS"
+            test "$LABELS" = 
+            do
+              [ -z "$COVER" ] && continue
+              CTYPE="$(curl -k -sS -L --connect-timeout 8 --max-time 30 -o /dev/null -w '%{http_code} %{content_type}' "$COVER")"
+              echo "COVER=$CTYPE URL=$COVER"
+              test "$CTYPE" = "200 image/jpeg"
+              if [ "$FILE" = "nuvio-collections-shield.json" ]; then
+                echo "$COVER" | grep -q 'v=shield15-safe-badges'
+              else
+                echo "$COVER" | grep -q 'v=desktop14-safe-badges'
+              fi
+            done
+            rm -f "$OUT"
+          done
+Hier\tSemaine passée\tMois dernier\tHier\tSemaine passée\tMois dernier\tÀ l’affiche actuellement'
             jq -r '[.[] | select(.id=="calendar-archives-fr-editorial-now")][0].folders[]?.coverImageUrl' "$OUT" | while read -r COVER
             do
               [ -z "$COVER" ] && continue
