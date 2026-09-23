@@ -49,7 +49,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12231);
+  assert.equal(fr.catalogs.length, 12237);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -81,7 +81,7 @@ test('combined live import fails closed without Cinema availability and keeps re
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
-test('Editorial trends collection keeps periods as catalog sources inside three folders', async () => {
+test('Editorial collection keeps period catalogs inside six folders with Shield/Desktop covers', async () => {
   const shield = JSON.parse((await call('/nuvio-collections-shield.json')).text);
   const editorial = shield.find((c) => c.id === 'calendar-archives-fr-editorial-now');
   assert(editorial);
@@ -89,6 +89,9 @@ test('Editorial trends collection keeps periods as catalog sources inside three 
   assert.deepEqual(editorial.folders.map((f) => f.title), [
     '⭐ Séries les mieux notées',
     '🔥 Séries les plus trendy',
+    '🆕 Nouvelles séries',
+    '🔁 Séries renouvelées',
+    '🎬 Nouveaux films',
     '🎬 Films au cinéma actuellement'
   ]);
   assert.deepEqual(editorial.folders[0].sources.map((x) => x.catalogId), [
@@ -102,18 +105,36 @@ test('Editorial trends collection keeps periods as catalog sources inside three 
     'editorial-series-trendy-lastmonth'
   ]);
   assert.deepEqual(editorial.folders[2].sources.map((x) => x.catalogId), [
+    'editorial-series-new-thisweek','editorial-series-new-thismonth'
+  ]);
+  assert.deepEqual(editorial.folders[3].sources.map((x) => x.catalogId), [
+    'editorial-series-returning-thisweek','editorial-series-returning-thismonth'
+  ]);
+  assert.deepEqual(editorial.folders[4].sources.map((x) => x.catalogId), [
+    'editorial-movies-new-thisweek','editorial-movies-new-thismonth'
+  ]);
+  assert.deepEqual(editorial.folders[5].sources.map((x) => x.catalogId), [
     'editorial-movies-cinema-now'
   ]);
+  assert.deepEqual(editorial.folders[2].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
+  assert.deepEqual(editorial.folders[3].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
+  assert.deepEqual(editorial.folders[4].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
   assert.match(editorial.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=drama/);
   assert.match(editorial.folders[1].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
-  assert.match(editorial.folders[2].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(editorial.folders[2].coverImageUrl, /\/shield-genre-card\.jpg\?genre=action/);
+  assert.match(editorial.folders[3].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
+  assert.match(editorial.folders[4].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(editorial.folders[5].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
 
   const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
   const desktopEditorial = desktop.find((c) => c.id === 'calendar-archives-fr-editorial-now');
   assert(desktopEditorial);
   assert.match(desktopEditorial.folders[0].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=drama/);
   assert.match(desktopEditorial.folders[1].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
-  assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=action/);
+  assert.match(desktopEditorial.folders[3].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
+  assert.match(desktopEditorial.folders[4].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(desktopEditorial.folders[5].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
 });
 
 test('Cinema du moment static schema exposes À l’affiche plus dated tiles and reuses the France addon', () => {
