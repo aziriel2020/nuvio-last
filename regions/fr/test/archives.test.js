@@ -122,12 +122,12 @@ test('Editorial collection has six folders and periods are catalogs inside each 
     'À l’affiche actuellement'
   ]);
   assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl&&f.titleLogoUrl));
-  assert.match(editorial.folders[0].coverImageUrl,/genre-folder-art\.svg/);
-  assert.match(editorial.folders[1].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[0].coverImageUrl,/\/editorial-cover\.jpg\?key=series-top-rated/);
+  assert.match(editorial.folders[1].coverImageUrl,/\/editorial-cover\.jpg\?key=series-trendy/);
   assert.match(editorial.folders[2].coverImageUrl,/genre-folder-art\.svg/);
   assert.match(editorial.folders[3].coverImageUrl,/genre-folder-art\.svg/);
   assert.match(editorial.folders[4].coverImageUrl,/platform-category-card\.svg/);
-  assert.match(editorial.folders[5].coverImageUrl,/platform-category-card\.svg/);
+  assert.match(editorial.folders[5].coverImageUrl,/\/editorial-cover\.jpg\?key=cinema-now/);
 
   const top=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
   const trendy=api._internals.resolveArchiveCatalog('editorial-series-trendy-lastweek','series',fixedNow,tz);
