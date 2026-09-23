@@ -845,7 +845,9 @@ function detailsToGenreMeta(details, catalog, window) {
 async function buildGenreStreamingCatalog({ catalog, timeZone, now = new Date(), period = catalog.period, useCache = true }) {
   const window = catalog.source === 'torrentio-theatrical'
     ? cinemaDateWindow(catalog.cinemaBucket, now, timeZone)
-    : dateWindow(period, now, timeZone);
+    : catalog.source === 'editorial-fresh'
+      ? editorialFreshWindow(catalog.freshPeriod, now, timeZone)
+      : dateWindow(period, now, timeZone);
   const key = catalogCacheKey({ providerSlug: `${TMDB_GENRE_COLLECTION.slug}:${catalog.type}:${catalog.tmdbGenreId}`, type: catalog.type, period, timeZone, today: window.today, sourceVersion: `${SOURCE_VERSION}-genres-periods-v2` });
   if (useCache) {
     const cached = catalogCache.get(key);
@@ -1170,7 +1172,9 @@ function buildEditorialCollection(origin = null) {
 
   const editorialPeriodLabel = (entry) => {
     if (entry.id === 'editorial-movies-cinema-now') return 'À l’affiche actuellement';
-    return EDITORIAL_PERIODS.find(({ key }) => entry.id.endsWith(`-${key}`))?.label || null;
+    return EDITORIAL_PERIODS.find(({ key }) => entry.id.endsWith(`-${key}`))?.label
+      || editorialFreshPeriodLabel(entry)
+      || null;
   };
   const editorialAddonSource = (entry) => ({
     ...collectionAddonSource(entry),
@@ -1201,6 +1205,9 @@ function buildEditorialCollection(origin = null) {
 
   const ratedIds = EDITORIAL_PERIODS.map(({ key }) => `editorial-series-top-rated-${key}`);
   const trendyIds = EDITORIAL_PERIODS.map(({ key }) => `editorial-series-trendy-${key}`);
+  const newSeriesIds = EDITORIAL_FRESH_PERIODS.map(({ key }) => `editorial-series-new-${key}`);
+  const returningSeriesIds = EDITORIAL_FRESH_PERIODS.map(({ key }) => `editorial-series-returning-${key}`);
+  const newMovieIds = EDITORIAL_FRESH_PERIODS.map(({ key }) => `editorial-movies-new-${key}`);
 
   const folders = [
     folder({
@@ -1220,6 +1227,33 @@ function buildEditorialCollection(origin = null) {
       art: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=card&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&dynamic=1&v=editorial-v1`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
+    }),
+    folder({
+      id: 'editorial-series-new',
+      title: '🆕 Nouvelles séries',
+      emoji: '🆕',
+      ids: newSeriesIds,
+      art: (base) => `${base}/genre-folder-art.svg?genre=action&variant=card&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&dynamic=1&v=editorial-fresh-v1`,
+      hero: (base) => `${base}/genre-backdrop.jpg?genre=action&v=editorial-fresh-v1`,
+      logo: (base) => `${base}/genre-folder-art.svg?genre=action&variant=logo&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&v=editorial-fresh-v1`
+    }),
+    folder({
+      id: 'editorial-series-returning',
+      title: '🔁 Séries renouvelées',
+      emoji: '🔁',
+      ids: returningSeriesIds,
+      art: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=card&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&dynamic=1&v=editorial-fresh-v1`,
+      hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-fresh-v1`,
+      logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&v=editorial-fresh-v1`
+    }),
+    folder({
+      id: 'editorial-movies-new',
+      title: '🎬 Nouveaux films',
+      emoji: '🎬',
+      ids: newMovieIds,
+      art: (base) => `${base}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23f59e0b&v=editorial-fresh-v1`,
+      hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-fresh-v1`,
+      logo: (base) => `${base}/platform-logo?provider=vod-fr&type=movie&v=editorial-fresh-v1`
     }),
     folder({
       id: 'editorial-cinema-now',
@@ -1342,6 +1376,22 @@ const EDITORIAL_PERIODS = Object.freeze([
   { key: 'lastmonth', label: 'Mois dernier', period: 'lastmonth' }
 ]);
 
+const EDITORIAL_FRESH_PERIODS = Object.freeze([
+  { key: 'thisweek', label: 'Cette semaine' },
+  { key: 'thismonth', label: 'Ce mois' }
+]);
+
+function editorialFreshWindow(period, now = new Date(), timeZone = DEFAULT_TIMEZONE) {
+  const today = localIsoDate(now, timeZone);
+  if (period === 'thismonth') {
+    return { start: `${today.slice(0, 7)}-01`, end: today, today, kind: 'thismonth', allowPast: true };
+  }
+  const noon = new Date(`${today}T12:00:00Z`);
+  const daysSinceMonday = (noon.getUTCDay() + 6) % 7;
+  const monday = addIsoDays(today, -daysSinceMonday);
+  return { start: monday, end: today, today, kind: 'thisweek', allowPast: true };
+}
+
 function buildEditorialCatalogEntries() {
   const series = EDITORIAL_PERIODS.flatMap(({ key, label, period }) => ([
     {
@@ -1375,8 +1425,60 @@ function buildEditorialCatalogEntries() {
       }
     }
   ]));
+  const fresh = EDITORIAL_FRESH_PERIODS.flatMap(({ key, label }) => ([
+    {
+      id: `editorial-series-new-${key}`,
+      catalog: {
+        type: 'series',
+        name: 'Séries',
+        providerSlug: 'editorial-series-new',
+        cardProvider: 'Nouvelles séries',
+        period: key,
+        freshPeriod: key,
+        editorialMode: 'series-new',
+        source: 'editorial-fresh',
+        section: 'series-streaming',
+        noFilters: true,
+        explore: true
+      }
+    },
+    {
+      id: `editorial-series-returning-${key}`,
+      catalog: {
+        type: 'series',
+        name: 'Séries',
+        providerSlug: 'editorial-series-returning',
+        cardProvider: 'Séries renouvelées',
+        period: key,
+        freshPeriod: key,
+        editorialMode: 'series-returning',
+        source: 'editorial-fresh',
+        section: 'series-streaming',
+        noFilters: true,
+        explore: true
+      }
+    },
+    {
+      id: `editorial-movies-new-${key}`,
+      catalog: {
+        type: 'movie',
+        name: 'Films',
+        providerSlug: 'editorial-movies-new',
+        cardProvider: 'Nouveaux films',
+        period: key,
+        freshPeriod: key,
+        editorialMode: 'movie-new',
+        source: 'editorial-fresh',
+        section: 'films',
+        noFilters: true,
+        explore: true
+      }
+    }
+  ]));
+
   return [
     ...series,
+    ...fresh,
     {
       id: 'editorial-movies-cinema-now',
       catalog: {
@@ -4632,6 +4734,224 @@ function activeSeriesEditorialLabel(details) {
   return firstAir ? `Nouvelle série · première diffusion ${humanCalendarDate(firstAir)}` : null;
 }
 
+function editorialFreshPeriodLabel(entry) {
+  return EDITORIAL_FRESH_PERIODS.find(({ key }) => entry.id.endsWith(`-${key}`))?.label || null;
+}
+
+async function discoverEditorialFreshSeriesCandidates(catalog, window, timeZone) {
+  const items = [];
+  const params = {
+    language: getConfig().language,
+    include_adult: false,
+    include_null_first_air_dates: false,
+    sort_by: 'popularity.desc',
+    timezone: timeZone
+  };
+  if (catalog.editorialMode === 'series-new') {
+    params['first_air_date.gte'] = window.start;
+    params['first_air_date.lte'] = window.end;
+  } else {
+    params['air_date.gte'] = window.start;
+    params['air_date.lte'] = window.end;
+  }
+  for (let page = 1; page <= 4 && items.length < getConfig().maxCandidates; page += 1) {
+    const payload = await tmdbFetch('/discover/tv', { ...params, page });
+    items.push(...(payload?.results || []));
+    if (page >= Number(payload?.total_pages || 1)) break;
+  }
+  const unique = new Map();
+  for (const item of items) {
+    const id = Number(item?.id);
+    if (Number.isFinite(id) && !unique.has(id)) unique.set(id, item);
+  }
+  return [...unique.values()].slice(0, getConfig().maxCandidates);
+}
+
+function editorialReturningSeason(details, window) {
+  return (details?.seasons || [])
+    .map((season) => ({
+      seasonNumber: Number(season?.season_number || 0),
+      airDate: normalizeIsoDate(season?.air_date)
+    }))
+    .filter((season) => season.seasonNumber > 1 && season.airDate && season.airDate >= window.start && season.airDate <= window.end)
+    .sort((a, b) => b.airDate.localeCompare(a.airDate) || b.seasonNumber - a.seasonNumber)[0] || null;
+}
+
+async function buildEditorialFreshSeriesCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  const window = editorialFreshWindow(catalog.freshPeriod, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: catalog.providerSlug,
+    type: 'series',
+    period: catalog.freshPeriod,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-editorial-fresh-series-v1`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = emptyStats({ label: catalog.cardProvider, ids: [] }, catalog, window, timeZone);
+  const raw = await discoverEditorialFreshSeriesCandidates(catalog, window, timeZone);
+  stats.candidates = raw.length;
+
+  const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
+    const details = await fetchDetails('series', candidate.id);
+    let date = null;
+    let releaseInfo = null;
+
+    if (catalog.editorialMode === 'series-new') {
+      date = normalizeIsoDate(details?.first_air_date || candidate?.first_air_date);
+      if (!date || date < window.start || date > window.end) return { meta: null, reason: 'outside-window' };
+      releaseInfo = `Nouvelle série • ${humanCalendarDate(date)}`;
+    } else {
+      const season = editorialReturningSeason(details, window);
+      if (!season) return { meta: null, reason: 'no-returning-season' };
+      date = season.airDate;
+      releaseInfo = `Nouvelle saison S${season.seasonNumber} • ${humanCalendarDate(date)}`;
+    }
+
+    const meta = baseMeta(details, 'series', date, releaseInfo);
+    if (!meta.poster) return { meta: null, reason: 'no-poster' };
+    const popularity = Number(details?.popularity || candidate?.popularity || 0);
+    const voteAverage = Number(details?.vote_average || candidate?.vote_average || 0);
+    const voteCount = Number(details?.vote_count || candidate?.vote_count || 0);
+    meta.description = [
+      catalog.editorialMode === 'series-new' ? 'Nouvelle série' : 'Retour avec une nouvelle saison',
+      `Période : ${humanCalendarDate(window.start)} → ${humanCalendarDate(window.end)}`,
+      releaseInfo,
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._editorialScore = popularity;
+    meta._editorialVoteAverage = voteAverage;
+    meta._editorialVoteCount = voteCount;
+    meta._calendarProvider = catalog.cardProvider;
+    meta._calendarSource = catalog.source;
+    meta._dedupeKey = `${catalog.editorialMode}:${details.id}`;
+    return { meta };
+  });
+
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) { countReason(stats, result?.reason); continue; }
+    metas.push(result.meta);
+  }
+  const deduped = [...new Map(metas.map((meta) => [meta._dedupeKey || meta.id, meta])).values()];
+  deduped.sort((a, b) => (
+    Number(b._editorialScore || 0) - Number(a._editorialScore || 0) ||
+    Number(b._editorialVoteAverage || 0) - Number(a._editorialVoteAverage || 0) ||
+    Number(b._editorialVoteCount || 0) - Number(a._editorialVoteCount || 0)
+  ));
+  const finalMetas = deduped.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  stats.duplicatesRemoved = Math.max(0, metas.length - deduped.length);
+  stats.final = finalMetas.length;
+  const result = { metas: finalMetas, stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
+async function discoverEditorialFreshMovieCandidates(window) {
+  const region = cinemaRegion();
+  const items = [];
+  for (let page = 1; page <= 4 && items.length < getConfig().maxCandidates; page += 1) {
+    const payload = await tmdbFetch('/discover/movie', {
+      language: getConfig().language,
+      page,
+      include_adult: false,
+      include_video: false,
+      region,
+      sort_by: 'popularity.desc',
+      with_release_type: '2|3|4',
+      'release_date.gte': window.start,
+      'release_date.lte': window.end
+    });
+    items.push(...(payload?.results || []));
+    if (page >= Number(payload?.total_pages || 1)) break;
+  }
+  const unique = new Map();
+  for (const item of items) {
+    const id = Number(item?.id);
+    if (Number.isFinite(id) && !unique.has(id)) unique.set(id, item);
+  }
+  return [...unique.values()].slice(0, getConfig().maxCandidates);
+}
+
+function editorialFreshMovieRelease(details, candidate, window) {
+  const country = (details?.release_dates?.results || []).find((entry) => entry?.iso_3166_1 === cinemaRegion());
+  const regional = (country?.release_dates || [])
+    .filter((entry) => [2, 3, 4].includes(Number(entry?.type)))
+    .map((entry) => ({ type: Number(entry.type), date: normalizeIsoDate(entry?.release_date) }))
+    .filter((entry) => entry.date && entry.date >= window.start && entry.date <= window.end)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.type - b.type);
+  if (regional.length) return regional[0];
+  const fallback = normalizeIsoDate(candidate?.release_date || details?.release_date);
+  return fallback && fallback >= window.start && fallback <= window.end ? { type: 0, date: fallback } : null;
+}
+
+async function buildEditorialFreshMovieCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  const window = editorialFreshWindow(catalog.freshPeriod, now, timeZone);
+  const key = catalogCacheKey({
+    providerSlug: catalog.providerSlug,
+    type: 'movie',
+    period: catalog.freshPeriod,
+    timeZone,
+    today: window.today,
+    sourceVersion: `${SOURCE_VERSION}-editorial-fresh-movie-v1`
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+
+  const stats = emptyStats({ label: catalog.cardProvider, ids: [] }, catalog, window, timeZone);
+  const raw = await discoverEditorialFreshMovieCandidates(window);
+  stats.candidates = raw.length;
+
+  const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
+    const details = await fetchDetails('movie', candidate.id);
+    const release = editorialFreshMovieRelease(details, candidate, window);
+    if (!release) return { meta: null, reason: 'outside-window' };
+    const meta = baseMeta(details, 'movie', release.date, `Nouveau film • ${humanCalendarDate(release.date)}`);
+    if (!meta.poster) return { meta: null, reason: 'no-poster' };
+    const popularity = Number(details?.popularity || candidate?.popularity || 0);
+    meta.description = [
+      'Nouveau film',
+      `Sortie Belgique : ${humanCalendarDate(release.date)}`,
+      `Période : ${humanCalendarDate(window.start)} → ${humanCalendarDate(window.end)}`,
+      meta.description
+    ].filter(Boolean).join('\n\n');
+    meta._editorialScore = popularity;
+    meta._calendarProvider = catalog.cardProvider;
+    meta._calendarSource = catalog.source;
+    meta._dedupeKey = `movie-new:${details.id}`;
+    return { meta };
+  });
+
+  const metas = [];
+  for (const result of settled) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (!result?.meta) { countReason(stats, result?.reason); continue; }
+    metas.push(result.meta);
+  }
+  const deduped = [...new Map(metas.map((meta) => [meta._dedupeKey || meta.id, meta])).values()];
+  deduped.sort((a, b) => (
+    Number(b._editorialScore || 0) - Number(a._editorialScore || 0) ||
+    String(b.released || '').localeCompare(String(a.released || ''))
+  ));
+  const finalMetas = deduped.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  stats.duplicatesRemoved = Math.max(0, metas.length - deduped.length);
+  stats.final = finalMetas.length;
+  const result = { metas: finalMetas, stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
+async function buildEditorialFreshCatalog(options) {
+  return options.catalog.type === 'movie'
+    ? buildEditorialFreshMovieCatalog(options)
+    : buildEditorialFreshSeriesCatalog(options);
+}
+
 async function discoverEditorialCinemaCandidates() {
   const region = cinemaRegion();
   const items = [];
@@ -4711,6 +5031,7 @@ async function buildEditorialCinemaCatalog({ catalog, timeZone, now = new Date()
 async function buildCatalog(options) {
   const source = options.catalog.source;
   if (source === 'editorial-series') return buildEditorialSeriesCatalog(options);
+  if (source === 'editorial-fresh') return buildEditorialFreshCatalog(options);
   if (source === 'editorial-cinema') return buildEditorialCinemaCatalog(options);
   if (source === 'torrentio-theatrical') return buildCinemaTorrentioCatalog(options);
   if (source === 'combined-calendar') return buildCombinedCatalog(options);
@@ -5268,7 +5589,16 @@ module.exports._internals = {
   buildTargetedCinemaHistoricalCatalog,
   buildCinemaTorrentioCatalog,
   EDITORIAL_PERIODS,
+  EDITORIAL_FRESH_PERIODS,
+  editorialFreshWindow,
   buildEditorialCatalogEntries,
+  editorialReturningSeason,
+  discoverEditorialFreshSeriesCandidates,
+  buildEditorialFreshSeriesCatalog,
+  discoverEditorialFreshMovieCandidates,
+  editorialFreshMovieRelease,
+  buildEditorialFreshMovieCatalog,
+  buildEditorialFreshCatalog,
   editorialSeriesIsEligible,
   discoverEditorialSeriesCandidates,
   buildEditorialSeriesCatalog,

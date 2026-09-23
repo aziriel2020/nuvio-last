@@ -66,13 +66,16 @@ test('Cinema card renderer uses a real Cinema label and no fake platform identit
 });
 
 
-test('Editorial collection has three folders and periods are catalogs inside each folder',()=>{
+test('Editorial collection has six folders and periods are catalogs inside each folder',()=>{
   const editorial=api._internals.buildEditorialCollection('https://fr-archives.example');
   assert.equal(editorial.id,'calendar-archives-fr-editorial-now');
   assert.equal(editorial.title,'🇫🇷 Tendances & Cinéma');
   assert.deepEqual(editorial.folders.map((f)=>f.title),[
     '⭐ Séries les mieux notées',
     '🔥 Séries les plus trendy',
+    '🆕 Nouvelles séries',
+    '🔁 Séries renouvelées',
+    '🎬 Nouveaux films',
     '🎬 Films au cinéma actuellement'
   ]);
   assert.deepEqual(editorial.folders[0].sources.map((x)=>x.catalogId),[
@@ -92,23 +95,56 @@ test('Editorial collection has three folders and periods are catalogs inside eac
     'Hier','Semaine passée','Mois dernier'
   ]);
   assert.deepEqual(editorial.folders[2].sources.map((x)=>x.catalogId),[
-    'editorial-movies-cinema-now'
+    'editorial-series-new-thisweek',
+    'editorial-series-new-thismonth'
   ]);
   assert.deepEqual(editorial.folders[2].sources.map((x)=>x.genre),[
+    'Cette semaine','Ce mois'
+  ]);
+  assert.deepEqual(editorial.folders[3].sources.map((x)=>x.catalogId),[
+    'editorial-series-returning-thisweek',
+    'editorial-series-returning-thismonth'
+  ]);
+  assert.deepEqual(editorial.folders[3].sources.map((x)=>x.genre),[
+    'Cette semaine','Ce mois'
+  ]);
+  assert.deepEqual(editorial.folders[4].sources.map((x)=>x.catalogId),[
+    'editorial-movies-new-thisweek',
+    'editorial-movies-new-thismonth'
+  ]);
+  assert.deepEqual(editorial.folders[4].sources.map((x)=>x.genre),[
+    'Cette semaine','Ce mois'
+  ]);
+  assert.deepEqual(editorial.folders[5].sources.map((x)=>x.catalogId),[
+    'editorial-movies-cinema-now'
+  ]);
+  assert.deepEqual(editorial.folders[5].sources.map((x)=>x.genre),[
     'À l’affiche actuellement'
   ]);
   assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl&&f.titleLogoUrl));
   assert.match(editorial.folders[0].coverImageUrl,/genre-folder-art\.svg/);
   assert.match(editorial.folders[1].coverImageUrl,/genre-folder-art\.svg/);
-  assert.match(editorial.folders[2].coverImageUrl,/platform-category-card\.svg/);
+  assert.match(editorial.folders[2].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[3].coverImageUrl,/genre-folder-art\.svg/);
+  assert.match(editorial.folders[4].coverImageUrl,/platform-category-card\.svg/);
+  assert.match(editorial.folders[5].coverImageUrl,/platform-category-card\.svg/);
 
   const top=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
   const trendy=api._internals.resolveArchiveCatalog('editorial-series-trendy-lastweek','series',fixedNow,tz);
+  const newSeries=api._internals.resolveArchiveCatalog('editorial-series-new-thisweek','series',fixedNow,tz);
+  const returning=api._internals.resolveArchiveCatalog('editorial-series-returning-thismonth','series',fixedNow,tz);
+  const newMovie=api._internals.resolveArchiveCatalog('editorial-movies-new-thisweek','movie',fixedNow,tz);
   const cinema=api._internals.resolveArchiveCatalog('editorial-movies-cinema-now','movie',fixedNow,tz);
   assert.equal(top.source,'editorial-series');
   assert.equal(top.editorialMode,'top-rated');
   assert.equal(trendy.source,'editorial-series');
   assert.equal(trendy.editorialMode,'trendy');
+  assert.equal(newSeries.source,'editorial-fresh');
+  assert.equal(newSeries.editorialMode,'series-new');
+  assert.equal(returning.source,'editorial-fresh');
+  assert.equal(returning.editorialMode,'series-returning');
+  assert.equal(newMovie.source,'editorial-fresh');
+  assert.equal(newMovie.editorialMode,'movie-new');
   assert.equal(cinema.source,'editorial-cinema');
   assert.equal(cinema.editorialMode,'cinema-now');
 });
@@ -182,7 +218,7 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+17);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+23);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
     ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
@@ -193,6 +229,8 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
       'editorial-series-top-rated-yesterday','editorial-series-trendy-yesterday',
       'editorial-series-top-rated-lastweek','editorial-series-trendy-lastweek',
       'editorial-series-top-rated-lastmonth','editorial-series-trendy-lastmonth',
+      'editorial-series-new-thisweek','editorial-series-returning-thisweek','editorial-movies-new-thisweek',
+      'editorial-series-new-thismonth','editorial-series-returning-thismonth','editorial-movies-new-thismonth',
       'editorial-movies-cinema-now'
     ]
   );
@@ -227,6 +265,32 @@ test('periods then month+years are descending and import is stable across Septem
   assert(sources.indexOf('archives-fr-v1-series-netflix-2026-09')<sources.indexOf('archives-fr-v1-series-netflix-2026-08'));
 });
 
+
+test('Fresh editorial windows stop at today and returning means a real S2+ premiere',()=>{
+  const now=new Date('2026-09-23T07:00:00Z');
+  assert.deepEqual(api._internals.editorialFreshWindow('thisweek',now,'Europe/Brussels'),{
+    start:'2026-09-21',end:'2026-09-23',today:'2026-09-23',kind:'thisweek',allowPast:true
+  });
+  assert.deepEqual(api._internals.editorialFreshWindow('thismonth',now,'Europe/Brussels'),{
+    start:'2026-09-01',end:'2026-09-23',today:'2026-09-23',kind:'thismonth',allowPast:true
+  });
+  const season=api._internals.editorialReturningSeason({
+    seasons:[
+      {season_number:1,air_date:'2025-01-02'},
+      {season_number:2,air_date:'2026-09-22'},
+      {season_number:3,air_date:'2027-01-01'}
+    ]
+  },{start:'2026-09-21',end:'2026-09-23'});
+  assert.deepEqual(season,{seasonNumber:2,airDate:'2026-09-22'});
+  assert.equal(api._internals.editorialReturningSeason({
+    seasons:[{season_number:1,air_date:'2026-09-22'}]
+  },{start:'2026-09-21',end:'2026-09-23'}),null);
+  assert.deepEqual(api._internals.editorialFreshMovieRelease({
+    release_dates:{results:[{iso_3166_1:'BE',release_dates:[
+      {type:3,release_date:'2026-09-22T00:00:00.000Z'}
+    ]}]}
+  },{release_date:'2026-09-01'},{start:'2026-09-21',end:'2026-09-23'}),{type:3,date:'2026-09-22'});
+});
 
 test('Editorial series uses period air-date filters and keeps only new or active shows',async()=>{
   const oldFetch=global.fetch;
