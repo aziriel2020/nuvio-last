@@ -38,6 +38,12 @@ jobs:
           probe_catalog series editorial-series-trendy-lastweek
           probe_catalog series editorial-series-trendy-lastmonth
           probe_catalog movie editorial-movies-cinema-now
+          probe_catalog series editorial-series-new-thisweek
+          probe_catalog series editorial-series-new-thismonth
+          probe_catalog series editorial-series-returning-thisweek
+          probe_catalog series editorial-series-returning-thismonth
+          probe_catalog movie editorial-movies-new-thisweek
+          probe_catalog movie editorial-movies-new-thismonth
           probe_catalog movie cinema-torrentio-yesterday
           probe_catalog movie cinema-torrentio-lastweek
 
