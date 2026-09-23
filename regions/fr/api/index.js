@@ -60,6 +60,12 @@ const REGION_ART_KEY = 'fr';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/fr');
 const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-art/shared');
 const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
+const EDITORIAL_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial');
+const EDITORIAL_COVER_FILES = Object.freeze({
+  'series-top-rated': 'series-top-rated.jpg',
+  'series-trendy': 'series-trendy.jpg',
+  'cinema-now': 'cinema-now.jpg'
+});
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   const key = `${mime}:${absolutePath}`;
@@ -93,6 +99,17 @@ function serveGenreCinematicJpeg(res, url, variant = 'card') {
 function serveLocalJpeg(res, absolutePath, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
   try { const data = fs.readFileSync(absolutePath); res.statusCode=200; res.setHeader('Content-Type','image/jpeg'); res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control',cache); res.end(data); }
   catch (_) { res.statusCode=404; res.end('Not found'); }
+}
+
+function serveEditorialCoverJpeg(res, url) {
+  const key = String(url.searchParams.get('key') || '').trim();
+  const file = EDITORIAL_COVER_FILES[key];
+  if (!file) { res.statusCode = 404; return res.end('Not found'); }
+  return serveLocalJpeg(
+    res,
+    path.join(EDITORIAL_COVER_DIR, file),
+    'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000'
+  );
 }
 
 function normalizedDesktopType(value) {
@@ -1215,7 +1232,7 @@ function buildEditorialCollection(origin = null) {
       title: '⭐ Séries les mieux notées',
       emoji: '⭐',
       ids: ratedIds,
-      art: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=card&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&dynamic=1&v=editorial-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=shield-netflix-v1`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=drama&v=editorial-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
     }),
@@ -1224,7 +1241,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔥 Séries les plus trendy',
       emoji: '🔥',
       ids: trendyIds,
-      art: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=card&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&dynamic=1&v=editorial-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=shield-netflix-v1`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
     }),
@@ -1260,7 +1277,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Films au cinéma actuellement',
       emoji: '🎬',
       ids: ['editorial-movies-cinema-now'],
-      art: (base) => `${base}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23e11d48&v=editorial-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=shield-netflix-v1`,
       hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-v1`,
       logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
     })
@@ -5429,6 +5446,7 @@ module.exports = async function handler(req, res) {
     if (path === '/genre-card.jpg') return serveGenreCinematicJpeg(res, url, 'card');
     if (path === '/genre-backdrop.jpg') return serveGenreCinematicJpeg(res, url, 'backdrop');
     if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/fr-genres-backdrop.jpg`);
+    if (path === '/editorial-cover.jpg') return serveEditorialCoverJpeg(res, url);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
     if (path === '/nuvio-collections.json' || path === '/collections.json') return json(res, 200, buildNuvioCollectionsImport(runtimeNow(), requestTimeZone(req), origin), LARGE_JSON_CACHE);
