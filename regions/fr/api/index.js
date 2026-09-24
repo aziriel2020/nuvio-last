@@ -122,8 +122,35 @@ async function serveEditorialCoverJpeg(res, url) {
       providerLabel: 'TENDANCES',
       bottomTag: 'TRENDY'
     },
-    'cinema-now': {
+    'series-new': {
+      source: path.join(GENRE_CINEMATIC_ART_DIR, 'action-card.jpg'),
+      type: 'series',
+      accent: '#06b6d4',
+      title: 'Nouvelles séries',
+      subtitle: 'Cette semaine · Ce mois',
+      providerLabel: 'NOUVEAUTÉS',
+      bottomTag: 'NOUVELLES SÉRIES'
+    },
+    'series-returning': {
+      source: path.join(GENRE_CINEMATIC_ART_DIR, 'mystery-card.jpg'),
+      type: 'series',
+      accent: '#a855f7',
+      title: 'Séries renouvelées',
+      subtitle: 'Nouvelles saisons · Cette semaine · Ce mois',
+      providerLabel: 'RETOURS',
+      bottomTag: 'NOUVELLES SAISONS'
+    },
+    'movies-new': {
       source: path.join(PLATFORM_ART_DIR, 'vod-fr-card.jpg'),
+      type: 'movie',
+      accent: '#f59e0b',
+      title: 'Nouveaux films',
+      subtitle: 'Sorties Belgique · Cette semaine · Ce mois',
+      providerLabel: 'NOUVEAUTÉS',
+      bottomTag: 'NOUVEAUX FILMS'
+    },
+    'cinema-now': {
+      source: path.join(PLATFORM_ART_DIR, 'vod-fr-backdrop.jpg'),
       type: 'movie',
       accent: '#e11d48',
       title: 'Films au cinéma actuellement',
@@ -137,7 +164,7 @@ async function serveEditorialCoverJpeg(res, url) {
 
   try {
     const source = fs.readFileSync(recipe.source);
-    const data = await desktopCinematicCardBuffer(source, recipe);
+    const data = await editorialNetflixCardBuffer(source, recipe);
     res.setHeader('X-Nuvio-Editorial-Cover', key);
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
@@ -249,6 +276,67 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
     ${bottomPath}
     <rect x="100" y="846" width="470" height="5" rx="2.5" fill="${accent}" opacity=".85"/>
   </svg>`);
+}
+
+function editorialRoundedMask(width, height, radius = 42) {
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <rect width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#ffffff"/>
+  </svg>`);
+}
+
+async function editorialRoundedFrame(buffer, width = 1600, height = 900, radius = 42) {
+  const rounded = await sharp(buffer)
+    .resize(width, height, { fit: 'cover', position: 'centre' })
+    .ensureAlpha()
+    .composite([{ input: editorialRoundedMask(width, height, radius), blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+  return sharp({ create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } } })
+    .composite([{ input: rounded, left: 0, top: 0 }])
+    .jpeg({ quality: 96, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
+function editorialCardOverlaySvg(options = {}) {
+  const width = 1600;
+  const height = 900;
+  const accent = safeDesktopAccent(options.accent, '#ffffff');
+  const titlePath = desktopPathText(options.title || '', 86, 704, 1250, 88, { minSize: 48, fill: '#ffffff' });
+  const subtitlePath = desktopPathText(options.subtitle || '', 88, 785, 1200, 42, { minSize: 30, fill: '#eef5ff', opacity: .96 });
+  const tagPath = desktopPathText(options.bottomTag || '', 88, 844, 900, 34, { minSize: 26, fill: accent, opacity: 1 });
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <defs>
+      <linearGradient id="left" x1="0" x2="1">
+        <stop offset="0%" stop-color="#000000" stop-opacity=".58"/>
+        <stop offset="42%" stop-color="#000000" stop-opacity=".16"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="45%" stop-color="#000000" stop-opacity="0"/>
+        <stop offset="75%" stop-color="#000000" stop-opacity=".48"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity=".88"/>
+      </linearGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#left)"/>
+    <rect width="${width}" height="${height}" fill="url(#bottom)"/>
+    ${titlePath}
+    ${subtitlePath}
+    ${tagPath}
+  </svg>`);
+}
+
+async function editorialNetflixCardBuffer(sourceBuffer, options = {}) {
+  const background = await sharp(sourceBuffer)
+    .resize(1600, 900, { fit: 'cover', position: 'attention' })
+    .modulate({ brightness: 0.94, saturation: 1.05 })
+    .sharpen({ sigma: 0.32 })
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+  const composed = await sharp(background)
+    .composite([{ input: editorialCardOverlaySvg(options), left: 0, top: 0 }])
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+  return editorialRoundedFrame(composed);
 }
 
 async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
@@ -1266,7 +1354,7 @@ function buildEditorialCollection(origin = null) {
       title: '⭐ Séries les mieux notées',
       emoji: '⭐',
       ids: ratedIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=shield-netflix-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=netflix-frame-v2`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=drama&v=editorial-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
     }),
@@ -1275,7 +1363,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔥 Séries les plus trendy',
       emoji: '🔥',
       ids: trendyIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=shield-netflix-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=netflix-frame-v2`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
     }),
@@ -1284,7 +1372,7 @@ function buildEditorialCollection(origin = null) {
       title: '🆕 Nouvelles séries',
       emoji: '🆕',
       ids: newSeriesIds,
-      art: (base) => `${base}/genre-folder-art.svg?genre=action&variant=card&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&dynamic=1&v=editorial-fresh-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=netflix-frame-v2`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=action&v=editorial-fresh-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=action&variant=logo&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&v=editorial-fresh-v1`
     }),
@@ -1293,7 +1381,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔁 Séries renouvelées',
       emoji: '🔁',
       ids: returningSeriesIds,
-      art: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=card&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&dynamic=1&v=editorial-fresh-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=netflix-frame-v2`,
       hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-fresh-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&v=editorial-fresh-v1`
     }),
@@ -1302,7 +1390,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Nouveaux films',
       emoji: '🎬',
       ids: newMovieIds,
-      art: (base) => `${base}/platform-category-card.svg?provider=vod-fr&category=films&dynamic=1&color=%23f59e0b&v=editorial-fresh-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=netflix-frame-v2`,
       hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-fresh-v1`,
       logo: (base) => `${base}/platform-logo?provider=vod-fr&type=movie&v=editorial-fresh-v1`
     }),
@@ -1311,7 +1399,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Films au cinéma actuellement',
       emoji: '🎬',
       ids: ['editorial-movies-cinema-now'],
-      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=shield-netflix-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=netflix-frame-v2`,
       hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-v1`,
       logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
     })

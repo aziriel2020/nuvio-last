@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const handler = require('../api/index');
+const sharp = require('sharp');
 
 function call(path, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -121,9 +122,9 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
   assert.deepEqual(editorial.folders[4].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
   assert.match(editorial.folders[0].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-top-rated/);
   assert.match(editorial.folders[1].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-trendy/);
-  assert.match(editorial.folders[2].coverImageUrl, /\/shield-genre-card\.jpg\?genre=action/);
-  assert.match(editorial.folders[3].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
-  assert.match(editorial.folders[4].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(editorial.folders[2].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-new/);
+  assert.match(editorial.folders[3].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-returning/);
+  assert.match(editorial.folders[4].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=movies-new/);
   assert.match(editorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
 
   const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
@@ -131,17 +132,20 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
   assert(desktopEditorial);
   assert.match(desktopEditorial.folders[0].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-top-rated/);
   assert.match(desktopEditorial.folders[1].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-trendy/);
-  assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=action/);
-  assert.match(desktopEditorial.folders[3].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
-  assert.match(desktopEditorial.folders[4].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(desktopEditorial.folders[2].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-new/);
+  assert.match(desktopEditorial.folders[3].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-returning/);
+  assert.match(desktopEditorial.folders[4].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=movies-new/);
   assert.match(desktopEditorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
 });
 
 test('static editorial Shield covers are real JPEG assets and stay untouched by Shield/Desktop transforms', async () => {
   const paths = [
-    '/fr/editorial-cover.jpg?key=series-top-rated&v=shield-netflix-v1',
-    '/fr/editorial-cover.jpg?key=series-trendy&v=shield-netflix-v1',
-    '/fr/editorial-cover.jpg?key=cinema-now&v=shield-netflix-v1'
+    '/fr/editorial-cover.jpg?key=series-top-rated&v=netflix-frame-v2',
+    '/fr/editorial-cover.jpg?key=series-trendy&v=netflix-frame-v2',
+    '/fr/editorial-cover.jpg?key=series-new&v=netflix-frame-v2',
+    '/fr/editorial-cover.jpg?key=series-returning&v=netflix-frame-v2',
+    '/fr/editorial-cover.jpg?key=movies-new&v=netflix-frame-v2',
+    '/fr/editorial-cover.jpg?key=cinema-now&v=netflix-frame-v2'
   ];
   for (const path of paths) {
     const response = await call(path);
@@ -150,6 +154,11 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert.equal(response.body[0], 0xff, path);
     assert.equal(response.body[1], 0xd8, path);
     assert(response.body.length > 100000, path);
+    const metadata = await sharp(response.body).metadata();
+    assert.equal(metadata.width, 1600, path);
+    assert.equal(metadata.height, 900, path);
+    const corner = await sharp(response.body).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
+    assert(Math.max(...corner) <= 28, path + ' is missing the rounded Netflix frame');
   }
 
   const bad = await call('/fr/editorial-cover.jpg?key=does-not-exist');
@@ -163,6 +172,9 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert(collection);
     assert.match(collection.folders[0].coverImageUrl, /editorial-cover\.jpg\?key=series-top-rated/);
     assert.match(collection.folders[1].coverImageUrl, /editorial-cover\.jpg\?key=series-trendy/);
+    assert.match(collection.folders[2].coverImageUrl, /editorial-cover\.jpg\?key=series-new/);
+    assert.match(collection.folders[3].coverImageUrl, /editorial-cover\.jpg\?key=series-returning/);
+    assert.match(collection.folders[4].coverImageUrl, /editorial-cover\.jpg\?key=movies-new/);
     assert.match(collection.folders[5].coverImageUrl, /editorial-cover\.jpg\?key=cinema-now/);
   }
 });

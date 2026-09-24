@@ -267,10 +267,10 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v8-individual-masters-hq', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v9-netflix-rounded-double-audit', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
-assert(generatedManifest?.artDirection === 'individual-masters-hq-v8', `wrong art direction: ${generatedManifest?.artDirection}`);
-assert(generatedManifest?.visualReference === 'validated-individual-lots-1-4', 'validated individual asset reference missing');
+assert(generatedManifest?.artDirection === 'netflix-rounded-unified-v9', `wrong art direction: ${generatedManifest?.artDirection}`);
+assert(generatedManifest?.visualReference === 'netflix-master-frame-plus-approved-local-art', 'validated individual asset reference missing');
 
 const masterSource = generatedManifest?.masterSource || {};
 assert(masterSource.sourceFile === 'assets/individual-masters-v8/pack.b64.*', 'v8 individual pack source marker missing');
@@ -289,6 +289,9 @@ assert(generatedManifest?.backgroundPolicy?.secondaryCompositing === false, 'v8 
 assert(generatedManifest?.backgroundPolicy?.hueMutation === false, 'v8 hue mutation must stay disabled');
 assert(generatedManifest?.backgroundPolicy?.horizontalMirroring === false, 'v8 mirroring must stay disabled');
 assert(generatedManifest?.backgroundPolicy?.exactApprovedCardSource === true, 'v8 exact source policy missing');
+assert(generatedManifest?.backgroundPolicy?.unifiedRoundedFrame === true, 'unified rounded-frame policy missing');
+assert(generatedManifest?.backgroundPolicy?.coloredOuterBorder === false, 'colored outer border must stay disabled');
+assert(Number(generatedManifest?.backgroundPolicy?.frameRadius || 0) === 42, 'rounded frame radius must stay 42');
 assert(generatedManifest?.backgroundPolicy?.individualMastersArePrimary === true, 'v8 individual masters are not primary');
 assert(generatedManifest?.backgroundPolicy?.fullFramePreserved === true, 'v8 full-frame preservation missing');
 assert(generatedManifest?.backgroundPolicy?.heroUsesFullFrameMaster === true, 'v8 hero full-frame policy missing');
@@ -302,16 +305,23 @@ assert(Number(generatedManifest?.generatedFiles || 0) >= 180, `generated cover f
 assert(Array.isArray(generatedManifest?.approvedCardFallbacks) && generatedManifest.approvedCardFallbacks.length === 0, `unexpected generator fallbacks: ${JSON.stringify(generatedManifest?.approvedCardFallbacks)}`);
 assert(JSON.stringify(generatedManifest?.explicitDerivedSources || []) === JSON.stringify(['tr/bi-kanal']), `unexpected derived source set: ${JSON.stringify(generatedManifest?.explicitDerivedSources)}`);
 assert(JSON.stringify(generatedManifest?.crossRegionApprovedSources || []) === JSON.stringify([]), `unexpected cross-region source set: ${JSON.stringify(generatedManifest?.crossRegionApprovedSources)}`);
+const doubleAudit = generatedManifest?.doubleAudit || {};
+assert(Number(doubleAudit.requiredPasses || 0) === 2, 'double cover audit pass count missing');
+assert(doubleAudit.stable === true, 'double cover audit did not stabilize');
+assert(Number(doubleAudit.pass1?.filesChecked || 0) > 0, 'double cover audit pass 1 checked no files');
+assert(doubleAudit.pass1?.filesChecked === doubleAudit.pass2?.filesChecked, 'double cover audit file counts differ');
+assert(doubleAudit.pass1?.digest === doubleAudit.pass2?.digest, 'double cover audit digests differ');
+assert(doubleAudit.pass1?.roundedVerified === doubleAudit.pass1?.filesChecked, 'rounded frame audit incomplete');
 
 assert(generatedManifest?.designProfile?.shield?.target === '83-inch-tv-distance', 'Shield TV design profile missing');
-assert(generatedManifest?.designProfile?.shield?.layout === 'individual-master-landscape', `wrong Shield layout: ${generatedManifest?.designProfile?.shield?.layout}`);
+assert(generatedManifest?.designProfile?.shield?.layout === 'netflix-rounded-landscape', `wrong Shield layout: ${generatedManifest?.designProfile?.shield?.layout}`);
 assert(Number(generatedManifest?.designProfile?.shield?.width || 0) === 1600 && Number(generatedManifest?.designProfile?.shield?.height || 0) === 900, 'Shield master dimensions must be 1600x900');
 assert(generatedManifest?.designProfile?.shield?.ratio === '16:9', 'Shield master ratio must be 16:9');
 assert(generatedManifest?.designProfile?.shield?.fit === 'contain' && generatedManifest?.designProfile?.shield?.crop === false, 'Shield must preserve the complete landscape frame without crop');
-assert(generatedManifest?.designProfile?.desktop?.layout === 'individual-master-landscape', 'Desktop v8 layout missing');
+assert(generatedManifest?.designProfile?.desktop?.layout === 'netflix-rounded-landscape', 'Desktop v8 layout missing');
 assert(Number(generatedManifest?.designProfile?.desktop?.width || 0) === 1600 && Number(generatedManifest?.designProfile?.desktop?.height || 0) === 900, 'Desktop master dimensions must be 1600x900');
 assert(generatedManifest?.designProfile?.desktop?.fit === 'contain' && generatedManifest?.designProfile?.desktop?.crop === false, 'Desktop must preserve the complete landscape frame without crop');
-assert(generatedManifest?.designProfile?.genres?.layout === 'individual-master-landscape', 'Genre v8 layout missing');
+assert(generatedManifest?.designProfile?.genres?.layout === 'netflix-rounded-landscape', 'Genre v8 layout missing');
 assert(generatedManifest?.designProfile?.genres?.crop === false, 'Genre cards must not be cropped');
 assert(generatedManifest?.designProfile?.hero?.layout === 'full-frame-black-blend', 'Hero v8 layout missing');
 assert(Number(generatedManifest?.designProfile?.hero?.width || 0) === 1920 && Number(generatedManifest?.designProfile?.hero?.height || 0) === 1080, 'Hero dimensions must be 1920x1080');
@@ -392,7 +402,7 @@ assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield service
 for (const value of generatedShieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v8-individual-masters-hq', `generated Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v9-netflix-rounded-double-audit', `generated Shield cover has stale revision: ${value}`);
 }
 
 const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
@@ -401,7 +411,7 @@ const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
 assert(generatedGenreShieldUrls.length >= 20, `too few generated Shield genre covers in collection payload: ${generatedGenreShieldUrls.length}`);
 for (const value of generatedGenreShieldUrls) {
   const visualUrl = new URL(value);
-  assert(visualUrl.searchParams.get('v') === 'generated-v8-individual-masters-hq', `generated genre Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v9-netflix-rounded-double-audit', `generated genre Shield cover has stale revision: ${value}`);
 }
 
 const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
@@ -429,7 +439,7 @@ assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop servi
 for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v8-individual-masters-hq', `generated Desktop cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v9-netflix-rounded-double-audit', `generated Desktop cover has stale revision: ${value}`);
 }
 const generatedGenreDesktopUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
