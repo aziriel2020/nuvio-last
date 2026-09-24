@@ -43,9 +43,10 @@ jobs:
 
           (async () => {
             const manifest = JSON.parse(fs.readFileSync('assets/generated-covers/manifest.json', 'utf8'));
-            if (manifest.revision !== 'generated-v8-individual-masters-hq') throw new Error('unexpected cover revision: ' + manifest.revision);
-            if (manifest.artDirection !== 'individual-masters-hq-v8') throw new Error('unexpected art direction: ' + manifest.artDirection);
-            if (manifest.visualReference !== 'validated-individual-lots-1-4') throw new Error('individual visual reference missing');
+            if (manifest.revision !== 'generated-v9-netflix-rounded-double-audit') throw new Error('unexpected cover revision: ' + manifest.revision);
+            if (manifest.artDirection !== 'netflix-rounded-unified-v9') throw new Error('unexpected art direction: ' + manifest.artDirection);
+            if (manifest.visualReference !== 'netflix-master-frame-plus-approved-local-art') throw new Error('individual visual reference missing');
+            if (manifest.doubleAudit?.stable !== true || manifest.doubleAudit?.requiredPasses !== 2) throw new Error('double cover audit missing');
 
             const source = manifest.masterSource || {};
             if (source.sourceFile !== 'assets/individual-masters-v8/pack.b64.*') throw new Error('wrong v8 master source');
