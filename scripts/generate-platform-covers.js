@@ -16,7 +16,7 @@ const PLATFORM_ART_ROOT = path.join(ROOT, 'assets', 'platform-art');
 const GENRE_ART_ROOT = path.join(ROOT, 'assets', 'genre-art', 'shared');
 const APPROVED_BOARD_ROOT = path.join(ROOT, 'assets', 'approved-board');
 const INDIVIDUAL_MASTER_ROOT = path.join(ROOT, 'assets', 'individual-masters-v8');
-const REVISION = 'generated-v8-individual-masters-hq';
+const REVISION = 'generated-v9-netflix-rounded-double-audit';
 
 const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 });
 const APPROVED_BOARD_PARTS = Object.freeze([
@@ -521,8 +521,35 @@ function brandLabel(api, providerSlug) {
   }
 }
 
+function roundedCardMask(width, height, radius = 42) {
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#ffffff"/>
+  </svg>`);
+}
+
+async function roundedNetflixFrame(buffer, width = 1600, height = 900, radius = 42) {
+  const content = await sharp(buffer)
+    .resize(width, height, { fit: 'cover', position: 'centre', withoutEnlargement: false })
+    .ensureAlpha()
+    .composite([{ input: roundedCardMask(width, height, radius), blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 }
+    }
+  })
+    .composite([{ input: content, left: 0, top: 0 }])
+    .jpeg({ quality: 97, chromaSubsampling: '4:4:4' })
+    .toBuffer();
+}
+
 async function individualCardFrame(buffer, width = 1600, height = 900) {
-  return sharp(buffer)
+  const base = await sharp(buffer)
     .resize(width, height, {
       fit: 'contain',
       position: 'centre',
@@ -532,6 +559,7 @@ async function individualCardFrame(buffer, width = 1600, height = 900) {
     .sharpen({ sigma: 0.28 })
     .jpeg({ quality: 97, chromaSubsampling: '4:4:4' })
     .toBuffer();
+  return roundedNetflixFrame(base, width, height);
 }
 
 async function individualHeroFrame(source, accent) {
@@ -592,7 +620,6 @@ function serviceCardOverlay(width, height, opts) {
     <rect width="${width}" height="${height}" fill="url(#bottom)"/>
     <rect width="${width}" height="${height}" fill="url(#left)"/>
     ${label}
-    <rect x="3" y="3" width="${width - 6}" height="${height - 6}" rx="32" fill="none" stroke="${opts.accent}" stroke-opacity=".88" stroke-width="5"/>
   </svg>`);
 }
 
@@ -612,7 +639,6 @@ function genreCardOverlay(width, height, opts) {
     </defs>
     <rect width="${width}" height="${height}" fill="url(#bottom)"/>
     ${title}
-    <rect x="3" y="3" width="${width - 6}" height="${height - 6}" rx="30" fill="none" stroke="#dce5f2" stroke-opacity=".46" stroke-width="4"/>
   </svg>`);
 }
 
@@ -620,7 +646,10 @@ async function serviceCover(source, logoBuffer, opts) {
   const width = 1600;
   const height = 900;
   if (source.individualExact === true) return individualCardFrame(source.buffer, width, height);
-  if (source.boardExact === true) return approvedBoardCardFrame(source.buffer, width, height);
+  if (source.boardExact === true) {
+    const board = await approvedBoardCardFrame(source.buffer, width, height);
+    return roundedNetflixFrame(board, width, height);
+  }
   const background = await approvedBackground(source.buffer, width, height, { derived: source.derived === true });
   const composites = [{ input: serviceCardOverlay(width, height, opts), left: 0, top: 0 }];
 
@@ -639,22 +668,27 @@ async function serviceCover(source, logoBuffer, opts) {
     composites.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">${fallback}</svg>`), left: 0, top: 0 });
   }
 
-  return sharp(background)
+  const composed = await sharp(background)
     .composite(composites)
     .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
     .toBuffer();
+  return roundedNetflixFrame(composed, width, height);
 }
 
 async function genreCover(source, opts) {
   const width = 1600;
   const height = 900;
   if (source.individualExact === true) return individualCardFrame(source.buffer, width, height);
-  if (source.boardExact === true) return approvedBoardCardFrame(source.buffer, width, height);
+  if (source.boardExact === true) {
+    const board = await approvedBoardCardFrame(source.buffer, width, height);
+    return roundedNetflixFrame(board, width, height);
+  }
   const background = await approvedBackground(source.buffer, width, height);
-  return sharp(background)
+  const composed = await sharp(background)
     .composite([{ input: genreCardOverlay(width, height, opts), left: 0, top: 0 }])
     .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
     .toBuffer();
+  return roundedNetflixFrame(composed, width, height);
 }
 
 function heroOverlay(width, height, accent) {
@@ -918,7 +952,7 @@ async function main() {
     for (const genre of uniqueGenres(api)) genreJobs.push({ region, genre });
   }
 
-  console.log(`Generating Nuvio Individual Masters HQ v8: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
+  console.log(`Generating Nuvio unified Netflix-frame v9 covers: ${providerJobs.length} service parents + ${genreJobs.length} genre identities`);
 
   const providerResults = await mapLimit(providerJobs, 3, async (job, index) => {
     process.stdout.write(`[service ${index + 1}/${providerJobs.length}] ${job.region}/${job.definition.provider.slug} ... `);
@@ -951,8 +985,8 @@ async function main() {
     revision: REVISION,
     complete: true,
     generatedAt: new Date().toISOString(),
-    artDirection: 'individual-masters-hq-v8',
-    visualReference: 'validated-individual-lots-1-4',
+    artDirection: 'netflix-rounded-unified-v9',
+    visualReference: 'netflix-master-frame-plus-approved-local-art',
     masterSource: {
       sourceFile: 'assets/individual-masters-v8/pack.b64.*',
       indexFile: 'assets/individual-masters-v8/index.json',
@@ -972,6 +1006,9 @@ async function main() {
       hueMutation: false,
       horizontalMirroring: false,
       exactApprovedCardSource: true,
+      unifiedRoundedFrame: true,
+      coloredOuterBorder: false,
+      frameRadius: 42,
       uniquePerService: true,
       uniquePerGenre: true,
       source: 'individual-hq-masters-with-local-approved-fallbacks',
@@ -1000,7 +1037,7 @@ async function main() {
     designProfile: {
       shield: {
         target: '83-inch-tv-distance',
-        layout: 'individual-master-landscape',
+        layout: 'netflix-rounded-landscape',
         width: 1600,
         height: 900,
         ratio: '16:9',
