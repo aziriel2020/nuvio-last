@@ -101,15 +101,49 @@ function serveLocalJpeg(res, absolutePath, cache = 'public, max-age=86400, s-max
   catch (_) { res.statusCode=404; res.end('Not found'); }
 }
 
-function serveEditorialCoverJpeg(res, url) {
+async function serveEditorialCoverJpeg(res, url) {
   const key = String(url.searchParams.get('key') || '').trim();
-  const file = EDITORIAL_COVER_FILES[key];
-  if (!file) { res.statusCode = 404; return res.end('Not found'); }
-  return serveLocalJpeg(
-    res,
-    path.join(EDITORIAL_COVER_DIR, file),
-    'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000'
-  );
+  const recipes = {
+    'series-top-rated': {
+      source: path.join(GENRE_CINEMATIC_ART_DIR, 'drama-card.jpg'),
+      type: 'series',
+      accent: '#f4c542',
+      title: 'Séries les mieux notées',
+      subtitle: 'Hier · Semaine passée · Mois dernier',
+      providerLabel: 'TENDANCES',
+      bottomTag: 'TOP NOTES'
+    },
+    'series-trendy': {
+      source: path.join(GENRE_CINEMATIC_ART_DIR, 'thriller-card.jpg'),
+      type: 'series',
+      accent: '#ff5a36',
+      title: 'Séries les plus trendy',
+      subtitle: 'Hier · Semaine passée · Mois dernier',
+      providerLabel: 'TENDANCES',
+      bottomTag: 'TRENDY'
+    },
+    'cinema-now': {
+      source: path.join(PLATFORM_ART_DIR, 'vod-fr-card.jpg'),
+      type: 'movie',
+      accent: '#e11d48',
+      title: 'Films au cinéma actuellement',
+      subtitle: 'Sorties Belgique · disponibilité vérifiée',
+      providerLabel: 'CINÉMA',
+      bottomTag: 'À L’AFFICHE'
+    }
+  };
+  const recipe = recipes[key];
+  if (!recipe) { res.statusCode = 404; return res.end('Not found'); }
+
+  try {
+    const source = fs.readFileSync(recipe.source);
+    const data = await desktopCinematicCardBuffer(source, recipe);
+    res.setHeader('X-Nuvio-Editorial-Cover', key);
+    return sendDesktopCinematicJpeg(res, data);
+  } catch (_) {
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
 }
 
 function normalizedDesktopType(value) {
