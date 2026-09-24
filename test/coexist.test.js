@@ -119,22 +119,52 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
   assert.deepEqual(editorial.folders[2].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
   assert.deepEqual(editorial.folders[3].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
   assert.deepEqual(editorial.folders[4].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
-  assert.match(editorial.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=drama/);
-  assert.match(editorial.folders[1].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
+  assert.match(editorial.folders[0].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-top-rated/);
+  assert.match(editorial.folders[1].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-trendy/);
   assert.match(editorial.folders[2].coverImageUrl, /\/shield-genre-card\.jpg\?genre=action/);
   assert.match(editorial.folders[3].coverImageUrl, /\/shield-genre-card\.jpg\?genre=thriller/);
   assert.match(editorial.folders[4].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
-  assert.match(editorial.folders[5].coverImageUrl, /\/shield-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(editorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
 
   const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
   const desktopEditorial = desktop.find((c) => c.id === 'calendar-archives-fr-editorial-now');
   assert(desktopEditorial);
-  assert.match(desktopEditorial.folders[0].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=drama/);
-  assert.match(desktopEditorial.folders[1].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
+  assert.match(desktopEditorial.folders[0].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-top-rated/);
+  assert.match(desktopEditorial.folders[1].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-trendy/);
   assert.match(desktopEditorial.folders[2].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=action/);
   assert.match(desktopEditorial.folders[3].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=thriller/);
   assert.match(desktopEditorial.folders[4].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
-  assert.match(desktopEditorial.folders[5].coverImageUrl, /\/desktop-folder-card\.jpg\?provider=vod-fr/);
+  assert.match(desktopEditorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
+});
+
+test('static editorial Shield covers are real JPEG assets and stay untouched by Shield/Desktop transforms', async () => {
+  const paths = [
+    '/fr/editorial-cover.jpg?key=series-top-rated&v=shield-netflix-v1',
+    '/fr/editorial-cover.jpg?key=series-trendy&v=shield-netflix-v1',
+    '/fr/editorial-cover.jpg?key=cinema-now&v=shield-netflix-v1'
+  ];
+  for (const path of paths) {
+    const response = await call(path);
+    assert.equal(response.statusCode, 200, path);
+    assert.match(response.headers['content-type'], /image\/jpeg/, path);
+    assert.equal(response.body[0], 0xff, path);
+    assert.equal(response.body[1], 0xd8, path);
+    assert(response.body.length > 100000, path);
+  }
+
+  const bad = await call('/fr/editorial-cover.jpg?key=does-not-exist');
+  assert.equal(bad.statusCode, 404);
+
+  const shield = JSON.parse((await call('/nuvio-collections-shield.json')).text)
+    .find((c) => c.id === 'calendar-archives-fr-editorial-now');
+  const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text)
+    .find((c) => c.id === 'calendar-archives-fr-editorial-now');
+  for (const collection of [shield, desktop]) {
+    assert(collection);
+    assert.match(collection.folders[0].coverImageUrl, /editorial-cover\.jpg\?key=series-top-rated/);
+    assert.match(collection.folders[1].coverImageUrl, /editorial-cover\.jpg\?key=series-trendy/);
+    assert.match(collection.folders[5].coverImageUrl, /editorial-cover\.jpg\?key=cinema-now/);
+  }
 });
 
 test('Cinema du moment static schema exposes À l’affiche plus dated tiles and reuses the France addon', () => {
