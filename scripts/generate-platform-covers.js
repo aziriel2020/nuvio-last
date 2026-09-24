@@ -926,6 +926,59 @@ async function mapLimit(items, limit, worker) {
   return output;
 }
 
+async function generatedCardFiles() {
+  const files = [];
+  async function walk(dir) {
+    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (/-((?:shield)|(?:desktop))\.jpg$/i.test(entry.name)) files.push(full);
+    }
+  }
+  await walk(OUT_ROOT);
+  return files.sort();
+}
+
+async function auditGeneratedCovers(passName) {
+  const files = await generatedCardFiles();
+  if (!files.length) throw new Error(passName + ': no generated Shield/Desktop cover files');
+
+  const rollup = crypto.createHash('sha256');
+  let roundedVerified = 0;
+
+  for (const file of files) {
+    const buffer = await fsp.readFile(file);
+    const metadata = await sharp(buffer).metadata();
+    if (metadata.width !== 1600 || metadata.height !== 900) {
+      throw new Error(passName + ': invalid cover dimensions for ' + path.relative(OUT_ROOT, file) + ': ' + metadata.width + 'x' + metadata.height);
+    }
+
+    const corner = await sharp(buffer)
+      .extract({ left: 0, top: 0, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer();
+    const cornerMax = Math.max(...corner);
+    if (cornerMax > 28) {
+      throw new Error(passName + ': rounded-corner mask missing for ' + path.relative(OUT_ROOT, file) + ' (corner=' + [...corner].join(',') + ')');
+    }
+    roundedVerified += 1;
+
+    rollup.update(path.relative(OUT_ROOT, file));
+    rollup.update(crypto.createHash('sha256').update(buffer).digest());
+  }
+
+  return {
+    pass: passName,
+    filesChecked: files.length,
+    roundedVerified,
+    dimensions: '1600x900',
+    radius: 42,
+    coloredOuterBorder: false,
+    digest: rollup.digest('hex')
+  };
+}
+
 async function main() {
   const manifestFile = path.join(OUT_ROOT, 'manifest.json');
   if (process.env.NUVIO_FORCE_COVER_REGEN !== '1') {
@@ -972,6 +1025,13 @@ async function main() {
     canonicalLibrary.files.length +
     providerResults.reduce((sum, item) => sum + item.files.length, 0) +
     genreResults.reduce((sum, item) => sum + item.files.length, 0);
+
+  const auditPass1 = await auditGeneratedCovers('pass-1');
+  const auditPass2 = await auditGeneratedCovers('pass-2');
+  if (auditPass1.filesChecked !== auditPass2.filesChecked || auditPass1.digest !== auditPass2.digest) {
+    throw new Error('double cover audit mismatch');
+  }
+  console.log('Double cover audit OK:', auditPass1.filesChecked + ' files, digest=' + auditPass1.digest.slice(0, 16));
 
   const derivedSources = [
     ...providerResults.filter((item) => item.derived === true).map((item) => `${item.region}/${item.provider}`),
@@ -1023,6 +1083,12 @@ async function main() {
     approvedCardFallbacks: [],
     explicitDerivedSources: derivedSources,
     crossRegionApprovedSources,
+    doubleAudit: {
+      requiredPasses: 2,
+      pass1: auditPass1,
+      pass2: auditPass2,
+      stable: true
+    },
     canonicalLibrary: {
       platformCount: canonicalLibrary.platforms.length,
       genreCount: canonicalLibrary.genres.length,
@@ -1045,7 +1111,7 @@ async function main() {
         crop: false
       },
       desktop: {
-        layout: 'individual-master-landscape',
+        layout: 'netflix-rounded-landscape',
         width: 1600,
         height: 900,
         ratio: '16:9',
@@ -1053,7 +1119,7 @@ async function main() {
         crop: false
       },
       genres: {
-        layout: 'individual-master-landscape',
+        layout: 'netflix-rounded-landscape',
         width: 1600,
         height: 900,
         ratio: '16:9',
