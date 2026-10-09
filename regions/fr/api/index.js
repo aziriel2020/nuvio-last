@@ -72,6 +72,15 @@ const EDITORIAL_BACKDROP_CROP = Object.freeze({
   'movies-new': 340,
   'cinema-now': 400
 });
+const EDITORIAL_TV_LABELS = Object.freeze({
+  'series-top-rated': { title: 'LES MIEUX NOTÉES', accent: '#e8bc62' },
+  'series-trendy': { title: 'SÉRIES TENDANCE', accent: '#ff6656' },
+  'series-new': { title: 'NOUVELLES SÉRIES', accent: '#5bd9e7' },
+  'series-returning': { title: 'SÉRIES RENOUVELÉES', accent: '#b87eff' },
+  'movies-new': { title: 'NOUVEAUX FILMS', accent: '#ffc15a' },
+  'cinema-now': { title: 'À L’AFFICHE', accent: '#fc6877' }
+});
+const EDITORIAL_TV_COVER_REVISION = 'tv-readable-v4';
 const EDITORIAL_BACKDROP_RENDER_CACHE = new Map();
 // Exactly six immutable cover variants; share one render per variant and process lifetime.
 // Cache the in-flight Promise too, so concurrent Shield/Desktop requests do not
@@ -110,6 +119,51 @@ function serveGenreCinematicJpeg(res, url, variant = 'card') {
 function serveLocalJpeg(res, absolutePath, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
   try { const data = fs.readFileSync(absolutePath); res.statusCode=200; res.setHeader('Content-Type','image/jpeg'); res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control',cache); res.end(data); }
   catch (_) { res.statusCode=404; res.end('Not found'); }
+}
+
+/**
+ * Render a TV-safe title from the original approved photography. Original JPEGs
+ * are never modified. Their embedded display type lies below y=440, so only
+ * the clean 747x420 photographic crop is used, in the same position as the
+ * corresponding hero backdrop. This avoids oversized baked-in serif copy,
+ * overprint, and unreadable miniature metadata on Shield/Desktop tiles.
+ */
+async function editorialTvReadableCoverJpeg(source, key) {
+  const style = EDITORIAL_TV_LABELS[key];
+  if (!style) throw new Error('Unknown editorial TV cover');
+  const width = 1600, height = 900;
+  const photo = await sharp(source)
+    .extract({ left: EDITORIAL_BACKDROP_CROP[key], top: 20, width: 747, height: 420 })
+    .resize(width, height, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
+    .sharpen({ sigma: .48 })
+    .toBuffer();
+
+  // Explicit glyph paths use the bundled DejaVu font, independent of the
+  // host OS fonts. The title is a single short line, limited to 1380px.
+  const titlePath = desktopPathText(style.title, 130, 780, 1380, 80, {
+    minSize: 52, fill: '#ffffff'
+  });
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    <defs>
+      <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="30%" stop-color="#000000" stop-opacity="0"/>
+        <stop offset="70%" stop-color="#050508" stop-opacity=".35"/>
+        <stop offset="100%" stop-color="#050508" stop-opacity=".86"/>
+      </linearGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#shade)"/>
+    <rect x="91" y="697" width="10" height="111" rx="5" fill="${style.accent}"/>
+    ${titlePath}
+    <!-- These four cutouts match the black corners of approved cards. -->
+    <path fill="#050609" d="M0 0 H70 A70 70 0 0 0 0 70 Z"/>
+    <path fill="#050609" d="M1530 0 H1600 V70 A70 70 0 0 0 1530 0 Z"/>
+    <path fill="#050609" d="M0 830 A70 70 0 0 0 70 900 H0 Z"/>
+    <path fill="#050609" d="M1530 900 A70 70 0 0 0 1600 830 V900 Z"/>
+  </svg>`);
+  return sharp(photo)
+    .composite([{ input: overlay, left: 0, top: 0 }])
+    .jpeg({ quality: 93, chromaSubsampling: '4:4:4' })
+    .toBuffer();
 }
 
 async function serveEditorialCoverJpeg(res, url) {
@@ -181,9 +235,8 @@ async function serveEditorialCoverJpeg(res, url) {
       // Fingerprint the actual artwork, not the finished titled card: two
       // different labels over the same photo must fail the visual uniqueness audit.
       const sourceSha256 = createHash('sha256').update(source).digest('hex');
-      // The title, typography, composition and rounded frame are already baked
-      // into this approved JPEG. Never repaint or regenerate these cards.
-      const data = source;
+      // Keep the approved source intact and compose readable TV titles at request time.
+      const data = await editorialTvReadableCoverJpeg(source, key);
       return { data, sourceSha256 };
     });
     EDITORIAL_COVER_RENDER_CACHE.set(key, render);
@@ -191,6 +244,7 @@ async function serveEditorialCoverJpeg(res, url) {
   try {
     const { data, sourceSha256 } = await render;
     res.setHeader('X-Nuvio-Editorial-Cover', key);
+    res.setHeader('X-Nuvio-Editorial-Style', EDITORIAL_TV_COVER_REVISION);
     res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
     res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
     return sendDesktopCinematicJpeg(res, data);
@@ -1367,7 +1421,7 @@ function buildEditorialCollection(origin = null) {
       title: '⭐ Séries les mieux notées',
       emoji: '⭐',
       ids: ratedIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=approved-covers-v3`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
     }),
@@ -1376,7 +1430,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔥 Séries les plus trendy',
       emoji: '🔥',
       ids: trendyIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=approved-covers-v3`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-trendy&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
     }),
@@ -1385,7 +1439,7 @@ function buildEditorialCollection(origin = null) {
       title: '🆕 Nouvelles séries',
       emoji: '🆕',
       ids: newSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=approved-covers-v3`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-new&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=action&variant=logo&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&v=editorial-fresh-v1`
     }),
@@ -1394,7 +1448,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔁 Séries renouvelées',
       emoji: '🔁',
       ids: returningSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=approved-covers-v3`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-returning&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&v=editorial-fresh-v1`
     }),
@@ -1403,7 +1457,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Nouveaux films',
       emoji: '🎬',
       ids: newMovieIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=approved-covers-v3`,
+      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=approved-hero-v1`,
       logo: (base) => `${base}/platform-logo?provider=vod-fr&type=movie&v=editorial-fresh-v1`
     }),
@@ -1412,7 +1466,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Films au cinéma actuellement',
       emoji: '🎬',
       ids: ['editorial-movies-cinema-now'],
-      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=approved-covers-v3`,
+      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=cinema-now&v=approved-hero-v1`,
       logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
     })
