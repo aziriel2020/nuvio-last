@@ -237,8 +237,7 @@ async function serveEditorialBackdropJpeg(res, url) {
     res.setHeader('X-Nuvio-Editorial-Backdrop', key);
     res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
     res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
-    res.setHeader('X-Nuvio-Desktop-Format', '1920x1080');
-    return sendDesktopCinematicJpeg(res, data);
+    return sendDesktopCinematicJpeg(res, data, '1920x1080');
   } catch (_) {
     if (EDITORIAL_BACKDROP_RENDER_CACHE.get(key) === render) {
       EDITORIAL_BACKDROP_RENDER_CACHE.delete(key);
@@ -400,13 +399,13 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
 }
 
 
-function sendDesktopCinematicJpeg(res, data) {
+function sendDesktopCinematicJpeg(res, data, format = '1600x900') {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
   res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');
-  res.setHeader('X-Nuvio-Desktop-Format', '1600x900');
+  res.setHeader('X-Nuvio-Desktop-Format', format);
   res.end(data);
 }
 
