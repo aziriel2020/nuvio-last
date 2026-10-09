@@ -2007,13 +2007,7 @@ folder = replace_once(
 folder = replace_once(
     folder,
     '''            val gridCells = if (isDesktop) {
-                GridCells.FixedSize(
-                    if (posterCardStyle.catalogLandscapeModeEnabled) {
-                        landscapePosterWidth(basePosterWidthDp)
-                    } else {
-                        basePosterWidthDp.dp
-                    },
-                )
+                GridCells.FixedSize(basePosterWidthDp.dp)
             } else {
                 GridCells.Fixed(columns)
             }
@@ -2107,18 +2101,16 @@ folder = replace_once(
 )
 folder = replace_once(
     folder,
-    '''                                        onHoverChanged = onPosterHoverChanged?.let { callback ->
-                                            { hovered -> callback(item, hovered) }
-                                        },
+    '''                                        detailLine = item.releaseInfo,
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
 ''',
-    '''                                        onHoverChanged = onPosterHoverChanged?.let { callback ->
-                                            { hovered -> callback(item, hovered) }
-                                        },
+    '''                                        detailLine = item.releaseInfo,
                                         isKeyboardSelected =
                                             keyboardNavigationActive &&
                                                 keyboardSelectedItem?.stableKey() == item.stableKey(),
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
 ''',
     "v7 tabbed selected visual",
 )
