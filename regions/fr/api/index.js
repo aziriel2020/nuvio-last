@@ -1386,7 +1386,7 @@ function buildEditorialCollection(origin = null) {
     genre: editorialPeriodLabel(entry)
   });
 
-  const folder = ({ id, title, emoji, ids, art, hero, logo }) => {
+  const folder = ({ id, title, emoji, ids, art, hero }) => {
     const sourceEntries = sourceSet(ids);
     return {
       id,
@@ -1398,7 +1398,9 @@ function buildEditorialCollection(origin = null) {
       hideTitle: true,
       heroBackdropUrl: origin ? hero(origin) : null,
       heroVideoUrl: null,
-      titleLogoUrl: origin ? logo(origin) : null,
+      // Let Nuvio render folder.title as native text on the left of the hero.
+      // The six approved cover JPEGs and title visibility on tiles stay untouched.
+      titleLogoUrl: null,
       sources: sourceEntries.map(editorialAddonSource),
       catalogSources: sourceEntries.map(editorialLegacySource)
     };
@@ -1418,7 +1420,6 @@ function buildEditorialCollection(origin = null) {
       ids: ratedIds,
       art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1`,
-      logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
     }),
     folder({
       id: 'editorial-series-trendy',
@@ -1427,7 +1428,6 @@ function buildEditorialCollection(origin = null) {
       ids: trendyIds,
       art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-trendy&v=approved-hero-v1`,
-      logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
     }),
     folder({
       id: 'editorial-series-new',
@@ -1436,7 +1436,6 @@ function buildEditorialCollection(origin = null) {
       ids: newSeriesIds,
       art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-new&v=approved-hero-v1`,
-      logo: (base) => `${base}/genre-folder-art.svg?genre=action&variant=logo&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&v=editorial-fresh-v1`
     }),
     folder({
       id: 'editorial-series-returning',
@@ -1445,7 +1444,6 @@ function buildEditorialCollection(origin = null) {
       ids: returningSeriesIds,
       art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-returning&v=approved-hero-v1`,
-      logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&v=editorial-fresh-v1`
     }),
     folder({
       id: 'editorial-movies-new',
@@ -1454,7 +1452,6 @@ function buildEditorialCollection(origin = null) {
       ids: newMovieIds,
       art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=approved-hero-v1`,
-      logo: (base) => `${base}/platform-logo?provider=vod-fr&type=movie&v=editorial-fresh-v1`
     }),
     folder({
       id: 'editorial-cinema-now',
@@ -1463,7 +1460,6 @@ function buildEditorialCollection(origin = null) {
       ids: ['editorial-movies-cinema-now'],
       art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=cinema-now&v=approved-hero-v1`,
-      logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
     })
   ];
 
