@@ -71,11 +71,12 @@ async function main() {
   const height = 2 * (sheet.cellHeight + sheet.labelHeight) + 3 * sheet.gap;
 
   for (const [index, [key, title]] of cards.entries()) {
-    const url = '/fr/editorial-cover.jpg?key=' + key + '&v=approved-covers-v3';
+    const url = '/fr/editorial-cover.jpg?key=' + key + '&v=tv-readable-v4';
     const first = await requestCard(key);
     check(first.statusCode === 200, key + ': expected HTTP 200, got ' + first.statusCode);
     check(first.headers['content-type']?.includes('image/jpeg'), key + ': not JPEG');
     check(first.headers['x-nuvio-editorial-cover'] === key, key + ': wrong cover route');
+    check(first.headers['x-nuvio-editorial-style'] === 'tv-readable-v4', key + ': missing TV-readable title revision');
     check(first.body.length > 100000, key + ': cover too small / possibly placeholder');
     check(first.body[0] === 0xff && first.body[1] === 0xd8, key + ': wrong JPEG signature');
 
@@ -94,8 +95,11 @@ async function main() {
     sourceDigests.add(sourceSha256);
     const locked = approved.images[key];
     check(locked && locked.sha256 === sourceSha256, key + ': approved visual source has changed');
-    check(locked.bytes === first.body.length, key + ': approved visual size has changed');
-    check(locked.sha256 === digest, key + ': rendered JPEG no longer equals the approved artwork');
+    const original = await readFile(path.join(root, 'assets/collection-art/editorial-approved', locked.file));
+    check(locked.bytes === original.length, key + ': approved source file size changed');
+    check(locked.sha256 === createHash('sha256').update(original).digest('hex'),
+      key + ': approved source JPEG mutated');
+    check(digest !== locked.sha256, key + ': TV cover still uses unreadable baked-in lettering');
 
     const second = await requestCard(key);
     check(second.statusCode === 200 && second.headers['x-nuvio-editorial-render'] === 'memory',
@@ -116,7 +120,7 @@ async function main() {
     composites.push({ input: label, left, top: top + sheet.cellHeight });
 
     checks.push({ key, title, url, width: metadata.width, height: metadata.height,
-      size: first.body.length, sha256: digest, sourceSha256, roundedFrame: true, warmCache: true });
+      size: first.body.length, sha256: digest, sourceSha256, roundedFrame: true, tvReadableTitle: true, warmCache: true });
   }
 
   await sharp({ create: { width, height, channels: 3, background: '#080b12' } })
@@ -124,7 +128,7 @@ async function main() {
     .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
     .toFile(path.join(out, 'contact-sheet.jpg'));
   const result = {
-    revision: 'editorial-approved-covers-v3',
+    revision: 'tv-readable-v4',
     checked: cards.length,
     region: 'fr',
     consumers: ['Shield', 'Desktop'],
@@ -132,7 +136,7 @@ async function main() {
     checks,
   };
   await writeFile(path.join(out, 'manifest.json'), JSON.stringify(result, null, 2) + '\n');
-  console.log('PASS: 6 distinct source artworks and Tendances & Cinéma covers, 1600x900 JPEG, rounded frame, deterministic cached render.');
+  console.log('PASS: six TV-legible short titles, approved sources unchanged, rounded corners, 1600x900 JPEG and deterministic cached renders.');
   console.log('Preview: editorial-cover-audit/contact-sheet.jpg');
 }
 
