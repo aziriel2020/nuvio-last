@@ -57,6 +57,7 @@ async function main() {
   const checks = [];
   const composites = [];
   const digests = new Set();
+  const sourceDigests = new Set();
   const sheet = { cellWidth: 600, cellHeight: 338, margin: 30, gap: 30, labelHeight: 52 };
   const width = 3 * sheet.cellWidth + 4 * sheet.gap;
   const height = 2 * (sheet.cellHeight + sheet.labelHeight) + 3 * sheet.gap;
@@ -77,8 +78,12 @@ async function main() {
       .removeAlpha().raw().toBuffer();
     check(Math.max(...corner) <= 28, key + ': Netflix rounded frame corner missing');
     const digest = createHash('sha256').update(first.body).digest('hex');
-    check(!digests.has(digest), key + ': duplicated image');
+    check(!digests.has(digest), key + ': duplicated finished card');
     digests.add(digest);
+    const sourceSha256 = first.headers['x-nuvio-editorial-source-sha256'];
+    check(/^[a-f0-9]{64}$/.test(sourceSha256 || ''), key + ': missing source SHA-256');
+    check(!sourceDigests.has(sourceSha256), key + ': reused the same underlying artwork');
+    sourceDigests.add(sourceSha256);
 
     const second = await requestCard(key);
     check(second.statusCode === 200 && second.headers['x-nuvio-editorial-render'] === 'memory',
@@ -99,7 +104,7 @@ async function main() {
     composites.push({ input: label, left, top: top + sheet.cellHeight });
 
     checks.push({ key, title, url, width: metadata.width, height: metadata.height,
-      size: first.body.length, sha256: digest, roundedFrame: true, warmCache: true });
+      size: first.body.length, sha256: digest, sourceSha256, roundedFrame: true, warmCache: true });
   }
 
   await sharp({ create: { width, height, channels: 3, background: '#080b12' } })
@@ -115,7 +120,7 @@ async function main() {
     checks,
   };
   await writeFile(path.join(out, 'manifest.json'), JSON.stringify(result, null, 2) + '\n');
-  console.log('PASS: 6 unique Tendances & Cinéma covers, 1600x900 JPEG, rounded frame, deterministic cached render.');
+  console.log('PASS: 6 distinct source artworks and Tendances & Cinéma covers, 1600x900 JPEG, rounded frame, deterministic cached render.');
   console.log('Preview: editorial-cover-audit/contact-sheet.jpg');
 }
 
