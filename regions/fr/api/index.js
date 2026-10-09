@@ -61,13 +61,18 @@ const REGION_ART_KEY = 'fr';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/fr');
 const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-art/shared');
 const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
-const EDITORIAL_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial');
 const EDITORIAL_APPROVED_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial-approved');
-const EDITORIAL_COVER_FILES = Object.freeze({
-  'series-top-rated': 'series-top-rated.jpg',
-  'series-trendy': 'series-trendy.jpg',
-  'cinema-now': 'cinema-now.jpg'
+// Subject-aware source-only crops: only the photography ABOVE the baked-in
+// typography is used. No text, border or title badge can leak into a hero.
+const EDITORIAL_BACKDROP_CROP = Object.freeze({
+  'series-top-rated': 390,
+  'series-trendy': 340,
+  'series-new': 405,
+  'series-returning': 350,
+  'movies-new': 340,
+  'cinema-now': 400
 });
+const EDITORIAL_BACKDROP_RENDER_CACHE = new Map();
 // Exactly six immutable cover variants; share one render per variant and process lifetime.
 // Cache the in-flight Promise too, so concurrent Shield/Desktop requests do not
 // re-render the same 1600x900 cover on a small Oracle Always Free VM.
@@ -199,6 +204,49 @@ async function serveEditorialCoverJpeg(res, url) {
   }
 }
 
+
+async function serveEditorialBackdropJpeg(res, url) {
+  const key = String(url.searchParams.get('key') || '').trim();
+  if (!Object.prototype.hasOwnProperty.call(EDITORIAL_BACKDROP_CROP, key)) {
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
+
+  let render = EDITORIAL_BACKDROP_RENDER_CACHE.get(key);
+  const cacheHit = Boolean(render);
+  if (!render) {
+    render = Promise.resolve().then(async () => {
+      const jpeg = fs.readFileSync(path.join(EDITORIAL_APPROVED_COVER_DIR, key + '.jpg'));
+      const sourceSha256 = createHash('sha256').update(jpeg).digest('hex');
+      const left = EDITORIAL_BACKDROP_CROP[key];
+      // 747:420 is 16:9. The approved-cover titles start well below the
+      // 20..440 photo crop; the upper-right category pills are outside x<=1152.
+      const data = await sharp(jpeg)
+        .extract({ left, top: 20, width: 747, height: 420 })
+        .resize(1920, 1080, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
+        .modulate({ brightness: 0.82, saturation: 1.03 })
+        .blur(2)
+        .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
+        .toBuffer();
+      return { data, sourceSha256 };
+    });
+    EDITORIAL_BACKDROP_RENDER_CACHE.set(key, render);
+  }
+  try {
+    const { data, sourceSha256 } = await render;
+    res.setHeader('X-Nuvio-Editorial-Backdrop', key);
+    res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
+    res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
+    return sendDesktopCinematicJpeg(res, data, '1920x1080');
+  } catch (_) {
+    if (EDITORIAL_BACKDROP_RENDER_CACHE.get(key) === render) {
+      EDITORIAL_BACKDROP_RENDER_CACHE.delete(key);
+    }
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
+}
+
 function normalizedDesktopType(value) {
   return String(value || '').toLowerCase() === 'movie' ? 'movie' : 'series';
 }
@@ -304,67 +352,6 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
   </svg>`);
 }
 
-function editorialRoundedMask(width, height, radius = 42) {
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#ffffff"/>
-  </svg>`);
-}
-
-async function editorialRoundedFrame(buffer, width = 1600, height = 900, radius = 42) {
-  const rounded = await sharp(buffer)
-    .resize(width, height, { fit: 'cover', position: 'centre' })
-    .ensureAlpha()
-    .composite([{ input: editorialRoundedMask(width, height, radius), blend: 'dest-in' }])
-    .png()
-    .toBuffer();
-  return sharp({ create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } } })
-    .composite([{ input: rounded, left: 0, top: 0 }])
-    .jpeg({ quality: 96, chromaSubsampling: '4:4:4' })
-    .toBuffer();
-}
-
-function editorialCardOverlaySvg(options = {}) {
-  const width = 1600;
-  const height = 900;
-  const accent = safeDesktopAccent(options.accent, '#ffffff');
-  const titlePath = desktopPathText(options.title || '', 86, 704, 1250, 88, { minSize: 48, fill: '#ffffff' });
-  const subtitlePath = desktopPathText(options.subtitle || '', 88, 785, 1200, 42, { minSize: 30, fill: '#eef5ff', opacity: .96 });
-  const tagPath = desktopPathText(options.bottomTag || '', 88, 844, 900, 34, { minSize: 26, fill: accent, opacity: 1 });
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <defs>
-      <linearGradient id="left" x1="0" x2="1">
-        <stop offset="0%" stop-color="#000000" stop-opacity=".58"/>
-        <stop offset="42%" stop-color="#000000" stop-opacity=".16"/>
-        <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-      </linearGradient>
-      <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="45%" stop-color="#000000" stop-opacity="0"/>
-        <stop offset="75%" stop-color="#000000" stop-opacity=".48"/>
-        <stop offset="100%" stop-color="#000000" stop-opacity=".88"/>
-      </linearGradient>
-    </defs>
-    <rect width="${width}" height="${height}" fill="url(#left)"/>
-    <rect width="${width}" height="${height}" fill="url(#bottom)"/>
-    ${titlePath}
-    ${subtitlePath}
-    ${tagPath}
-  </svg>`);
-}
-
-async function editorialNetflixCardBuffer(sourceBuffer, options = {}) {
-  const background = await sharp(sourceBuffer)
-    .resize(1600, 900, { fit: 'cover', position: 'attention' })
-    .modulate({ brightness: 0.94, saturation: 1.05 })
-    .sharpen({ sigma: 0.32 })
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-    .toBuffer();
-  const composed = await sharp(background)
-    .composite([{ input: editorialCardOverlaySvg(options), left: 0, top: 0 }])
-    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-    .toBuffer();
-  return editorialRoundedFrame(composed);
-}
-
 async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   const type = normalizedDesktopType(options.type);
   const accent = safeDesktopAccent(options.accent, '#38bdf8');
@@ -412,13 +399,13 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
 }
 
 
-function sendDesktopCinematicJpeg(res, data) {
+function sendDesktopCinematicJpeg(res, data, format = '1600x900') {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
   res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');
-  res.setHeader('X-Nuvio-Desktop-Format', '1600x900');
+  res.setHeader('X-Nuvio-Desktop-Format', format);
   res.end(data);
 }
 
@@ -1380,8 +1367,8 @@ function buildEditorialCollection(origin = null) {
       title: '⭐ Séries les mieux notées',
       emoji: '⭐',
       ids: ratedIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=netflix-frame-v2`,
-      hero: (base) => `${base}/genre-backdrop.jpg?genre=drama&v=editorial-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=approved-covers-v3`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
     }),
     folder({
@@ -1389,8 +1376,8 @@ function buildEditorialCollection(origin = null) {
       title: '🔥 Séries les plus trendy',
       emoji: '🔥',
       ids: trendyIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=netflix-frame-v2`,
-      hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=approved-covers-v3`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-trendy&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
     }),
     folder({
@@ -1398,8 +1385,8 @@ function buildEditorialCollection(origin = null) {
       title: '🆕 Nouvelles séries',
       emoji: '🆕',
       ids: newSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=netflix-frame-v2`,
-      hero: (base) => `${base}/genre-backdrop.jpg?genre=action&v=editorial-fresh-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=approved-covers-v3`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-new&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=action&variant=logo&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&v=editorial-fresh-v1`
     }),
     folder({
@@ -1407,8 +1394,8 @@ function buildEditorialCollection(origin = null) {
       title: '🔁 Séries renouvelées',
       emoji: '🔁',
       ids: returningSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=netflix-frame-v2`,
-      hero: (base) => `${base}/genre-backdrop.jpg?genre=thriller&v=editorial-fresh-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=approved-covers-v3`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-returning&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&v=editorial-fresh-v1`
     }),
     folder({
@@ -1416,8 +1403,8 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Nouveaux films',
       emoji: '🎬',
       ids: newMovieIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=netflix-frame-v2`,
-      hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-fresh-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=approved-covers-v3`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=approved-hero-v1`,
       logo: (base) => `${base}/platform-logo?provider=vod-fr&type=movie&v=editorial-fresh-v1`
     }),
     folder({
@@ -1425,8 +1412,8 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Films au cinéma actuellement',
       emoji: '🎬',
       ids: ['editorial-movies-cinema-now'],
-      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=netflix-frame-v2`,
-      hero: (base) => `${base}/platform-backdrop.svg?provider=vod-fr&type=movie&v=editorial-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=approved-covers-v3`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=cinema-now&v=approved-hero-v1`,
       logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
     })
   ];
@@ -1434,7 +1421,7 @@ function buildEditorialCollection(origin = null) {
   return {
     id: 'calendar-archives-fr-editorial-now',
     title: '🇫🇷 Tendances & Cinéma',
-    backdropImageUrl: origin ? `${origin}/genre-backdrop.jpg?genre=drama&v=editorial-v1` : null,
+    backdropImageUrl: origin ? `${origin}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1` : null,
     pinToTop: true,
     focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT',
@@ -5595,6 +5582,7 @@ module.exports = async function handler(req, res) {
     if (path === '/genre-backdrop.jpg') return serveGenreCinematicJpeg(res, url, 'backdrop');
     if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/fr-genres-backdrop.jpg`);
     if (path === '/editorial-cover.jpg') return serveEditorialCoverJpeg(res, url);
+    if (path === '/editorial-backdrop.jpg') return serveEditorialBackdropJpeg(res, url);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
     if (path === '/nuvio-collections.json' || path === '/collections.json') return json(res, 200, buildNuvioCollectionsImport(runtimeNow(), requestTimeZone(req), origin), LARGE_JSON_CACHE);

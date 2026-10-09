@@ -31,6 +31,9 @@ jobs:
       - name: Render and audit all six Tendances & Cinéma covers
         run: npm run audit:editorial-covers
 
+      - name: Render and audit all six Tendances & Cinéma backgrounds
+        run: npm run audit:editorial-backdrops
+
       - name: Upload six editorial cover previews
         uses: actions/upload-artifact@v4
         with:
