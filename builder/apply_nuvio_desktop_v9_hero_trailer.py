@@ -36,6 +36,7 @@ fun HomePosterCard(
     item: MetaPreview,
     modifier: Modifier = Modifier,
     useLandscapeBackdropMode: Boolean = false,
+    showLandscapeOverlay: Boolean = true,
     useHoverPreview: Boolean = true,
     onHoverChanged: ((Boolean) -> Unit)? = null,
     isWatched: Boolean = false,
@@ -61,8 +62,8 @@ fun HomePosterCard(
             shape = if (isLandscapeMode) NuvioPosterShape.Landscape else item.posterShape.toNuvioPosterShape(),
             detailLine = if (isLandscapeMode || posterCardStyle.hideLabelsEnabled) null else item.releaseInfo?.let { formatReleaseDateForDisplay(it) },
             showTitleBelow = !posterCardStyle.hideLabelsEnabled,
-            bottomLeftLogoUrl = if (isLandscapeMode) item.logo else null,
-            bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
+            bottomLeftLogoUrl = if (isLandscapeMode && showLandscapeOverlay) item.logo else null,
+            bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
             isWatched = isWatched,
             onClick = onClick,
             onLongClick = onLongClick,
@@ -641,6 +642,18 @@ catalog_path.write_text(catalog, encoding="utf-8")
 folder = folder_path.read_text(encoding="utf-8")
 folder = replace_once(
     folder,
+    "import androidx.compose.ui.Modifier\n",
+    "import androidx.compose.ui.ExperimentalComposeUiApi\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.input.pointer.PointerEventType\nimport androidx.compose.ui.input.pointer.onPointerEvent\n",
+    "folder hover pointer imports",
+)
+folder = replace_once(
+    folder,
+    "@Composable\nprivate fun TabbedGridContent(",
+    "@OptIn(ExperimentalComposeUiApi::class)\n@Composable\nprivate fun TabbedGridContent(",
+    "folder tabbed hover opt-in",
+)
+folder = replace_once(
+    folder,
     "import androidx.compose.runtime.mutableFloatStateOf\n",
     "import androidx.compose.runtime.mutableFloatStateOf\nimport androidx.compose.runtime.mutableStateOf\n",
     "folder state import",
@@ -818,19 +831,53 @@ folder = replace_once(
 )
 folder = replace_once(
     folder,
-    '''                                    HomePosterCard(
-                                        item = item,
-                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+    '''                                HomePosterHoverPreview(
+                                    item = item,
+                                    isWatched = isWatched,
+                                    onClick = { onPosterClick(item) },
+                                    onLongClick = null,
+                                ) { cardModifier ->
+                                    NuvioPosterCard(
+                                        title = item.name,
+                                        imageUrl = item.poster,
+                                        modifier = cardModifier,
+                                        basePosterWidthDp = if (isDesktop) basePosterWidthDp else null,
+                                        fallbackImageUrl = item.rawPosterUrl,
+                                        shape = NuvioPosterShape.Poster,
+                                        detailLine = item.releaseInfo,
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                }
 ''',
-    '''                                    HomePosterCard(
-                                        item = item,
-                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
-                                        useHoverPreview = onPosterHoverChanged == null,
-                                        onHoverChanged = onPosterHoverChanged?.let { callback ->
-                                            { hovered -> callback(item, hovered) }
-                                        },
+    '''                                val posterContent: @Composable (Modifier) -> Unit = { cardModifier ->
+                                    NuvioPosterCard(
+                                        title = item.name,
+                                        imageUrl = item.poster,
+                                        modifier = cardModifier,
+                                        basePosterWidthDp = if (isDesktop) basePosterWidthDp else null,
+                                        fallbackImageUrl = item.rawPosterUrl,
+                                        shape = NuvioPosterShape.Poster,
+                                        detailLine = item.releaseInfo,
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                }
+                                if (onPosterHoverChanged != null) {
+                                    posterContent(
+                                        Modifier
+                                            .onPointerEvent(PointerEventType.Enter) { onPosterHoverChanged(item, true) }
+                                            .onPointerEvent(PointerEventType.Exit) { onPosterHoverChanged(item, false) },
+                                    )
+                                } else {
+                                    HomePosterHoverPreview(
+                                        item = item,
+                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                        onLongClick = null,
+                                        content = posterContent,
+                                    )
+                                }
 ''',
     "tabbed poster hover",
 )
@@ -1186,23 +1233,20 @@ shelf = replace_once(
     "import androidx.compose.foundation.interaction.collectIsFocusedAsState\nimport androidx.compose.foundation.interaction.collectIsHoveredAsState\n",
     "v6 focused interaction import",
 )
-shelf = replace_once(
-    shelf,
-    "import androidx.compose.ui.geometry.Rect\n",
-    "import androidx.compose.ui.focus.FocusDirection\nimport androidx.compose.ui.focus.onFocusChanged\nimport androidx.compose.ui.geometry.Rect\n",
-    "v6 focus imports",
+# Poster clickable implementation moved out of ShelfComponents to PosterLift upstream.
+lift_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterLift.kt"
+lift = lift_path.read_text(encoding="utf-8")
+lift = replace_once(
+    lift,
+    "import androidx.compose.ui.Modifier\n",
+    "import androidx.compose.ui.Modifier\nimport androidx.compose.ui.focus.FocusDirection\nimport androidx.compose.ui.focus.onFocusChanged\nimport androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\n",
+    "v6 PosterLift keyboard imports",
 )
-shelf = replace_once(
-    shelf,
-    "import androidx.compose.ui.input.pointer.PointerEventPass\n",
-    "import androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\nimport androidx.compose.ui.input.pointer.PointerEventPass\n",
-    "v6 key imports",
-)
-shelf = replace_once(
-    shelf,
-    "import androidx.compose.ui.platform.LocalDensity\n" if "import androidx.compose.ui.platform.LocalDensity\n" in shelf else "import androidx.compose.ui.layout.positionInRoot\n",
-    ("import androidx.compose.ui.platform.LocalDensity\nimport androidx.compose.ui.platform.LocalFocusManager\n" if "import androidx.compose.ui.platform.LocalDensity\n" in shelf else "import androidx.compose.ui.layout.positionInRoot\nimport androidx.compose.ui.platform.LocalFocusManager\n"),
-    "v6 local focus manager import",
+lift = replace_once(
+    lift,
+    "import androidx.compose.ui.platform.LocalGraphicsContext\n",
+    "import androidx.compose.ui.platform.LocalGraphicsContext\nimport androidx.compose.ui.platform.LocalFocusManager\n",
+    "v6 PosterLift focus manager import",
 )
 
 shelf = replace_once(
@@ -1258,8 +1302,8 @@ shelf = replace_once(
     "v6 focused z index",
 )
 
-shelf = replace_once(
-    shelf,
+lift = replace_once(
+    lift,
     '''    zoomImageUrl: String? = null,
     zoomCornerRadius: Dp = NuvioTokens.Radius.poster,
     hoverScaleEnabled: Boolean = true,
@@ -1271,31 +1315,20 @@ shelf = replace_once(
     onFocusChanged: ((Boolean) -> Unit)? = null,
 ): Modifier {
 ''',
-    "v6 clickable focus callback signature",
+    "v6 PosterLift focus callback signature",
 )
-shelf = replace_once(
-    shelf,
-    '''    val bounds = remember { mutableStateOf<Rect?>(null) }
-    val interactionSource = remember { MutableInteractionSource() }
-''',
-    '''    val bounds = remember { mutableStateOf<Rect?>(null) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val focusManager = LocalFocusManager.current
-''',
-    "v6 local focus manager",
+lift = replace_once(
+    lift,
+    "    val onPosterClickAnchor = LocalPosterClickAnchor.current\n",
+    "    val onPosterClickAnchor = LocalPosterClickAnchor.current\n    val focusManager = LocalFocusManager.current\n",
+    "v6 PosterLift focus manager",
 )
-shelf = replace_once(
-    shelf,
-    '''        .desktopPosterHoverScale(
-            enabled = hoverScaleEnabled,
-            interactionSource = interactionSource,
-        )
+lift = replace_once(
+    lift,
+    '''        .then(posterModifier)
         .combinedClickable(
 ''',
-    '''        .desktopPosterHoverScale(
-            enabled = hoverScaleEnabled,
-            interactionSource = interactionSource,
-        )
+    '''        .then(posterModifier)
         .onFocusChanged { state -> onFocusChanged?.invoke(state.isFocused) }
         .onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -1309,8 +1342,9 @@ shelf = replace_once(
         }
         .combinedClickable(
 ''',
-    "v6 directional key navigation",
+    "v6 PosterLift directional key navigation",
 )
+lift_path.write_text(lift, encoding="utf-8")
 shelf_path.write_text(shelf, encoding="utf-8")
 
 poster = poster_path.read_text(encoding="utf-8")
@@ -1365,11 +1399,11 @@ poster = replace_once(
 )
 poster = replace_once(
     poster,
-    '''            bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
+    '''            bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
             isWatched = isWatched,
             onClick = onClick,
 ''',
-    '''            bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
+    '''            bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
             isWatched = isWatched,
             onFocusChanged = if (onHoverChanged != null) {
                 { focused ->
@@ -1899,7 +1933,7 @@ folder = folder.replace("import androidx.compose.foundation.background\n", "impo
 folder = folder.replace("import androidx.compose.foundation.lazy.rememberLazyListState\n", "import androidx.compose.foundation.lazy.LazyListState\nimport androidx.compose.foundation.lazy.rememberLazyListState\n", 1)
 folder = folder.replace("import androidx.compose.runtime.mutableFloatStateOf\n", "import androidx.compose.runtime.mutableFloatStateOf\nimport androidx.compose.runtime.mutableIntStateOf\nimport androidx.compose.runtime.rememberCoroutineScope\n", 1)
 folder = folder.replace("import androidx.compose.ui.geometry.Offset\n", "import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.geometry.Offset\nimport androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\n", 1)
-folder = folder.replace("import com.nuvio.app.core.ui.NuvioPosterShape\n", "import com.nuvio.app.core.ui.NuvioPosterShape\nimport com.nuvio.app.core.ui.PosterNavigationDirection\nimport com.nuvio.app.core.ui.PosterRowPosition\nimport com.nuvio.app.core.ui.nextPosterIndex\nimport com.nuvio.app.core.ui.nextPosterRowPosition\nimport com.nuvio.app.core.ui.normalizePosterRowPosition\n", 1)
+folder = folder.replace("import com.nuvio.app.core.ui.NuvioPosterShape\n", "import com.nuvio.app.core.ui.NuvioPosterShape\nimport com.nuvio.app.core.ui.landscapePosterWidth\nimport com.nuvio.app.core.ui.PosterNavigationDirection\nimport com.nuvio.app.core.ui.PosterRowPosition\nimport com.nuvio.app.core.ui.nextPosterIndex\nimport com.nuvio.app.core.ui.nextPosterRowPosition\nimport com.nuvio.app.core.ui.normalizePosterRowPosition\n", 1)
 folder = folder.replace("import kotlinx.coroutines.flow.distinctUntilChanged\n", "import kotlinx.coroutines.flow.distinctUntilChanged\nimport kotlinx.coroutines.launch\n", 1)
 folder = replace_once(
     folder,
@@ -1974,13 +2008,7 @@ folder = replace_once(
 folder = replace_once(
     folder,
     '''            val gridCells = if (isDesktop) {
-                GridCells.FixedSize(
-                    if (posterCardStyle.catalogLandscapeModeEnabled) {
-                        landscapePosterWidth(basePosterWidthDp)
-                    } else {
-                        basePosterWidthDp.dp
-                    },
-                )
+                GridCells.FixedSize(basePosterWidthDp.dp)
             } else {
                 GridCells.Fixed(columns)
             }
@@ -2074,18 +2102,16 @@ folder = replace_once(
 )
 folder = replace_once(
     folder,
-    '''                                        onHoverChanged = onPosterHoverChanged?.let { callback ->
-                                            { hovered -> callback(item, hovered) }
-                                        },
+    '''                                        detailLine = item.releaseInfo,
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
 ''',
-    '''                                        onHoverChanged = onPosterHoverChanged?.let { callback ->
-                                            { hovered -> callback(item, hovered) }
-                                        },
+    '''                                        detailLine = item.releaseInfo,
                                         isKeyboardSelected =
                                             keyboardNavigationActive &&
                                                 keyboardSelectedItem?.stableKey() == item.stableKey(),
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
 ''',
     "v7 tabbed selected visual",
 )
@@ -4750,3 +4776,23 @@ bridge_kt = bridge_kt.replace(
 bridge_kt_path.write_text(bridge_kt, encoding="utf-8")
 
 print("Applied V9.18 pure-black native overlay; seam target RGB 0,0,0")
+
+
+# Compatibility for pinned NuvioDesktop Dev: the GIF prefetch path refers to a
+# local flag that upstream never declared. Determine it from the image URL.
+gif_image_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/home/components/CollectionCardRemoteImage.desktop.kt"
+gif_image = gif_image_path.read_text(encoding="utf-8")
+gif_image = replace_once(
+    gif_image,
+    '''    val shouldAnimate = animateIfPossible && (isHovered || staticImageUrl.isNullOrBlank())
+
+    var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
+''',
+    '''    val shouldAnimate = animateIfPossible && (isHovered || staticImageUrl.isNullOrBlank())
+    val isGifUrl = imageUrl.substringBefore('?').endsWith(".gif", ignoreCase = true)
+
+    var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
+''',
+    "desktop gif prefetch missing isGifUrl",
+)
+gif_image_path.write_text(gif_image, encoding="utf-8")
