@@ -236,6 +236,38 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
 });
 
 
+
+test('the six editorial hero titles are plain text, never a poster or logo', async () => {
+  const endpoints = [
+    '/nuvio-collections-shield.json',
+    '/nuvio-collections-desktop.json',
+    '/nuvio-collections-fr-global-tr-usa.json'
+  ];
+  const ids = [
+    'editorial-series-top-rated', 'editorial-series-trendy',
+    'editorial-series-new', 'editorial-series-returning',
+    'editorial-movies-new', 'editorial-cinema-now'
+  ];
+  for (const endpoint of endpoints) {
+    const response = await call(endpoint);
+    assert.equal(response.statusCode, 200, endpoint);
+    const editorial = JSON.parse(response.text).find(c => c.id === 'calendar-archives-fr-editorial-now');
+    assert(editorial, endpoint + ': editorial collection missing');
+    assert.equal(editorial.folders.length, 6, endpoint);
+    for (const id of ids) {
+      const folder = editorial.folders.find(f => f.id === id);
+      assert(folder, endpoint + ': missing ' + id);
+      assert.equal(folder.titleLogoUrl, null, endpoint + ': image replacing left text title');
+      assert.equal(typeof folder.title, 'string', endpoint + ': native text title missing');
+      assert(folder.title.trim().length > 3, endpoint + ': empty native title');
+      assert.match(folder.coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=/,
+        endpoint + ': approved cover modified');
+      assert.match(folder.heroBackdropUrl, /\/fr\/editorial-backdrop\.jpg\?key=/,
+        endpoint + ': cinematic hero modified');
+    }
+  }
+});
+
 test('Nouvelles séries and Nouveaux films always use their own source, cover and hero in Shield/Desktop', async () => {
   const approved = require('../assets/collection-art/editorial-approved/manifest.json');
   const mappings = [
@@ -413,7 +445,7 @@ test('all hosted visual URLs stay inside the correct regional/global route prefi
     for (const folder of collection.folders) {
       assert(folder.coverImageUrl?.startsWith(prefix));
       assert(folder.heroBackdropUrl?.startsWith(prefix));
-      assert(folder.titleLogoUrl?.startsWith(prefix));
+      if (folder.titleLogoUrl != null) assert(folder.titleLogoUrl.startsWith(prefix));
     }
   }
 });
