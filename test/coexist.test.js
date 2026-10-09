@@ -159,6 +159,11 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert.equal(metadata.height, 900, path);
     const corner = await sharp(response.body).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
     assert(Math.max(...corner) <= 28, path + ' is missing the rounded Netflix frame');
+    const warmed = await call(path);
+    assert.equal(warmed.statusCode, 200, path + ' warm cache status');
+    assert.equal(warmed.headers['x-nuvio-editorial-cover'], new URL(path, 'https://localhost').searchParams.get('key'));
+    assert.equal(warmed.headers['x-nuvio-editorial-render'], 'memory', path + ' was re-rendered');
+    assert.deepEqual(warmed.body, response.body, path + ' rendered inconsistently');
   }
 
   const bad = await call('/fr/editorial-cover.jpg?key=does-not-exist');
