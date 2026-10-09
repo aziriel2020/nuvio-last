@@ -62,6 +62,7 @@ const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/f
 const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-art/shared');
 const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
 const EDITORIAL_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial');
+const EDITORIAL_APPROVED_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial-approved');
 const EDITORIAL_COVER_FILES = Object.freeze({
   'series-top-rated': 'series-top-rated.jpg',
   'series-trendy': 'series-trendy.jpg',
@@ -110,7 +111,7 @@ async function serveEditorialCoverJpeg(res, url) {
   const key = String(url.searchParams.get('key') || '').trim();
   const recipes = {
     'series-top-rated': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'drama-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-top-rated.jpg'),
       type: 'series',
       accent: '#f4c542',
       title: 'Séries les mieux notées',
@@ -119,7 +120,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'TOP NOTES'
     },
     'series-trendy': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'thriller-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-trendy.jpg'),
       type: 'series',
       accent: '#ff5a36',
       title: 'Séries les plus trendy',
@@ -128,7 +129,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'TRENDY'
     },
     'series-new': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'action-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-new.jpg'),
       type: 'series',
       accent: '#06b6d4',
       title: 'Nouvelles séries',
@@ -137,7 +138,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SÉRIES'
     },
     'series-returning': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'romance-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-returning.jpg'),
       type: 'series',
       accent: '#a855f7',
       title: 'Séries renouvelées',
@@ -146,7 +147,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SAISONS'
     },
     'movies-new': {
-      source: path.join(PLATFORM_ART_DIR, 'vod-fr-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'movies-new.jpg'),
       type: 'movie',
       accent: '#f59e0b',
       title: 'Nouveaux films',
@@ -155,7 +156,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVEAUX FILMS'
     },
     'cinema-now': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'science-fiction-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'cinema-now.jpg'),
       type: 'movie',
       accent: '#e11d48',
       title: 'Films au cinéma actuellement',
@@ -175,7 +176,9 @@ async function serveEditorialCoverJpeg(res, url) {
       // Fingerprint the actual artwork, not the finished titled card: two
       // different labels over the same photo must fail the visual uniqueness audit.
       const sourceSha256 = createHash('sha256').update(source).digest('hex');
-      const data = await editorialNetflixCardBuffer(source, recipe);
+      // The title, typography, composition and rounded frame are already baked
+      // into this approved JPEG. Never repaint or regenerate these cards.
+      const data = source;
       return { data, sourceSha256 };
     });
     EDITORIAL_COVER_RENDER_CACHE.set(key, render);
