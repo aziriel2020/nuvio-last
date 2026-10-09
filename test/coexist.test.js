@@ -181,12 +181,12 @@ test('Editorial backdrops are unique, clean 1920x1080 JPEGs and cached', async (
 
 test('static editorial Shield covers are real JPEG assets and stay untouched by Shield/Desktop transforms', async () => {
   const paths = [
-    '/fr/editorial-cover.jpg?key=series-top-rated&v=netflix-frame-v2',
-    '/fr/editorial-cover.jpg?key=series-trendy&v=netflix-frame-v2',
-    '/fr/editorial-cover.jpg?key=series-new&v=netflix-frame-v2',
-    '/fr/editorial-cover.jpg?key=series-returning&v=netflix-frame-v2',
-    '/fr/editorial-cover.jpg?key=movies-new&v=netflix-frame-v2',
-    '/fr/editorial-cover.jpg?key=cinema-now&v=netflix-frame-v2'
+    '/fr/editorial-cover.jpg?key=series-top-rated&v=approved-covers-v3',
+    '/fr/editorial-cover.jpg?key=series-trendy&v=approved-covers-v3',
+    '/fr/editorial-cover.jpg?key=series-new&v=approved-covers-v3',
+    '/fr/editorial-cover.jpg?key=series-returning&v=approved-covers-v3',
+    '/fr/editorial-cover.jpg?key=movies-new&v=approved-covers-v3',
+    '/fr/editorial-cover.jpg?key=cinema-now&v=approved-covers-v3'
   ];
   const sourceDigests = new Set();
   for (const path of paths) {
