@@ -1367,7 +1367,7 @@ function buildEditorialCollection(origin = null) {
       title: '⭐ Séries les mieux notées',
       emoji: '⭐',
       ids: ratedIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=netflix-frame-v2`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=approved-covers-v3`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=drama&variant=logo&label=${encodeURIComponent('Séries les mieux notées')}&type=series&color=%23f4c542&v=editorial-v1`
     }),
@@ -1376,7 +1376,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔥 Séries les plus trendy',
       emoji: '🔥',
       ids: trendyIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=netflix-frame-v2`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=approved-covers-v3`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-trendy&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries les plus trendy')}&type=series&color=%23ff5a36&v=editorial-v1`
     }),
@@ -1385,7 +1385,7 @@ function buildEditorialCollection(origin = null) {
       title: '🆕 Nouvelles séries',
       emoji: '🆕',
       ids: newSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=netflix-frame-v2`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=approved-covers-v3`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-new&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=action&variant=logo&label=${encodeURIComponent('Nouvelles séries')}&type=series&color=%2306b6d4&v=editorial-fresh-v1`
     }),
@@ -1394,7 +1394,7 @@ function buildEditorialCollection(origin = null) {
       title: '🔁 Séries renouvelées',
       emoji: '🔁',
       ids: returningSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=netflix-frame-v2`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=approved-covers-v3`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=series-returning&v=approved-hero-v1`,
       logo: (base) => `${base}/genre-folder-art.svg?genre=thriller&variant=logo&label=${encodeURIComponent('Séries renouvelées')}&type=series&color=%23a855f7&v=editorial-fresh-v1`
     }),
@@ -1403,7 +1403,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Nouveaux films',
       emoji: '🎬',
       ids: newMovieIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=netflix-frame-v2`,
+      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=approved-covers-v3`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=approved-hero-v1`,
       logo: (base) => `${base}/platform-logo?provider=vod-fr&type=movie&v=editorial-fresh-v1`
     }),
@@ -1412,7 +1412,7 @@ function buildEditorialCollection(origin = null) {
       title: '🎬 Films au cinéma actuellement',
       emoji: '🎬',
       ids: ['editorial-movies-cinema-now'],
-      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=netflix-frame-v2`,
+      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=approved-covers-v3`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=cinema-now&v=approved-hero-v1`,
       logo: (base) => `${base}/platform-logo?provider=cinema-torrentio&type=movie&v=editorial-v1`
     })
