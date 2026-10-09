@@ -71,7 +71,7 @@ async function main() {
   const height = 2 * (sheet.cellHeight + sheet.labelHeight) + 3 * sheet.gap;
 
   for (const [index, [key, title]] of cards.entries()) {
-    const url = '/fr/editorial-cover.jpg?key=' + key + '&v=netflix-frame-v2';
+    const url = '/fr/editorial-cover.jpg?key=' + key + '&v=approved-covers-v3';
     const first = await requestCard(key);
     check(first.statusCode === 200, key + ': expected HTTP 200, got ' + first.statusCode);
     check(first.headers['content-type']?.includes('image/jpeg'), key + ': not JPEG');
@@ -124,7 +124,7 @@ async function main() {
     .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
     .toFile(path.join(out, 'contact-sheet.jpg'));
   const result = {
-    revision: 'editorial-netflix-frame-v2',
+    revision: 'editorial-approved-covers-v3',
     checked: cards.length,
     region: 'fr',
     consumers: ['Shield', 'Desktop'],
