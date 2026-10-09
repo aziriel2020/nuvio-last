@@ -641,6 +641,18 @@ catalog_path.write_text(catalog, encoding="utf-8")
 folder = folder_path.read_text(encoding="utf-8")
 folder = replace_once(
     folder,
+    "import androidx.compose.ui.Modifier\n",
+    "import androidx.compose.ui.ExperimentalComposeUiApi\nimport androidx.compose.ui.Modifier\nimport androidx.compose.ui.input.pointer.PointerEventType\nimport androidx.compose.ui.input.pointer.onPointerEvent\n",
+    "folder hover pointer imports",
+)
+folder = replace_once(
+    folder,
+    "@Composable\nprivate fun TabbedGridContent(",
+    "@OptIn(ExperimentalComposeUiApi::class)\n@Composable\nprivate fun TabbedGridContent(",
+    "folder tabbed hover opt-in",
+)
+folder = replace_once(
+    folder,
     "import androidx.compose.runtime.mutableFloatStateOf\n",
     "import androidx.compose.runtime.mutableFloatStateOf\nimport androidx.compose.runtime.mutableStateOf\n",
     "folder state import",
@@ -818,19 +830,53 @@ folder = replace_once(
 )
 folder = replace_once(
     folder,
-    '''                                    HomePosterCard(
-                                        item = item,
-                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+    '''                                HomePosterHoverPreview(
+                                    item = item,
+                                    isWatched = isWatched,
+                                    onClick = { onPosterClick(item) },
+                                    onLongClick = null,
+                                ) { cardModifier ->
+                                    NuvioPosterCard(
+                                        title = item.name,
+                                        imageUrl = item.poster,
+                                        modifier = cardModifier,
+                                        basePosterWidthDp = if (isDesktop) basePosterWidthDp else null,
+                                        fallbackImageUrl = item.rawPosterUrl,
+                                        shape = NuvioPosterShape.Poster,
+                                        detailLine = item.releaseInfo,
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                }
 ''',
-    '''                                    HomePosterCard(
-                                        item = item,
-                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
-                                        useHoverPreview = onPosterHoverChanged == null,
-                                        onHoverChanged = onPosterHoverChanged?.let { callback ->
-                                            { hovered -> callback(item, hovered) }
-                                        },
+    '''                                val posterContent: @Composable (Modifier) -> Unit = { cardModifier ->
+                                    NuvioPosterCard(
+                                        title = item.name,
+                                        imageUrl = item.poster,
+                                        modifier = cardModifier,
+                                        basePosterWidthDp = if (isDesktop) basePosterWidthDp else null,
+                                        fallbackImageUrl = item.rawPosterUrl,
+                                        shape = NuvioPosterShape.Poster,
+                                        detailLine = item.releaseInfo,
                                         isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                }
+                                if (onPosterHoverChanged != null) {
+                                    posterContent(
+                                        Modifier
+                                            .onPointerEvent(PointerEventType.Enter) { onPosterHoverChanged(item, true) }
+                                            .onPointerEvent(PointerEventType.Exit) { onPosterHoverChanged(item, false) },
+                                    )
+                                } else {
+                                    HomePosterHoverPreview(
+                                        item = item,
+                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                        onLongClick = null,
+                                        content = posterContent,
+                                    )
+                                }
 ''',
     "tabbed poster hover",
 )
