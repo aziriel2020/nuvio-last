@@ -22,7 +22,9 @@ jobs:
       - name: Checkout NuvioDesktop Dev
         shell: pwsh
         run: |
-          git clone --branch Dev --single-branch https://github.com/NuvioMedia/NuvioDesktop.git NuvioDesktop
+          git clone https://github.com/NuvioMedia/NuvioDesktop.git NuvioDesktop
+          git -C NuvioDesktop checkout --detach 2c9b3a5d3f5fbd02f802043acac6b21c581a61e6
+          git -C NuvioDesktop rev-parse HEAD
 
       - name: Apply V9 patch
         shell: pwsh
