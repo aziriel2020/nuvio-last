@@ -36,6 +36,7 @@ fun HomePosterCard(
     item: MetaPreview,
     modifier: Modifier = Modifier,
     useLandscapeBackdropMode: Boolean = false,
+    showLandscapeOverlay: Boolean = true,
     useHoverPreview: Boolean = true,
     onHoverChanged: ((Boolean) -> Unit)? = null,
     isWatched: Boolean = false,
@@ -61,8 +62,8 @@ fun HomePosterCard(
             shape = if (isLandscapeMode) NuvioPosterShape.Landscape else item.posterShape.toNuvioPosterShape(),
             detailLine = if (isLandscapeMode || posterCardStyle.hideLabelsEnabled) null else item.releaseInfo?.let { formatReleaseDateForDisplay(it) },
             showTitleBelow = !posterCardStyle.hideLabelsEnabled,
-            bottomLeftLogoUrl = if (isLandscapeMode) item.logo else null,
-            bottomLeftText = if (isLandscapeMode && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
+            bottomLeftLogoUrl = if (isLandscapeMode && showLandscapeOverlay) item.logo else null,
+            bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
             isWatched = isWatched,
             onClick = onClick,
             onLongClick = onLongClick,
@@ -1932,7 +1933,7 @@ folder = folder.replace("import androidx.compose.foundation.background\n", "impo
 folder = folder.replace("import androidx.compose.foundation.lazy.rememberLazyListState\n", "import androidx.compose.foundation.lazy.LazyListState\nimport androidx.compose.foundation.lazy.rememberLazyListState\n", 1)
 folder = folder.replace("import androidx.compose.runtime.mutableFloatStateOf\n", "import androidx.compose.runtime.mutableFloatStateOf\nimport androidx.compose.runtime.mutableIntStateOf\nimport androidx.compose.runtime.rememberCoroutineScope\n", 1)
 folder = folder.replace("import androidx.compose.ui.geometry.Offset\n", "import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.geometry.Offset\nimport androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\n", 1)
-folder = folder.replace("import com.nuvio.app.core.ui.NuvioPosterShape\n", "import com.nuvio.app.core.ui.NuvioPosterShape\nimport com.nuvio.app.core.ui.PosterNavigationDirection\nimport com.nuvio.app.core.ui.PosterRowPosition\nimport com.nuvio.app.core.ui.nextPosterIndex\nimport com.nuvio.app.core.ui.nextPosterRowPosition\nimport com.nuvio.app.core.ui.normalizePosterRowPosition\n", 1)
+folder = folder.replace("import com.nuvio.app.core.ui.NuvioPosterShape\n", "import com.nuvio.app.core.ui.NuvioPosterShape\nimport com.nuvio.app.core.ui.landscapePosterWidth\nimport com.nuvio.app.core.ui.PosterNavigationDirection\nimport com.nuvio.app.core.ui.PosterRowPosition\nimport com.nuvio.app.core.ui.nextPosterIndex\nimport com.nuvio.app.core.ui.nextPosterRowPosition\nimport com.nuvio.app.core.ui.normalizePosterRowPosition\n", 1)
 folder = folder.replace("import kotlinx.coroutines.flow.distinctUntilChanged\n", "import kotlinx.coroutines.flow.distinctUntilChanged\nimport kotlinx.coroutines.launch\n", 1)
 folder = replace_once(
     folder,
@@ -4775,3 +4776,23 @@ bridge_kt = bridge_kt.replace(
 bridge_kt_path.write_text(bridge_kt, encoding="utf-8")
 
 print("Applied V9.18 pure-black native overlay; seam target RGB 0,0,0")
+
+
+# Compatibility for pinned NuvioDesktop Dev: the GIF prefetch path refers to a
+# local flag that upstream never declared. Determine it from the image URL.
+gif_image_path = root / "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/home/components/CollectionCardRemoteImage.desktop.kt"
+gif_image = gif_image_path.read_text(encoding="utf-8")
+gif_image = replace_once(
+    gif_image,
+    '''    val shouldAnimate = animateIfPossible && (isHovered || staticImageUrl.isNullOrBlank())
+
+    var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
+''',
+    '''    val shouldAnimate = animateIfPossible && (isHovered || staticImageUrl.isNullOrBlank())
+    val isGifUrl = imageUrl.substringBefore('?').endsWith(".gif", ignoreCase = true)
+
+    var composeBitmap by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
+''',
+    "desktop gif prefetch missing isGifUrl",
+)
+gif_image_path.write_text(gif_image, encoding="utf-8")
