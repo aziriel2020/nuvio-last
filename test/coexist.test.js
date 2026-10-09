@@ -136,6 +136,47 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
   assert.match(desktopEditorial.folders[3].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-returning/);
   assert.match(desktopEditorial.folders[4].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=movies-new/);
   assert.match(desktopEditorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
+  const keys = ['series-top-rated', 'series-trendy', 'series-new', 'series-returning', 'movies-new', 'cinema-now'];
+  for (const collection of [editorial, desktopEditorial]) {
+    assert.match(collection.backdropImageUrl, /editorial-backdrop\.jpg\?key=series-top-rated/);
+    for (let i = 0; i < keys.length; i += 1) {
+      const folder = collection.folders[i];
+      assert.match(folder.heroBackdropUrl,
+        new RegExp('editorial-backdrop\\.jpg\\?key=' + keys[i] + '(?:&|$)'), folder.title);
+      assert(!folder.heroBackdropUrl.includes('/genre-backdrop.jpg'), folder.title + ' still uses legacy genre art');
+      assert(!folder.heroBackdropUrl.includes('/platform-backdrop.svg'), folder.title + ' still uses VOD art');
+    }
+  }
+});
+
+test('Editorial backdrops are unique, clean 1920x1080 JPEGs and cached', async () => {
+  const keys = ['series-top-rated', 'series-trendy', 'series-new', 'series-returning', 'movies-new', 'cinema-now'];
+  const sources = new Set();
+  const heroes = new Set();
+  for (const key of keys) {
+    const route = '/fr/editorial-backdrop.jpg?key=' + key + '&v=approved-hero-v1';
+    const [first, concurrent] = await Promise.all([call(route), call(route)]);
+    assert.equal(first.statusCode, 200, key);
+    assert.equal(first.headers['content-type'], 'image/jpeg', key);
+    assert.equal(first.headers['x-nuvio-editorial-backdrop'], key, key);
+    assert.equal(first.headers['x-nuvio-desktop-format'], '1920x1080', key);
+    assert.match(first.headers['x-nuvio-editorial-source-sha256'], /^[a-f0-9]{64}$/, key);
+    assert(!sources.has(first.headers['x-nuvio-editorial-source-sha256']), key + ' reused a cover source');
+    sources.add(first.headers['x-nuvio-editorial-source-sha256']);
+    const meta = await sharp(first.body).metadata();
+    assert.equal(meta.width, 1920, key);
+    assert.equal(meta.height, 1080, key);
+    assert.equal(meta.format, 'jpeg', key);
+    assert(first.body.length > 80000, key + ' empty backdrop');
+    const heroDigest = require('node:crypto').createHash('sha256').update(first.body).digest('hex');
+    assert(!heroes.has(heroDigest), key + ' duplicated backdrop');
+    heroes.add(heroDigest);
+    assert.deepEqual(first.body, concurrent.body, key + ' concurrent generation changed');
+    const warm = await call(route);
+    assert.equal(warm.headers['x-nuvio-editorial-render'], 'memory', key);
+    assert.deepEqual(first.body, warm.body, key + ' cache instability');
+  }
+  assert.equal((await call('/fr/editorial-backdrop.jpg?key=unknown')).statusCode, 404);
 });
 
 test('static editorial Shield covers are real JPEG assets and stay untouched by Shield/Desktop transforms', async () => {
