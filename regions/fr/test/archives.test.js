@@ -121,7 +121,10 @@ test('Editorial collection has six folders and periods are catalogs inside each 
   assert.deepEqual(editorial.folders[5].sources.map((x)=>x.genre),[
     'À l’affiche actuellement'
   ]);
-  assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl&&f.titleLogoUrl));
+  assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl));
+  assert(editorial.folders.every((f)=>typeof f.title==='string'&&f.title.trim().length>0));
+  assert(editorial.folders.every((f)=>f.titleLogoUrl===null),
+    'Editorial left-side titles must be native text, not poster-style artwork');
   assert.match(editorial.folders[0].coverImageUrl,/\/editorial-cover\.jpg\?key=series-top-rated/);
   assert.match(editorial.folders[1].coverImageUrl,/\/editorial-cover\.jpg\?key=series-trendy/);
   assert.match(editorial.folders[2].coverImageUrl,/\/editorial-cover\.jpg\?key=series-new/);
