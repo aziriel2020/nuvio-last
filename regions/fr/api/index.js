@@ -155,7 +155,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVEAUX FILMS'
     },
     'cinema-now': {
-      source: path.join(PLATFORM_ART_DIR, 'canal-plus-backdrop.jpg'),
+      source: path.join(GENRE_CINEMATIC_ART_DIR, 'science-fiction-card.jpg'),
       type: 'movie',
       accent: '#e11d48',
       title: 'Films au cinéma actuellement',
