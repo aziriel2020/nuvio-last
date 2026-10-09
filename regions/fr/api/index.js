@@ -66,6 +66,10 @@ const EDITORIAL_COVER_FILES = Object.freeze({
   'series-trendy': 'series-trendy.jpg',
   'cinema-now': 'cinema-now.jpg'
 });
+// Exactly six immutable cover variants; share one render per variant and process lifetime.
+// Cache the in-flight Promise too, so concurrent Shield/Desktop requests do not
+// re-render the same 1600x900 cover on a small Oracle Always Free VM.
+const EDITORIAL_COVER_RENDER_CACHE = new Map();
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   const key = `${mime}:${absolutePath}`;
@@ -162,12 +166,25 @@ async function serveEditorialCoverJpeg(res, url) {
   const recipe = recipes[key];
   if (!recipe) { res.statusCode = 404; return res.end('Not found'); }
 
+  const cacheHit = EDITORIAL_COVER_RENDER_CACHE.has(key);
+  let render = EDITORIAL_COVER_RENDER_CACHE.get(key);
+  if (!render) {
+    render = Promise.resolve().then(() => {
+      const source = fs.readFileSync(recipe.source);
+      return editorialNetflixCardBuffer(source, recipe);
+    });
+    EDITORIAL_COVER_RENDER_CACHE.set(key, render);
+  }
   try {
-    const source = fs.readFileSync(recipe.source);
-    const data = await editorialNetflixCardBuffer(source, recipe);
+    const data = await render;
     res.setHeader('X-Nuvio-Editorial-Cover', key);
+    res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
+    // A missing/corrupt source must never poison this worker's cache permanently.
+    if (EDITORIAL_COVER_RENDER_CACHE.get(key) === render) {
+      EDITORIAL_COVER_RENDER_CACHE.delete(key);
+    }
     res.statusCode = 404;
     return res.end('Not found');
   }
