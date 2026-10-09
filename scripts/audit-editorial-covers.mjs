@@ -4,7 +4,7 @@
  * Run: npm run audit:editorial-covers
  */
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -54,6 +54,14 @@ function xmlEscape(value) {
 
 async function main() {
   await mkdir(out, { recursive: true });
+  const approved = JSON.parse(await readFile(
+    path.join(root, 'assets/collection-art/editorial-approved/manifest.json'), 'utf8'));
+  check(approved.revision === 'editorial-approved-art-v1-2026-10-09',
+    'Approved art manifest revision does not match');
+  check(approved.renderer === 'precomposed-jpeg-direct',
+    'Approved artwork must be served without an additional overlay');
+  check(Object.keys(approved.images).length === cards.length,
+    'Approved manifest must contain exactly six covers');
   const checks = [];
   const composites = [];
   const digests = new Set();
@@ -84,6 +92,10 @@ async function main() {
     check(/^[a-f0-9]{64}$/.test(sourceSha256 || ''), key + ': missing source SHA-256');
     check(!sourceDigests.has(sourceSha256), key + ': reused the same underlying artwork');
     sourceDigests.add(sourceSha256);
+    const locked = approved.images[key];
+    check(locked && locked.sha256 === sourceSha256, key + ': approved visual source has changed');
+    check(locked.bytes === first.body.length, key + ': approved visual size has changed');
+    check(locked.sha256 === digest, key + ': rendered JPEG no longer equals the approved artwork');
 
     const second = await requestCard(key);
     check(second.statusCode === 200 && second.headers['x-nuvio-editorial-render'] === 'memory',
