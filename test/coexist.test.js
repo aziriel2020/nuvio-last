@@ -235,6 +235,51 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
   }
 });
 
+
+test('Nouvelles séries and Nouveaux films always use their own source, cover and hero in Shield/Desktop', async () => {
+  const approved = require('../assets/collection-art/editorial-approved/manifest.json');
+  const mappings = [
+    { id: 'editorial-series-new', key: 'series-new', title: 'Nouvelles séries', prefix: 'editorial-series-new-' },
+    { id: 'editorial-movies-new', key: 'movies-new', title: 'Nouveaux films', prefix: 'editorial-movies-new-' }
+  ];
+  const fingerprints = new Set();
+
+  for (const route of ['/nuvio-collections-shield.json', '/nuvio-collections-desktop.json']) {
+    const response = await call(route);
+    assert.equal(response.statusCode, 200, route);
+    const editorial = JSON.parse(response.text).find(c => c.id === 'calendar-archives-fr-editorial-now');
+    assert(editorial, route);
+
+    for (const expected of mappings) {
+      const folder = editorial.folders.find(f => f.id === expected.id);
+      assert(folder, route + ' missing ' + expected.id);
+      assert(folder.title.includes(expected.title), route + ' incorrect title for ' + expected.key);
+      assert.equal(new URL(folder.coverImageUrl).searchParams.get('key'), expected.key,
+        route + ' cover points to the other editorial image');
+      assert.equal(new URL(folder.heroBackdropUrl).searchParams.get('key'), expected.key,
+        route + ' hero points to the other editorial image');
+      assert(folder.sources.every(s => s.catalogId.startsWith(expected.prefix)),
+        route + ' source catalog has wrong media type');
+
+      const [cover, hero] = await Promise.all([
+        call('/fr/editorial-cover.jpg?key=' + expected.key),
+        call('/fr/editorial-backdrop.jpg?key=' + expected.key)
+      ]);
+      assert.equal(cover.statusCode, 200, expected.key + ' cover');
+      assert.equal(hero.statusCode, 200, expected.key + ' backdrop');
+      assert.equal(cover.headers['x-nuvio-editorial-cover'], expected.key);
+      assert.equal(hero.headers['x-nuvio-editorial-backdrop'], expected.key);
+      const sourceHash = approved.images[expected.key].sha256;
+      assert.equal(cover.headers['x-nuvio-editorial-source-sha256'], sourceHash,
+        expected.key + ' cover reads the wrong original JPEG');
+      assert.equal(hero.headers['x-nuvio-editorial-source-sha256'], sourceHash,
+        expected.key + ' hero reads the wrong original JPEG');
+      fingerprints.add(sourceHash);
+    }
+  }
+  assert.equal(fingerprints.size, 2, 'series and movies accidentally share the same photography');
+});
+
 test('Cinema du moment static schema exposes À l’affiche plus dated tiles and reuses the France addon', () => {
   const req = { headers: { host: 'coexist.example', 'x-forwarded-proto': 'https' } };
   const raw = handler._internals.cinemaTorrentioCollection(req);
