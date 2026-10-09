@@ -31,6 +31,7 @@ const {
 } = require('../src/calendar');
 
 const fs = require('fs');
+const { createHash } = require('node:crypto');
 const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
@@ -136,7 +137,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SÉRIES'
     },
     'series-returning': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'mystery-card.jpg'),
+      source: path.join(GENRE_CINEMATIC_ART_DIR, 'romance-card.jpg'),
       type: 'series',
       accent: '#a855f7',
       title: 'Séries renouvelées',
@@ -154,7 +155,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVEAUX FILMS'
     },
     'cinema-now': {
-      source: path.join(PLATFORM_ART_DIR, 'vod-fr-backdrop.jpg'),
+      source: path.join(PLATFORM_ART_DIR, 'canal-plus-backdrop.jpg'),
       type: 'movie',
       accent: '#e11d48',
       title: 'Films au cinéma actuellement',
@@ -169,15 +170,20 @@ async function serveEditorialCoverJpeg(res, url) {
   const cacheHit = EDITORIAL_COVER_RENDER_CACHE.has(key);
   let render = EDITORIAL_COVER_RENDER_CACHE.get(key);
   if (!render) {
-    render = Promise.resolve().then(() => {
+    render = Promise.resolve().then(async () => {
       const source = fs.readFileSync(recipe.source);
-      return editorialNetflixCardBuffer(source, recipe);
+      // Fingerprint the actual artwork, not the finished titled card: two
+      // different labels over the same photo must fail the visual uniqueness audit.
+      const sourceSha256 = createHash('sha256').update(source).digest('hex');
+      const data = await editorialNetflixCardBuffer(source, recipe);
+      return { data, sourceSha256 };
     });
     EDITORIAL_COVER_RENDER_CACHE.set(key, render);
   }
   try {
-    const data = await render;
+    const { data, sourceSha256 } = await render;
     res.setHeader('X-Nuvio-Editorial-Cover', key);
+    res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
     res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
