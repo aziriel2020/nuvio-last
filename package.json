@@ -14,7 +14,8 @@
     "test:oracle": "node scripts/test-oracle-runtime.mjs",
     "verify:oracle:production": "node scripts/verify-oracle-production.mjs",
     "generate:covers": "node scripts/generate-platform-covers.js",
-    "audit:editorial-covers": "node scripts/audit-editorial-covers.mjs"
+    "audit:editorial-covers": "node scripts/audit-editorial-covers.mjs",
+    "audit:editorial-backdrops": "node scripts/audit-editorial-backdrops.mjs"
   },
   "engines": {
     "node": ">=20"
