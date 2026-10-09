@@ -181,12 +181,12 @@ test('Editorial backdrops are unique, clean 1920x1080 JPEGs and cached', async (
 
 test('static editorial Shield covers are real JPEG assets and stay untouched by Shield/Desktop transforms', async () => {
   const paths = [
-    '/fr/editorial-cover.jpg?key=series-top-rated&v=approved-covers-v3',
-    '/fr/editorial-cover.jpg?key=series-trendy&v=approved-covers-v3',
-    '/fr/editorial-cover.jpg?key=series-new&v=approved-covers-v3',
-    '/fr/editorial-cover.jpg?key=series-returning&v=approved-covers-v3',
-    '/fr/editorial-cover.jpg?key=movies-new&v=approved-covers-v3',
-    '/fr/editorial-cover.jpg?key=cinema-now&v=approved-covers-v3'
+    '/fr/editorial-cover.jpg?key=series-top-rated&v=tv-readable-v4',
+    '/fr/editorial-cover.jpg?key=series-trendy&v=tv-readable-v4',
+    '/fr/editorial-cover.jpg?key=series-new&v=tv-readable-v4',
+    '/fr/editorial-cover.jpg?key=series-returning&v=tv-readable-v4',
+    '/fr/editorial-cover.jpg?key=movies-new&v=tv-readable-v4',
+    '/fr/editorial-cover.jpg?key=cinema-now&v=tv-readable-v4'
   ];
   const sourceDigests = new Set();
   for (const path of paths) {
@@ -196,15 +196,18 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert.equal(response.body[0], 0xff, path);
     assert.equal(response.body[1], 0xd8, path);
     assert(response.body.length > 100000, path);
+    assert.equal(response.headers['x-nuvio-editorial-style'], 'tv-readable-v4', path);
     const sourceDigest = response.headers['x-nuvio-editorial-source-sha256'];
     assert.match(sourceDigest, /^[a-f0-9]{64}$/, path + ' has no source fingerprint');
+    const renderedDigest = require('node:crypto').createHash('sha256').update(response.body).digest('hex');
+    assert.notEqual(renderedDigest, sourceDigest, path + ' still uses oversized baked-in title');
     assert(!sourceDigests.has(sourceDigest), path + ' reuses another folder artwork');
     sourceDigests.add(sourceDigest);
     const metadata = await sharp(response.body).metadata();
     assert.equal(metadata.width, 1600, path);
     assert.equal(metadata.height, 900, path);
     const corner = await sharp(response.body).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
-    assert(Math.max(...corner) <= 28, path + ' is missing the rounded Netflix frame');
+    assert(Math.max(...corner) <= 28, path + ' is missing its rounded black corner');
     const warmed = await call(path);
     assert.equal(warmed.statusCode, 200, path + ' warm cache status');
     assert.equal(warmed.headers['x-nuvio-editorial-cover'], new URL(path, 'https://localhost').searchParams.get('key'));
@@ -227,6 +230,8 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert.match(collection.folders[3].coverImageUrl, /editorial-cover\.jpg\?key=series-returning/);
     assert.match(collection.folders[4].coverImageUrl, /editorial-cover\.jpg\?key=movies-new/);
     assert.match(collection.folders[5].coverImageUrl, /editorial-cover\.jpg\?key=cinema-now/);
+    assert(collection.folders.every(f => f.coverImageUrl.includes('v=tv-readable-v4')),
+      'Shield/Desktop still reference cached oversized editorial title art');
   }
 });
 
