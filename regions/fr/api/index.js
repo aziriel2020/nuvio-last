@@ -170,7 +170,6 @@ async function serveEditorialCoverJpeg(res, url) {
   const key = String(url.searchParams.get('key') || '').trim();
   const recipes = {
     'series-top-rated': {
-      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-top-rated.jpg'),
       type: 'series',
       accent: '#f4c542',
       title: 'Séries les mieux notées',
@@ -179,7 +178,6 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'TOP NOTES'
     },
     'series-trendy': {
-      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-trendy.jpg'),
       type: 'series',
       accent: '#ff5a36',
       title: 'Séries les plus trendy',
@@ -188,7 +186,6 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'TRENDY'
     },
     'series-new': {
-      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-new.jpg'),
       type: 'series',
       accent: '#06b6d4',
       title: 'Nouvelles séries',
@@ -197,7 +194,6 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SÉRIES'
     },
     'series-returning': {
-      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-returning.jpg'),
       type: 'series',
       accent: '#a855f7',
       title: 'Séries renouvelées',
@@ -206,7 +202,6 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SAISONS'
     },
     'movies-new': {
-      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'movies-new.jpg'),
       type: 'movie',
       accent: '#f59e0b',
       title: 'Nouveaux films',
@@ -215,7 +210,6 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVEAUX FILMS'
     },
     'cinema-now': {
-      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'cinema-now.jpg'),
       type: 'movie',
       accent: '#e11d48',
       title: 'Films au cinéma actuellement',
@@ -231,7 +225,8 @@ async function serveEditorialCoverJpeg(res, url) {
   let render = EDITORIAL_COVER_RENDER_CACHE.get(key);
   if (!render) {
     render = Promise.resolve().then(async () => {
-      const source = fs.readFileSync(recipe.source);
+      // Cover and hero MUST resolve from the same key (no series/movies cross-wire).
+      const source = fs.readFileSync(path.join(EDITORIAL_APPROVED_COVER_DIR, `${key}.jpg`));
       // Fingerprint the actual artwork, not the finished titled card: two
       // different labels over the same photo must fail the visual uniqueness audit.
       const sourceSha256 = createHash('sha256').update(source).digest('hex');
