@@ -147,6 +147,7 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     '/fr/editorial-cover.jpg?key=movies-new&v=netflix-frame-v2',
     '/fr/editorial-cover.jpg?key=cinema-now&v=netflix-frame-v2'
   ];
+  const sourceDigests = new Set();
   for (const path of paths) {
     const response = await call(path);
     assert.equal(response.statusCode, 200, path);
@@ -154,11 +155,20 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert.equal(response.body[0], 0xff, path);
     assert.equal(response.body[1], 0xd8, path);
     assert(response.body.length > 100000, path);
+    const sourceDigest = response.headers['x-nuvio-editorial-source-sha256'];
+    assert.match(sourceDigest, /^[a-f0-9]{64}$/, path + ' has no source fingerprint');
+    assert(!sourceDigests.has(sourceDigest), path + ' reuses another folder artwork');
+    sourceDigests.add(sourceDigest);
     const metadata = await sharp(response.body).metadata();
     assert.equal(metadata.width, 1600, path);
     assert.equal(metadata.height, 900, path);
     const corner = await sharp(response.body).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
     assert(Math.max(...corner) <= 28, path + ' is missing the rounded Netflix frame');
+    const warmed = await call(path);
+    assert.equal(warmed.statusCode, 200, path + ' warm cache status');
+    assert.equal(warmed.headers['x-nuvio-editorial-cover'], new URL(path, 'https://localhost').searchParams.get('key'));
+    assert.equal(warmed.headers['x-nuvio-editorial-render'], 'memory', path + ' was re-rendered');
+    assert.deepEqual(warmed.body, response.body, path + ' rendered inconsistently');
   }
 
   const bad = await call('/fr/editorial-cover.jpg?key=does-not-exist');

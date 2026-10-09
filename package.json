@@ -13,7 +13,8 @@
     "start:oracle": "node oracle/server.mjs",
     "test:oracle": "node scripts/test-oracle-runtime.mjs",
     "verify:oracle:production": "node scripts/verify-oracle-production.mjs",
-    "generate:covers": "node scripts/generate-platform-covers.js"
+    "generate:covers": "node scripts/generate-platform-covers.js",
+    "audit:editorial-covers": "node scripts/audit-editorial-covers.mjs"
   },
   "engines": {
     "node": ">=20"

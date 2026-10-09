@@ -31,6 +31,7 @@ const {
 } = require('../src/calendar');
 
 const fs = require('fs');
+const { createHash } = require('node:crypto');
 const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
@@ -61,11 +62,16 @@ const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/f
 const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-art/shared');
 const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
 const EDITORIAL_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial');
+const EDITORIAL_APPROVED_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial-approved');
 const EDITORIAL_COVER_FILES = Object.freeze({
   'series-top-rated': 'series-top-rated.jpg',
   'series-trendy': 'series-trendy.jpg',
   'cinema-now': 'cinema-now.jpg'
 });
+// Exactly six immutable cover variants; share one render per variant and process lifetime.
+// Cache the in-flight Promise too, so concurrent Shield/Desktop requests do not
+// re-render the same 1600x900 cover on a small Oracle Always Free VM.
+const EDITORIAL_COVER_RENDER_CACHE = new Map();
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   const key = `${mime}:${absolutePath}`;
@@ -105,7 +111,7 @@ async function serveEditorialCoverJpeg(res, url) {
   const key = String(url.searchParams.get('key') || '').trim();
   const recipes = {
     'series-top-rated': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'drama-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-top-rated.jpg'),
       type: 'series',
       accent: '#f4c542',
       title: 'Séries les mieux notées',
@@ -114,7 +120,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'TOP NOTES'
     },
     'series-trendy': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'thriller-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-trendy.jpg'),
       type: 'series',
       accent: '#ff5a36',
       title: 'Séries les plus trendy',
@@ -123,7 +129,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'TRENDY'
     },
     'series-new': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'action-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-new.jpg'),
       type: 'series',
       accent: '#06b6d4',
       title: 'Nouvelles séries',
@@ -132,7 +138,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SÉRIES'
     },
     'series-returning': {
-      source: path.join(GENRE_CINEMATIC_ART_DIR, 'mystery-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'series-returning.jpg'),
       type: 'series',
       accent: '#a855f7',
       title: 'Séries renouvelées',
@@ -141,7 +147,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVELLES SAISONS'
     },
     'movies-new': {
-      source: path.join(PLATFORM_ART_DIR, 'vod-fr-card.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'movies-new.jpg'),
       type: 'movie',
       accent: '#f59e0b',
       title: 'Nouveaux films',
@@ -150,7 +156,7 @@ async function serveEditorialCoverJpeg(res, url) {
       bottomTag: 'NOUVEAUX FILMS'
     },
     'cinema-now': {
-      source: path.join(PLATFORM_ART_DIR, 'vod-fr-backdrop.jpg'),
+      source: path.join(EDITORIAL_APPROVED_COVER_DIR, 'cinema-now.jpg'),
       type: 'movie',
       accent: '#e11d48',
       title: 'Films au cinéma actuellement',
@@ -162,12 +168,32 @@ async function serveEditorialCoverJpeg(res, url) {
   const recipe = recipes[key];
   if (!recipe) { res.statusCode = 404; return res.end('Not found'); }
 
+  const cacheHit = EDITORIAL_COVER_RENDER_CACHE.has(key);
+  let render = EDITORIAL_COVER_RENDER_CACHE.get(key);
+  if (!render) {
+    render = Promise.resolve().then(async () => {
+      const source = fs.readFileSync(recipe.source);
+      // Fingerprint the actual artwork, not the finished titled card: two
+      // different labels over the same photo must fail the visual uniqueness audit.
+      const sourceSha256 = createHash('sha256').update(source).digest('hex');
+      // The title, typography, composition and rounded frame are already baked
+      // into this approved JPEG. Never repaint or regenerate these cards.
+      const data = source;
+      return { data, sourceSha256 };
+    });
+    EDITORIAL_COVER_RENDER_CACHE.set(key, render);
+  }
   try {
-    const source = fs.readFileSync(recipe.source);
-    const data = await editorialNetflixCardBuffer(source, recipe);
+    const { data, sourceSha256 } = await render;
     res.setHeader('X-Nuvio-Editorial-Cover', key);
+    res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
+    res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
     return sendDesktopCinematicJpeg(res, data);
   } catch (_) {
+    // A missing/corrupt source must never poison this worker's cache permanently.
+    if (EDITORIAL_COVER_RENDER_CACHE.get(key) === render) {
+      EDITORIAL_COVER_RENDER_CACHE.delete(key);
+    }
     res.statusCode = 404;
     return res.end('Not found');
   }

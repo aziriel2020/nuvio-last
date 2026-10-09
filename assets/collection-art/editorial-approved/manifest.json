@@ -1,0 +1,49 @@
+{
+  "revision": "editorial-approved-art-v1-2026-10-09",
+  "approved": true,
+  "renderer": "precomposed-jpeg-direct",
+  "images": {
+    "series-top-rated": {
+      "file": "series-top-rated.jpg",
+      "sha256": "26d2c3bb276e3d8771328af04f2abb2dae97b1de0d5767a665046d5591559e89",
+      "bytes": 299485,
+      "width": 1600,
+      "height": 900
+    },
+    "series-trendy": {
+      "file": "series-trendy.jpg",
+      "sha256": "75adaf698772ad8f3a9c69a61d3062e725d1d11fed92e073e2df66ce8edd9687",
+      "bytes": 325136,
+      "width": 1600,
+      "height": 900
+    },
+    "series-new": {
+      "file": "series-new.jpg",
+      "sha256": "5153583ad8cb96ea91e26142fb17ed2f6d6a30b59c47582062e2b55b2c1b99a7",
+      "bytes": 332527,
+      "width": 1600,
+      "height": 900
+    },
+    "series-returning": {
+      "file": "series-returning.jpg",
+      "sha256": "e201f4f9cdf70111317a22b6ec671c7d4aac798a28a2b59720c4a1de5160c561",
+      "bytes": 326230,
+      "width": 1600,
+      "height": 900
+    },
+    "movies-new": {
+      "file": "movies-new.jpg",
+      "sha256": "90faa998c1ae868d82819e8fc7e8298ffff633b6045ea89b6e32a020b0f1fa18",
+      "bytes": 354081,
+      "width": 1600,
+      "height": 900
+    },
+    "cinema-now": {
+      "file": "cinema-now.jpg",
+      "sha256": "eb06d671dd787108fa36a399828fbf9d17ad4fa015cfff96bf338efb725cff3e",
+      "bytes": 344736,
+      "width": 1600,
+      "height": 900
+    }
+  }
+}
