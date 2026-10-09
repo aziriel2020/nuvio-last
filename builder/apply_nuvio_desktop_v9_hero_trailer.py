@@ -1232,23 +1232,20 @@ shelf = replace_once(
     "import androidx.compose.foundation.interaction.collectIsFocusedAsState\nimport androidx.compose.foundation.interaction.collectIsHoveredAsState\n",
     "v6 focused interaction import",
 )
-shelf = replace_once(
-    shelf,
-    "import androidx.compose.ui.geometry.Rect\n",
-    "import androidx.compose.ui.focus.FocusDirection\nimport androidx.compose.ui.focus.onFocusChanged\nimport androidx.compose.ui.geometry.Rect\n",
-    "v6 focus imports",
+# Poster clickable implementation moved out of ShelfComponents to PosterLift upstream.
+lift_path = root / "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterLift.kt"
+lift = lift_path.read_text(encoding="utf-8")
+lift = replace_once(
+    lift,
+    "import androidx.compose.ui.Modifier\n",
+    "import androidx.compose.ui.Modifier\nimport androidx.compose.ui.focus.FocusDirection\nimport androidx.compose.ui.focus.onFocusChanged\nimport androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\n",
+    "v6 PosterLift keyboard imports",
 )
-shelf = replace_once(
-    shelf,
-    "import androidx.compose.ui.input.pointer.PointerEventPass\n",
-    "import androidx.compose.ui.input.key.Key\nimport androidx.compose.ui.input.key.KeyEventType\nimport androidx.compose.ui.input.key.key\nimport androidx.compose.ui.input.key.onPreviewKeyEvent\nimport androidx.compose.ui.input.key.type\nimport androidx.compose.ui.input.pointer.PointerEventPass\n",
-    "v6 key imports",
-)
-shelf = replace_once(
-    shelf,
-    "import androidx.compose.ui.platform.LocalDensity\n" if "import androidx.compose.ui.platform.LocalDensity\n" in shelf else "import androidx.compose.ui.layout.positionInRoot\n",
-    ("import androidx.compose.ui.platform.LocalDensity\nimport androidx.compose.ui.platform.LocalFocusManager\n" if "import androidx.compose.ui.platform.LocalDensity\n" in shelf else "import androidx.compose.ui.layout.positionInRoot\nimport androidx.compose.ui.platform.LocalFocusManager\n"),
-    "v6 local focus manager import",
+lift = replace_once(
+    lift,
+    "import androidx.compose.ui.platform.LocalGraphicsContext\n",
+    "import androidx.compose.ui.platform.LocalGraphicsContext\nimport androidx.compose.ui.platform.LocalFocusManager\n",
+    "v6 PosterLift focus manager import",
 )
 
 shelf = replace_once(
@@ -1304,8 +1301,8 @@ shelf = replace_once(
     "v6 focused z index",
 )
 
-shelf = replace_once(
-    shelf,
+lift = replace_once(
+    lift,
     '''    zoomImageUrl: String? = null,
     zoomCornerRadius: Dp = NuvioTokens.Radius.poster,
     hoverScaleEnabled: Boolean = true,
@@ -1317,31 +1314,20 @@ shelf = replace_once(
     onFocusChanged: ((Boolean) -> Unit)? = null,
 ): Modifier {
 ''',
-    "v6 clickable focus callback signature",
+    "v6 PosterLift focus callback signature",
 )
-shelf = replace_once(
-    shelf,
-    '''    val bounds = remember { mutableStateOf<Rect?>(null) }
-    val interactionSource = remember { MutableInteractionSource() }
-''',
-    '''    val bounds = remember { mutableStateOf<Rect?>(null) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val focusManager = LocalFocusManager.current
-''',
-    "v6 local focus manager",
+lift = replace_once(
+    lift,
+    "    val onPosterClickAnchor = LocalPosterClickAnchor.current\n",
+    "    val onPosterClickAnchor = LocalPosterClickAnchor.current\n    val focusManager = LocalFocusManager.current\n",
+    "v6 PosterLift focus manager",
 )
-shelf = replace_once(
-    shelf,
-    '''        .desktopPosterHoverScale(
-            enabled = hoverScaleEnabled,
-            interactionSource = interactionSource,
-        )
+lift = replace_once(
+    lift,
+    '''        .then(posterModifier)
         .combinedClickable(
 ''',
-    '''        .desktopPosterHoverScale(
-            enabled = hoverScaleEnabled,
-            interactionSource = interactionSource,
-        )
+    '''        .then(posterModifier)
         .onFocusChanged { state -> onFocusChanged?.invoke(state.isFocused) }
         .onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -1355,8 +1341,9 @@ shelf = replace_once(
         }
         .combinedClickable(
 ''',
-    "v6 directional key navigation",
+    "v6 PosterLift directional key navigation",
 )
+lift_path.write_text(lift, encoding="utf-8")
 shelf_path.write_text(shelf, encoding="utf-8")
 
 poster = poster_path.read_text(encoding="utf-8")
