@@ -54,7 +54,7 @@ export function edgeTtl(input) {
   if (path.includes('/meta/')) return META_TTL;
 
   if (
-    /\/(?:calendar-card\.svg|desktop-content-card\.jpg|desktop-folder-card\.jpg|desktop-genre-card\.jpg|shield-folder-card\.jpg|shield-genre-card\.jpg|platform-card\.jpg|platform-backdrop\.jpg|platform-category-card\.svg|platform-backdrop\.svg|platform-logo|archive-year-card\.svg|genre-folder-art\.svg|genre-poster\.png)$/.test(path)
+    /\/(?:binge-watch-cover\.jpg|binge-watch-backdrop\.jpg|calendar-card\.svg|desktop-content-card\.jpg|desktop-folder-card\.jpg|desktop-genre-card\.jpg|shield-folder-card\.jpg|shield-genre-card\.jpg|platform-card\.jpg|platform-backdrop\.jpg|platform-category-card\.svg|platform-backdrop\.svg|platform-logo|archive-year-card\.svg|genre-folder-art\.svg|genre-poster\.png)$/.test(path)
   ) {
     return GENERATED_ART_TTL;
   }

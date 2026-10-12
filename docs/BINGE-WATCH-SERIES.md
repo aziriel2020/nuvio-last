@@ -52,14 +52,15 @@ ressources Oracle Always Free. Les périodes très longues peuvent donc être
 
 ## Art Shield/Desktop
 
-- `/fr/binge-watch-cover.jpg?v=premium-marathon-v1` — **1600 × 900 JPEG** ;
-- `/fr/binge-watch-backdrop.jpg?v=premium-marathon-v1` — **1920 × 1080 JPEG**.
+- `/fr/binge-watch-cover.jpg?v=premium-cinema-v2` — **1600 × 900 JPEG** ;
+- `/fr/binge-watch-backdrop.jpg?v=premium-cinema-v2` — **1920 × 1080 JPEG**.
 
-Les deux rendus proviennent d'un SVG vectoriel produit par le backend (mosaïque
-cinématographique originale, bleu nuit/violet). Le titre **Binge Watch**, la catégorie
-**Séries** et le badge **Tous les épisodes dispo** se trouvent uniquement sur la cover.
-Le fond hero reste sans texte afin de laisser l'interface Nuvio afficher son titre natif.
-Les images sont rendues une seule fois et gardées dans un cache mémoire.
+Les rendus JPEG proviennent des deux images cinématiques WebP approuvées,
+stockées dans `assets/collection-art/editorial-approved/`.
+La cover est une composition 1600×900 avec le titre Binge Watch et le badge.
+Le fond héro 1920×1080 est indépendant et sans texte afin de conserver le titre natif Nuvio.
+Les deux rendus sont mémorisés, identifiés par SHA-256 et utilisent la révision `premium-cinema-v2`
+qui invalide les anciennes URLs sur Shield et Desktop.
 
 ## Vérification
 

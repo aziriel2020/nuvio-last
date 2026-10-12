@@ -2,7 +2,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { BINGE_PERIODS, bingeWatchWindow, fullSeasonDrop, bingeWatchArtSvg } = require('../src/binge-watch');
+const { BINGE_PERIODS, bingeWatchWindow, fullSeasonDrop } = require('../src/binge-watch');
+const fs = require('node:fs');
+const path = require('node:path');
+const sharp = require('sharp');
+const { createHash } = require('node:crypto');
 
 const now = new Date('2026-10-12T10:00:00+02:00');
 const todayWindow = bingeWatchWindow('thisweek', now, 'Europe/Paris');
@@ -66,12 +70,20 @@ test('exclude partial, weekly, future, mismatched or unverified episodes', () =>
     bingeWatchWindow('lastweek', now, 'Europe/Paris')), null);
 });
 
-test('artwork is distinct cover and text-free hero in native cinematic sizes', () => {
-  const cover = bingeWatchArtSvg('cover');
-  const hero = bingeWatchArtSvg('backdrop');
-  assert.match(cover, /width="1600" height="900"/);
-  assert.match(hero, /width="1920" height="1080"/);
-  assert.match(cover, /BINGE WATCH/);
-  assert.match(cover, /TOUS LES ÉPISODES DISPO/);
-  assert(!hero.includes('TOUS LES ÉPISODES DISPO'));
+test('approved Binge Watch photographic sources are distinct valid WebP in cinematic sizes', async () => {
+  const assets = [
+    { variant: 'cover', width: 1600, height: 900, sha: '846fc8bd5568a5c8f36fe56441df9f4cc1cc8bfca85c2f6e8ba1f722f9b5ee2b' },
+    { variant: 'backdrop', width: 1920, height: 1080, sha: '61b63e8bf4dce7274fe50d86435af5002fa0cca22dbc879524d271cc169739da' }
+  ];
+  for (const asset of assets) {
+    const filename = path.resolve(__dirname, '../../../assets/collection-art/editorial-approved/binge-watch-' + asset.variant + '-v2.webp');
+    const source = fs.readFileSync(filename);
+    assert.equal(source.subarray(0, 4).toString('ascii'), 'RIFF');
+    assert.equal(source.subarray(8, 12).toString('ascii'), 'WEBP');
+    assert.equal(createHash('sha256').update(source).digest('hex'), asset.sha);
+    const { width, height, format } = await sharp(source).metadata();
+    assert.equal(format, 'webp');
+    assert.equal(width, asset.width);
+    assert.equal(height, asset.height);
+  }
 });

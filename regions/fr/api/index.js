@@ -30,7 +30,7 @@ const {
   normalizeTitle
 } = require('../src/calendar');
 
-const { BINGE_PERIODS, bingeWatchWindow, frenchStreamingProviders, fullSeasonDrop, bingeWatchArtSvg } = require('../src/binge-watch');
+const { BINGE_PERIODS, bingeWatchWindow, frenchStreamingProviders, fullSeasonDrop } = require('../src/binge-watch');
 
 const fs = require('fs');
 const { createHash } = require('node:crypto');
@@ -171,20 +171,28 @@ async function editorialTvReadableCoverJpeg(source, key) {
 
 
 async function serveBingeWatchArtJpeg(res, variant) {
-  const backdrop = variant === 'backdrop';
-  const cacheKey = backdrop ? 'backdrop' : 'cover';
+  const cacheKey = variant === 'backdrop' ? 'backdrop' : 'cover';
   let render = BINGE_ART_RENDER_CACHE.get(cacheKey);
   const cacheHit = Boolean(render);
   if (!render) {
-    render = sharp(Buffer.from(bingeWatchArtSvg(cacheKey), 'utf8'))
-      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toBuffer();
+    render = Promise.resolve().then(async () => {
+      // Approved photographic assets are committed with the application.
+      // Never fall back to the old placeholder SVG if an asset is missing.
+      const source = fs.readFileSync(path.join(EDITORIAL_APPROVED_COVER_DIR,
+        'binge-watch-' + cacheKey + '-v2.webp'));
+      const sourceSha256 = createHash('sha256').update(source).digest('hex');
+      const jpeg = await sharp(source)
+        .jpeg({ quality: 93, chromaSubsampling: '4:4:4' }).toBuffer();
+      return { jpeg, sourceSha256 };
+    });
     BINGE_ART_RENDER_CACHE.set(cacheKey, render);
   }
   try {
-    const jpeg = await render;
+    const { jpeg, sourceSha256 } = await render;
     res.setHeader('X-Nuvio-Binge-Watch-Art', cacheKey);
+    res.setHeader('X-Nuvio-Binge-Watch-Source-SHA256', sourceSha256);
     res.setHeader('X-Nuvio-Binge-Watch-Render', cacheHit ? 'memory' : 'generated');
-    return sendDesktopCinematicJpeg(res, jpeg, backdrop ? '1920x1080' : '1600x900');
+    return sendDesktopCinematicJpeg(res, jpeg, cacheKey === 'backdrop' ? '1920x1080' : '1600x900');
   } catch (error) {
     if (BINGE_ART_RENDER_CACHE.get(cacheKey) === render) BINGE_ART_RENDER_CACHE.delete(cacheKey);
     throw error;
@@ -1487,8 +1495,8 @@ function buildEditorialCollection(origin = null) {
       title: '🍿 Binge Watch · Séries',
       emoji: '🍿',
       ids: bingeIds,
-      art: (base) => `${base}/binge-watch-cover.jpg?v=premium-marathon-v1`,
-      hero: (base) => `${base}/binge-watch-backdrop.jpg?v=premium-marathon-v1`,
+      art: (base) => `${base}/binge-watch-cover.jpg?v=premium-cinema-v2`,
+      hero: (base) => `${base}/binge-watch-backdrop.jpg?v=premium-cinema-v2`,
     }),
     folder({
       id: 'editorial-cinema-now',
