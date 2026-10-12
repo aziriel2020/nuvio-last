@@ -168,19 +168,25 @@ test('Editorial collection keeps period catalogs inside seven folders with Shiel
 
 test('Binge Watch premium covers are actual JPGs, cached and correctly sized for Shield/Desktop', async () => {
   const routes = [
-    ['/fr/binge-watch-cover.jpg?v=premium-marathon-v1', 1600, 900, 'cover'],
-    ['/fr/binge-watch-backdrop.jpg?v=premium-marathon-v1', 1920, 1080, 'backdrop']
+    ['/fr/binge-watch-cover.jpg?v=premium-cinema-v2', 1600, 900, 'cover'],
+    ['/fr/binge-watch-backdrop.jpg?v=premium-cinema-v2', 1920, 1080, 'backdrop']
   ];
   for (const [route, width, height, variant] of routes) {
     const first = await call(route);
     assert.equal(first.statusCode, 200, route);
     assert(String(first.headers['content-type']).includes('image/jpeg'), route);
     assert.equal(first.headers['x-nuvio-binge-watch-art'], variant);
+    const original = require('node:fs').readFileSync(
+      require('node:path').join(__dirname, '../assets/collection-art/editorial-approved/binge-watch-' + variant + '-v2.webp')
+    );
+    assert.equal(first.headers['x-nuvio-binge-watch-source-sha256'],
+      require('node:crypto').createHash('sha256').update(original).digest('hex'),
+      variant + ' must render the approved photographic source');
     const metadata = await sharp(first.body).metadata();
     assert.equal(metadata.format, 'jpeg');
     assert.equal(metadata.width, width, variant);
     assert.equal(metadata.height, height, variant);
-    assert(first.body.length > 12000, 'Empty Binge Watch visual');
+    assert(first.body.length > 70000, 'Empty or over-compressed Binge Watch visual');
     const warmed = await call(route);
     assert.equal(warmed.headers['x-nuvio-binge-watch-render'], 'memory');
     assert.deepEqual(first.body, warmed.body);
