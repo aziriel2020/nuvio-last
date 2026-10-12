@@ -66,7 +66,7 @@ test('Cinema card renderer uses a real Cinema label and no fake platform identit
 });
 
 
-test('Editorial collection has six folders and periods are catalogs inside each folder',()=>{
+test('Editorial collection has seven folders and periods are catalogs inside each folder',()=>{
   const editorial=api._internals.buildEditorialCollection('https://fr-archives.example');
   assert.equal(editorial.id,'calendar-archives-fr-editorial-now');
   assert.equal(editorial.title,'🇫🇷 Tendances & Cinéma');
@@ -76,6 +76,7 @@ test('Editorial collection has six folders and periods are catalogs inside each 
     '🆕 Nouvelles séries',
     '🔁 Séries renouvelées',
     '🎬 Nouveaux films',
+    '🍿 Binge Watch · Séries',
     '🎬 Films au cinéma actuellement'
   ]);
   assert.deepEqual(editorial.folders[0].sources.map((x)=>x.catalogId),[
@@ -116,9 +117,19 @@ test('Editorial collection has six folders and periods are catalogs inside each 
     'Cette semaine','Ce mois'
   ]);
   assert.deepEqual(editorial.folders[5].sources.map((x)=>x.catalogId),[
-    'editorial-movies-cinema-now'
+    'editorial-binge-watch-series-thisweek',
+    'editorial-binge-watch-series-lastweek',
+    'editorial-binge-watch-series-thismonth',
+    'editorial-binge-watch-series-lastmonth',
+    'editorial-binge-watch-series-thisyear'
   ]);
   assert.deepEqual(editorial.folders[5].sources.map((x)=>x.genre),[
+    'Cette semaine','Semaine passée','Ce mois-ci','Le mois dernier','Cette année'
+  ]);
+  assert.deepEqual(editorial.folders[6].sources.map((x)=>x.catalogId),[
+    'editorial-movies-cinema-now'
+  ]);
+  assert.deepEqual(editorial.folders[6].sources.map((x)=>x.genre),[
     'À l’affiche actuellement'
   ]);
   assert(editorial.folders.every((f)=>f.coverImageUrl&&f.heroBackdropUrl));
@@ -130,7 +141,8 @@ test('Editorial collection has six folders and periods are catalogs inside each 
   assert.match(editorial.folders[2].coverImageUrl,/\/editorial-cover\.jpg\?key=series-new/);
   assert.match(editorial.folders[3].coverImageUrl,/\/editorial-cover\.jpg\?key=series-returning/);
   assert.match(editorial.folders[4].coverImageUrl,/\/editorial-cover\.jpg\?key=movies-new/);
-  assert.match(editorial.folders[5].coverImageUrl,/\/editorial-cover\.jpg\?key=cinema-now/);
+  assert.match(editorial.folders[5].coverImageUrl,/\/binge-watch-cover\.jpg\?/);
+  assert.match(editorial.folders[6].coverImageUrl,/\/editorial-cover\.jpg\?key=cinema-now/);
 
   const top=api._internals.resolveArchiveCatalog('editorial-series-top-rated-yesterday','series',fixedNow,tz);
   const trendy=api._internals.resolveArchiveCatalog('editorial-series-trendy-lastweek','series',fixedNow,tz);
@@ -221,7 +233,7 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
   assert.equal(manifest.version,'1.3.2');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+23);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+28);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
     ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
@@ -234,6 +246,9 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
       'editorial-series-top-rated-lastmonth','editorial-series-trendy-lastmonth',
       'editorial-series-new-thisweek','editorial-series-returning-thisweek','editorial-movies-new-thisweek',
       'editorial-series-new-thismonth','editorial-series-returning-thismonth','editorial-movies-new-thismonth',
+      'editorial-binge-watch-series-thisweek','editorial-binge-watch-series-lastweek',
+      'editorial-binge-watch-series-thismonth','editorial-binge-watch-series-lastmonth',
+      'editorial-binge-watch-series-thisyear',
       'editorial-movies-cinema-now'
     ]
   );
