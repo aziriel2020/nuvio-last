@@ -174,7 +174,7 @@ test('Binge Watch premium covers are actual JPGs, cached and correctly sized for
   for (const [route, width, height, variant] of routes) {
     const first = await call(route);
     assert.equal(first.statusCode, 200, route);
-    assert.match(first.headers['content-type'], /image\\/jpeg/, route);
+    assert(String(first.headers['content-type']).includes('image/jpeg'), route);
     assert.equal(first.headers['x-nuvio-binge-watch-art'], variant);
     const metadata = await sharp(first.body).metadata();
     assert.equal(metadata.format, 'jpeg');
