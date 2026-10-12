@@ -246,6 +246,9 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
       'editorial-series-top-rated-lastmonth','editorial-series-trendy-lastmonth',
       'editorial-series-new-thisweek','editorial-series-returning-thisweek','editorial-movies-new-thisweek',
       'editorial-series-new-thismonth','editorial-series-returning-thismonth','editorial-movies-new-thismonth',
+      'editorial-binge-watch-series-thisweek','editorial-binge-watch-series-lastweek',
+      'editorial-binge-watch-series-thismonth','editorial-binge-watch-series-lastmonth',
+      'editorial-binge-watch-series-thisyear',
       'editorial-movies-cinema-now'
     ]
   );
