@@ -166,6 +166,27 @@ test('Editorial collection keeps period catalogs inside seven folders with Shiel
   }
 });
 
+test('Binge Watch premium covers are actual JPGs, cached and correctly sized for Shield/Desktop', async () => {
+  const routes = [
+    ['/fr/binge-watch-cover.jpg?v=premium-marathon-v1', 1600, 900, 'cover'],
+    ['/fr/binge-watch-backdrop.jpg?v=premium-marathon-v1', 1920, 1080, 'backdrop']
+  ];
+  for (const [route, width, height, variant] of routes) {
+    const first = await call(route);
+    assert.equal(first.statusCode, 200, route);
+    assert.match(first.headers['content-type'], /image\\/jpeg/, route);
+    assert.equal(first.headers['x-nuvio-binge-watch-art'], variant);
+    const metadata = await sharp(first.body).metadata();
+    assert.equal(metadata.format, 'jpeg');
+    assert.equal(metadata.width, width, variant);
+    assert.equal(metadata.height, height, variant);
+    assert(first.body.length > 12000, 'Empty Binge Watch visual');
+    const warmed = await call(route);
+    assert.equal(warmed.headers['x-nuvio-binge-watch-render'], 'memory');
+    assert.deepEqual(first.body, warmed.body);
+  }
+});
+
 test('Editorial backdrops are unique, clean 1920x1080 JPEGs and cached', async () => {
   const keys = ['series-top-rated', 'series-trendy', 'series-new', 'series-returning', 'movies-new', 'cinema-now'];
   const sources = new Set();
