@@ -30,6 +30,8 @@ const {
   normalizeTitle
 } = require('../src/calendar');
 
+const { BINGE_PERIODS, bingeWatchWindow, frenchStreamingProviders, fullSeasonDrop, bingeWatchArtSvg } = require('../src/binge-watch');
+
 const fs = require('fs');
 const { createHash } = require('node:crypto');
 const path = require('path');
@@ -86,6 +88,7 @@ const EDITORIAL_BACKDROP_RENDER_CACHE = new Map();
 // Cache the in-flight Promise too, so concurrent Shield/Desktop requests do not
 // re-render the same 1600x900 cover on a small Oracle Always Free VM.
 const EDITORIAL_COVER_RENDER_CACHE = new Map();
+const BINGE_ART_RENDER_CACHE = new Map();
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   const key = `${mime}:${absolutePath}`;
@@ -164,6 +167,28 @@ async function editorialTvReadableCoverJpeg(source, key) {
     .composite([{ input: overlay, left: 0, top: 0 }])
     .jpeg({ quality: 93, chromaSubsampling: '4:4:4' })
     .toBuffer();
+}
+
+
+async function serveBingeWatchArtJpeg(res, variant) {
+  const backdrop = variant === 'backdrop';
+  const cacheKey = backdrop ? 'backdrop' : 'cover';
+  let render = BINGE_ART_RENDER_CACHE.get(cacheKey);
+  const cacheHit = Boolean(render);
+  if (!render) {
+    render = sharp(Buffer.from(bingeWatchArtSvg(cacheKey), 'utf8'))
+      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toBuffer();
+    BINGE_ART_RENDER_CACHE.set(cacheKey, render);
+  }
+  try {
+    const jpeg = await render;
+    res.setHeader('X-Nuvio-Binge-Watch-Art', cacheKey);
+    res.setHeader('X-Nuvio-Binge-Watch-Render', cacheHit ? 'memory' : 'generated');
+    return sendDesktopCinematicJpeg(res, jpeg, backdrop ? '1920x1080' : '1600x900');
+  } catch (error) {
+    if (BINGE_ART_RENDER_CACHE.get(cacheKey) === render) BINGE_ART_RENDER_CACHE.delete(cacheKey);
+    throw error;
+  }
 }
 
 async function serveEditorialCoverJpeg(res, url) {
@@ -1373,6 +1398,9 @@ function buildEditorialCollection(origin = null) {
 
   const editorialPeriodLabel = (entry) => {
     if (entry.id === 'editorial-movies-cinema-now') return 'À l’affiche actuellement';
+    if (entry.catalog.source === 'editorial-binge') {
+      return BINGE_PERIODS.find(({ key }) => entry.catalog.bingePeriod === key)?.label || null;
+    }
     return EDITORIAL_PERIODS.find(({ key }) => entry.id.endsWith(`-${key}`))?.label
       || editorialFreshPeriodLabel(entry)
       || null;
@@ -1411,6 +1439,7 @@ function buildEditorialCollection(origin = null) {
   const newSeriesIds = EDITORIAL_FRESH_PERIODS.map(({ key }) => `editorial-series-new-${key}`);
   const returningSeriesIds = EDITORIAL_FRESH_PERIODS.map(({ key }) => `editorial-series-returning-${key}`);
   const newMovieIds = EDITORIAL_FRESH_PERIODS.map(({ key }) => `editorial-movies-new-${key}`);
+  const bingeIds = BINGE_PERIODS.map(({ key }) => `editorial-binge-watch-series-${key}`);
 
   const folders = [
     folder({
@@ -1452,6 +1481,14 @@ function buildEditorialCollection(origin = null) {
       ids: newMovieIds,
       art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=tv-readable-v4`,
       hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=approved-hero-v1`,
+    }),
+    folder({
+      id: 'editorial-binge-watch-series',
+      title: '🍿 Binge Watch · Séries',
+      emoji: '🍿',
+      ids: bingeIds,
+      art: (base) => `${base}/binge-watch-cover.jpg?v=premium-marathon-v1`,
+      hero: (base) => `${base}/binge-watch-backdrop.jpg?v=premium-marathon-v1`,
     }),
     folder({
       id: 'editorial-cinema-now',
@@ -1673,9 +1710,26 @@ function buildEditorialCatalogEntries() {
     }
   ]));
 
+  const binge = BINGE_PERIODS.map(({ key }) => ({
+    id: `editorial-binge-watch-series-${key}`,
+    catalog: {
+      type: 'series',
+      name: 'Binge Watch · Séries',
+      providerSlug: 'editorial-binge-watch',
+      cardProvider: 'Binge Watch · Séries',
+      period: key,
+      bingePeriod: key,
+      editorialMode: 'full-season-drop',
+      source: 'editorial-binge',
+      section: 'series-streaming',
+      noFilters: true,
+      explore: true
+    }
+  }));
   return [
     ...series,
     ...fresh,
+    ...binge,
     {
       id: 'editorial-movies-cinema-now',
       catalog: {
@@ -4935,6 +4989,102 @@ function editorialFreshPeriodLabel(entry) {
   return EDITORIAL_FRESH_PERIODS.find(({ key }) => entry.id.endsWith(`-${key}`))?.label || null;
 }
 
+
+async function discoverBingeWatchCandidates(window) {
+  const unique = new Map();
+  // First-air-date discovery catches entirely new mini-series; air-date catches
+  // season premieres. Neither is accepted without full episode verification.
+  for (const mode of ['first_air_date', 'air_date']) {
+    const pages = window.kind === 'binge-thisyear' ? 5 : 3;
+    for (let page = 1; page <= pages; page += 1) {
+      const payload = await tmdbFetch('/discover/tv', {
+        language: getConfig().language,
+        watch_region: 'FR',
+        include_adult: false,
+        include_null_first_air_dates: false,
+        sort_by: 'popularity.desc',
+        page,
+        [mode + '.gte']: window.start,
+        [mode + '.lte']: window.end
+      });
+      for (const candidate of payload?.results || []) {
+        const id = Number(candidate?.id);
+        if (Number.isInteger(id) && id > 0 && !unique.has(id)) unique.set(id, candidate);
+      }
+      if (page >= Number(payload?.total_pages || 1)) break;
+    }
+  }
+  return [...unique.values()].slice(0, Math.max(90, getConfig().maxCandidates));
+}
+
+async function buildBingeWatchCatalog({ catalog, timeZone, now = new Date(), useCache = true }) {
+  const window = bingeWatchWindow(catalog.bingePeriod, now, timeZone);
+  if (!window) throw new Error('Unknown Binge Watch period');
+  const key = catalogCacheKey({
+    providerSlug: 'editorial-binge-watch-v1',
+    type: 'series',
+    period: catalog.bingePeriod,
+    timeZone, today: window.today,
+    sourceVersion: SOURCE_VERSION + '-binge-watch-full-season-v1'
+  });
+  if (useCache) {
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+  }
+  const stats = emptyStats({ label: 'Binge Watch · Séries', ids: [] }, catalog, window, timeZone);
+  const candidates = await discoverBingeWatchCandidates(window);
+  stats.candidates = candidates.length;
+  const settled = await mapLimitSettled(candidates, 6, async (candidate) => {
+    const details = await fetchDetails('series', candidate.id);
+    if (!frenchStreamingProviders(details).length) return { reason: 'no-fr-streaming-provider' };
+    const seasonSummaries = (details?.seasons || [])
+      .filter((summary) => Number(summary.season_number) > 0 &&
+        Number(summary.episode_count) >= 2 &&
+        Number(summary.episode_count) <= 50 &&
+        normalizeIsoDate(summary.air_date) >= window.start &&
+        normalizeIsoDate(summary.air_date) <= window.end)
+      .sort((a, b) => Number(b.season_number) - Number(a.season_number))
+      .slice(0, 2);
+    for (const summary of seasonSummaries) {
+      const season = await fetchSeasonDetails(details.id, Number(summary.season_number));
+      const drop = fullSeasonDrop(details, summary, season, window);
+      if (!drop) continue;
+      const releaseInfo = (drop.isMiniseries ? 'Mini-série intégrale' :
+        'Saison ' + drop.seasonNumber + ' complète') + ' · ' + humanCalendarDate(drop.releaseDate);
+      const meta = baseMeta(details, 'series', drop.releaseDate, releaseInfo);
+      if (!meta.poster) continue;
+      meta.description = [
+        'Binge Watch · Séries',
+        drop.episodeCount + ' épisodes avec la même date de diffusion TMDb',
+        'Streaming référencé en France : ' + drop.providers.join(', '),
+        'Disponibilité réelle à confirmer dans les addons Nuvio.',
+        releaseInfo, meta.description
+      ].filter(Boolean).join('\n\n');
+      meta._bingeDropDate = drop.releaseDate;
+      meta._bingePopularity = Number(details.popularity || candidate.popularity || 0);
+      meta._dedupeKey = 'binge-watch:' + details.id;
+      meta._calendarProvider = catalog.cardProvider;
+      meta._calendarSource = catalog.source;
+      return { meta };
+    }
+    return { reason: 'not-a-complete-same-day-drop' };
+  });
+  const found = [];
+  for (const item of settled) {
+    if (item?.error) { stats.enrichmentErrors += 1; continue; }
+    if (item?.meta) found.push(item.meta);
+    else countReason(stats, item?.reason);
+  }
+  const unique = [...new Map(found.map((m) => [m._dedupeKey, m])).values()];
+  unique.sort((a, b) => b._bingeDropDate.localeCompare(a._bingeDropDate) ||
+    b._bingePopularity - a._bingePopularity);
+  const metas = unique.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  stats.duplicatesRemoved = found.length - unique.length;
+  stats.final = metas.length;
+  const result = { metas, stats };
+  return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
+}
+
 async function discoverEditorialFreshSeriesCandidates(catalog, window, timeZone) {
   const items = [];
   const params = {
@@ -5227,6 +5377,7 @@ async function buildEditorialCinemaCatalog({ catalog, timeZone, now = new Date()
 
 async function buildCatalog(options) {
   const source = options.catalog.source;
+  if (source === 'editorial-binge') return buildBingeWatchCatalog(options);
   if (source === 'editorial-series') return buildEditorialSeriesCatalog(options);
   if (source === 'editorial-fresh') return buildEditorialFreshCatalog(options);
   if (source === 'editorial-cinema') return buildEditorialCinemaCatalog(options);
@@ -5261,7 +5412,9 @@ async function handleCatalog(req, res, type, catalogId, extras = {}, url = null)
   const period = catalog.period;
   const window = catalog.source === 'torrentio-theatrical'
     ? cinemaDateWindow(catalog.cinemaBucket, now, timeZone)
-    : dateWindow(period, now, timeZone);
+    : catalog.source === 'editorial-binge'
+      ? bingeWatchWindow(catalog.bingePeriod, now, timeZone)
+      : dateWindow(period, now, timeZone);
   const outsideRollingTwoYears = Number.isInteger(catalog.archiveYear)
     ? !archiveYearIsVisible(catalog.archiveYear, now, timeZone)
     : false;
@@ -5626,6 +5779,8 @@ module.exports = async function handler(req, res) {
     if (path === '/genre-card.jpg') return serveGenreCinematicJpeg(res, url, 'card');
     if (path === '/genre-backdrop.jpg') return serveGenreCinematicJpeg(res, url, 'backdrop');
     if (path === '/genre-collection-art.jpg') return serveLocalJpeg(res, `${COLLECTION_CINEMATIC_ART_DIR}/fr-genres-backdrop.jpg`);
+    if (path === '/binge-watch-cover.jpg') return serveBingeWatchArtJpeg(res, 'cover');
+    if (path === '/binge-watch-backdrop.jpg') return serveBingeWatchArtJpeg(res, 'backdrop');
     if (path === '/editorial-cover.jpg') return serveEditorialCoverJpeg(res, url);
     if (path === '/editorial-backdrop.jpg') return serveEditorialBackdropJpeg(res, url);
     if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
@@ -5701,6 +5856,11 @@ module.exports._internals = {
   platformCollectionId,
   platformImageUrls,
   buildEditorialCollection,
+  BINGE_PERIODS,
+  bingeWatchWindow,
+  fullSeasonDrop,
+  discoverBingeWatchCandidates,
+  buildBingeWatchCatalog,
   buildNuvioCollectionsImport,
   buildGenreCatalogEntries,
   buildGenreCollection,
