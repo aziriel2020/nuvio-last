@@ -50,7 +50,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12237);
+  assert.equal(fr.catalogs.length, 12242);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -82,7 +82,7 @@ test('combined live import fails closed without Cinema availability and keeps re
   assert.equal(collections.at(-1).title, '🇺🇸 Genres · Séries');
 });
 
-test('Editorial collection keeps period catalogs inside six folders with Shield/Desktop covers', async () => {
+test('Editorial collection keeps period catalogs inside seven folders with Shield/Desktop covers', async () => {
   const shield = JSON.parse((await call('/nuvio-collections-shield.json')).text);
   const editorial = shield.find((c) => c.id === 'calendar-archives-fr-editorial-now');
   assert(editorial);
@@ -93,6 +93,7 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
     '🆕 Nouvelles séries',
     '🔁 Séries renouvelées',
     '🎬 Nouveaux films',
+    '🍿 Binge Watch · Séries',
     '🎬 Films au cinéma actuellement'
   ]);
   assert.deepEqual(editorial.folders[0].sources.map((x) => x.catalogId), [
@@ -115,6 +116,16 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
     'editorial-movies-new-thisweek','editorial-movies-new-thismonth'
   ]);
   assert.deepEqual(editorial.folders[5].sources.map((x) => x.catalogId), [
+    'editorial-binge-watch-series-thisweek',
+    'editorial-binge-watch-series-lastweek',
+    'editorial-binge-watch-series-thismonth',
+    'editorial-binge-watch-series-lastmonth',
+    'editorial-binge-watch-series-thisyear'
+  ]);
+  assert.deepEqual(editorial.folders[5].sources.map((x) => x.genre), [
+    'Cette semaine','Semaine passée','Ce mois-ci','Le mois dernier','Cette année'
+  ]);
+  assert.deepEqual(editorial.folders[6].sources.map((x) => x.catalogId), [
     'editorial-movies-cinema-now'
   ]);
   assert.deepEqual(editorial.folders[2].sources.map((x) => x.genre), ['Cette semaine','Ce mois']);
@@ -125,7 +136,8 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
   assert.match(editorial.folders[2].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-new/);
   assert.match(editorial.folders[3].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-returning/);
   assert.match(editorial.folders[4].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=movies-new/);
-  assert.match(editorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
+  assert.match(editorial.folders[5].coverImageUrl, /\/fr\/binge-watch-cover\.jpg\?/);
+  assert.match(editorial.folders[6].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
 
   const desktop = JSON.parse((await call('/nuvio-collections-desktop.json')).text);
   const desktopEditorial = desktop.find((c) => c.id === 'calendar-archives-fr-editorial-now');
@@ -135,14 +147,19 @@ test('Editorial collection keeps period catalogs inside six folders with Shield/
   assert.match(desktopEditorial.folders[2].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-new/);
   assert.match(desktopEditorial.folders[3].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=series-returning/);
   assert.match(desktopEditorial.folders[4].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=movies-new/);
-  assert.match(desktopEditorial.folders[5].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
-  const keys = ['series-top-rated', 'series-trendy', 'series-new', 'series-returning', 'movies-new', 'cinema-now'];
+  assert.match(desktopEditorial.folders[5].coverImageUrl, /\/fr\/binge-watch-cover\.jpg\?/);
+  assert.match(desktopEditorial.folders[6].coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=cinema-now/);
+  const keys = ['series-top-rated', 'series-trendy', 'series-new', 'series-returning', 'movies-new', null, 'cinema-now'];
   for (const collection of [editorial, desktopEditorial]) {
     assert.match(collection.backdropImageUrl, /editorial-backdrop\.jpg\?key=series-top-rated/);
     for (let i = 0; i < keys.length; i += 1) {
       const folder = collection.folders[i];
-      assert.match(folder.heroBackdropUrl,
-        new RegExp('editorial-backdrop\\.jpg\\?key=' + keys[i] + '(?:&|$)'), folder.title);
+      if (keys[i]) {
+        assert.match(folder.heroBackdropUrl,
+          new RegExp('editorial-backdrop\\.jpg\\?key=' + keys[i] + '(?:&|$)'), folder.title);
+      } else {
+        assert.match(folder.heroBackdropUrl, /\/fr\/binge-watch-backdrop\.jpg\?/);
+      }
       assert(!folder.heroBackdropUrl.includes('/genre-backdrop.jpg'), folder.title + ' still uses legacy genre art');
       assert(!folder.heroBackdropUrl.includes('/platform-backdrop.svg'), folder.title + ' still uses VOD art');
     }
@@ -229,15 +246,15 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
     assert.match(collection.folders[2].coverImageUrl, /editorial-cover\.jpg\?key=series-new/);
     assert.match(collection.folders[3].coverImageUrl, /editorial-cover\.jpg\?key=series-returning/);
     assert.match(collection.folders[4].coverImageUrl, /editorial-cover\.jpg\?key=movies-new/);
-    assert.match(collection.folders[5].coverImageUrl, /editorial-cover\.jpg\?key=cinema-now/);
-    assert(collection.folders.every(f => f.coverImageUrl.includes('v=tv-readable-v4')),
+    assert.match(collection.folders[6].coverImageUrl, /editorial-cover\.jpg\?key=cinema-now/);
+    assert(collection.folders.every(f => f.id === 'editorial-binge-watch-series' || f.coverImageUrl.includes('v=tv-readable-v4')),
       'Shield/Desktop still reference cached oversized editorial title art');
   }
 });
 
 
 
-test('the six editorial hero titles are plain text, never a poster or logo', async () => {
+test('the seven editorial hero titles are plain text, never a poster or logo', async () => {
   const endpoints = [
     '/nuvio-collections-shield.json',
     '/nuvio-collections-desktop.json',
@@ -246,24 +263,29 @@ test('the six editorial hero titles are plain text, never a poster or logo', asy
   const ids = [
     'editorial-series-top-rated', 'editorial-series-trendy',
     'editorial-series-new', 'editorial-series-returning',
-    'editorial-movies-new', 'editorial-cinema-now'
+    'editorial-movies-new', 'editorial-binge-watch-series', 'editorial-cinema-now'
   ];
   for (const endpoint of endpoints) {
     const response = await call(endpoint);
     assert.equal(response.statusCode, 200, endpoint);
     const editorial = JSON.parse(response.text).find(c => c.id === 'calendar-archives-fr-editorial-now');
     assert(editorial, endpoint + ': editorial collection missing');
-    assert.equal(editorial.folders.length, 6, endpoint);
+    assert.equal(editorial.folders.length, 7, endpoint);
     for (const id of ids) {
       const folder = editorial.folders.find(f => f.id === id);
       assert(folder, endpoint + ': missing ' + id);
       assert.equal(folder.titleLogoUrl, null, endpoint + ': image replacing left text title');
       assert.equal(typeof folder.title, 'string', endpoint + ': native text title missing');
       assert(folder.title.trim().length > 3, endpoint + ': empty native title');
-      assert.match(folder.coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=/,
-        endpoint + ': approved cover modified');
-      assert.match(folder.heroBackdropUrl, /\/fr\/editorial-backdrop\.jpg\?key=/,
-        endpoint + ': cinematic hero modified');
+      if (id === 'editorial-binge-watch-series') {
+        assert.match(folder.coverImageUrl, /\/fr\/binge-watch-cover\.jpg\?/);
+        assert.match(folder.heroBackdropUrl, /\/fr\/binge-watch-backdrop\.jpg\?/);
+      } else {
+        assert.match(folder.coverImageUrl, /\/fr\/editorial-cover\.jpg\?key=/,
+          endpoint + ': approved cover modified');
+        assert.match(folder.heroBackdropUrl, /\/fr\/editorial-backdrop\.jpg\?key=/,
+          endpoint + ': cinematic hero modified');
+      }
     }
   }
 });
