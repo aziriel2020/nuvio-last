@@ -1,0 +1,42 @@
+name: Final Cinema V8 Production Check
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/final-cinema-v8-prod.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live Oracle Cinema v8
+        shell: bash
+        run: |
+          set -uo pipefail
+          BASE="https://141-145-215-202.nip.io"
+          echo '=== HEALTH ==='
+          curl -k -sS -L --connect-timeout 8 --max-time 15 "$BASE/_oracle/health"
+          echo
+          for KEY in nowplaying today thisweek thismonth previousmonth
+          do
+            OUT="$(mktemp)"
+            HDR="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -D "$HDR" -o "$OUT" -w '%{http_code}' "$BASE/fr/catalog/movie/cinema-torrentio-$KEY.json?probe=finalv8" || true)"
+            TOTAL="$(jq -r 'if (.metas|type)=="array" then (.metas|length) else -1 end' "$OUT" 2>/dev/null || echo -1)"
+            echo "BUCKET=$KEY HTTP=$CODE METAS=$TOTAL"
+            grep -i '^x-nuvio-cinema-' "$HDR" | tr -d '\r' || true
+            if [ "$TOTAL" != "0" ] && [ "$TOTAL" != "-1" ]; then jq -r '.metas[] | [.name,.id,.released] | @tsv' "$OUT" | head -10; fi
+            rm -f "$OUT" "$HDR"
+          done
+          for FILE in nuvio-collections-shield.json nuvio-collections-desktop.json
+          do
+            OUT="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -o "$OUT" -w '%{http_code}' "$BASE/$FILE?probe=finalv8" || true)"
+            echo -n "COLLECTION_FILE=$FILE HTTP=$CODE CINEMA="
+            jq -c '[.[] | select(.id=="cinema-now-torrentio")][0] // null | if .==null then null else {id,title,folders:[.folders[]? | {id,title,catalogId:(.sources[0].catalogId // null)}]} end' "$OUT"
+            rm -f "$OUT"
+          done
