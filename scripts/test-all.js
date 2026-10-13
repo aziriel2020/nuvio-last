@@ -10,7 +10,8 @@ const suites = [
   { name: 'Global VOD engine', cwd: path.join(root, 'regions', 'global'), args: ['--test'] },
   { name: 'Coexistence wrapper', cwd: root, args: ['--test', 'test/coexist.test.js'] },
   { name: 'Production audit helpers', cwd: root, args: ['--test', 'test/audit.test.mjs'] },
-  { name: 'Oracle Always Free guardrails', cwd: root, args: ['--test', 'test/oracle-config.test.mjs'] }
+  { name: 'Oracle Always Free guardrails', cwd: root, args: ['--test', 'test/oracle-config.test.mjs'] },
+  { name: 'Final Oracle Cinema production probe', cwd: root, args: ['--test', 'test/final-prod-smoke.test.mjs'] }
 ];
 
 for (const suite of suites) {
