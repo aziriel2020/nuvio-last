@@ -1,0 +1,73 @@
+name: Install Flight Radar on Oracle (isolated)
+on:
+  push:
+    branches:
+      - ops/flight-radar-isolated-probe
+    paths:
+      - .github/workflows/flight-radar-install.yml
+permissions:
+  contents: read
+concurrency:
+  group: flight-radar-oracle-install
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout verified Flight Radar snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: aziriel2020/flight-radar-oracle
+          ref: ebfa9ff4d0639ff2bdd0a56deb43083f14936244
+          persist-credentials: false
+      - name: Validate Python and shell before upload
+        run: |
+          set -Eeuo pipefail
+          python3 -m compileall -q flight_radar
+          bash -n deploy/oci/shared/install_shared.sh
+      - name: Decode Nuvio's existing OCI SSH secret to temp file
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/flight-radar-keys"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=os.environ.get("ORACLE_SSH_PRIVATE_KEY","").strip()
+          if not raw: raise SystemExit("Missing Oracle SSH secret")
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          Path(os.environ["RUNNER_TEMP"]+"/flight-radar-keys/oci.pem").write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("Invalid SSH key")
+          PY
+          chmod 600 "$RUNNER_TEMP/flight-radar-keys/oci.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/flight-radar-keys/oci.pem" >/dev/null
+      - name: Stage only Flight Radar code and install independent services
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          trap 'rm -rf "$RUNNER_TEMP/flight-radar-keys"' EXIT
+          key="$RUNNER_TEMP/flight-radar-keys/oci.pem"
+          host="ubuntu@141.145.215.202"
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$host" 'mkdir -p ~/flight-radar-setup'
+          tar -cf - --exclude=.git --exclude=.github --exclude=infra --exclude=tests . | ssh -i "$key" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$host" 'tar -xf - -C ~/flight-radar-setup'
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$host" 'cd ~/flight-radar-setup && sudo -n bash deploy/oci/shared/install_shared.sh'
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$host" 'set -e; test "$(systemctl is-active flight-radar-gateway.service)" = active; test "$(systemctl is-active nuvio.service)" = active; test "$(systemctl is-active caddy.service)" = active; curl -fsS http://127.0.0.1:18080/health; echo; curl -fsS -o /dev/null -w "city_image_http=%{http_code}\n" http://127.0.0.1:18080/images/destinations/FCO.svg; curl -fsS http://127.0.0.1:3000/_oracle/health | head -c 400; echo'
