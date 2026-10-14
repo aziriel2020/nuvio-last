@@ -1,0 +1,76 @@
+name: Flight Radar Oracle preflight (read-only)
+on:
+  push:
+    branches:
+      - ops/flight-radar-isolated-probe
+    paths:
+      - .github/workflows/flight-radar-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flight-radar-shared-vm-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Decode existing Oracle SSH key (no output)
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/flight-radar-keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ.get("ORACLE_SSH_PRIVATE_KEY","").strip()
+          if not raw: raise SystemExit("Missing existing Oracle SSH secret")
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          Path(os.environ["RUNNER_TEMP"]+"/flight-radar-keys/oci.pem").write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("Cannot decode existing Oracle key")
+          PY
+          chmod 600 "$RUNNER_TEMP/flight-radar-keys/oci.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/flight-radar-keys/oci.pem" >/dev/null
+      - name: Read-only Nuvio and Flight Radar resource audit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          trap 'rm -rf "$RUNNER_TEMP/flight-radar-keys"' EXIT
+          ssh -i "$RUNNER_TEMP/flight-radar-keys/oci.pem" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@141.145.215.202 "bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          echo '=== FIGHT RADAR PRE-FLIGHT / READ ONLY ==='
+          echo "architecture=$(uname -m)"
+          free -m | awk '/^Mem:/ {print "ram_total_mb="$2,"ram_available_mb="$7}'
+          df -Pm / | awk 'NR==2 {print "disk_available_mb="$4}'
+          echo "nuvio_status=$(systemctl is-active nuvio || true)"
+          echo "nuvio_timer_status=$(systemctl is-active nuvio-update.timer || true)"
+          echo "caddy_status=$(systemctl is-active caddy || true)"
+          echo "flight_radar_existing=$(systemctl is-enabled flight-radar.service 2>/dev/null || true)"
+          echo 'listening_ports:'
+          ss -ltn | head -15
+          echo 'existing_flight_radar_paths:'
+          for p in /opt/flight-radar /var/lib/flight-radar /etc/flight-radar; do
+            if [ -e "$p" ]; then echo "present $p"; else echo "not_present $p"; fi
+          done
+          echo 'nuvio_health_http:'
+          curl -sS -m 7 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/_oracle/health || true
+          REMOTE
