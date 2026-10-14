@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: aziriel2020/flight-radar-oracle
-          ref: ebfa9ff4d0639ff2bdd0a56deb43083f14936244
+          ref: e9870848d662d7f3f58e0a69c03912d27319de90
           persist-credentials: false
       - name: Validate Python and shell before upload
         run: |
