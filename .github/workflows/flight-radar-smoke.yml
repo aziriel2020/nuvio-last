@@ -1,0 +1,82 @@
+name: Flight Radar Oracle live collection smoke
+on:
+  push:
+    branches:
+      - ops/flight-radar-isolated-probe
+    paths:
+      - .github/workflows/flight-radar-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flight-radar-shared-vm-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Decode existing Oracle SSH key (no output)
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/flight-radar-keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ.get("ORACLE_SSH_PRIVATE_KEY","").strip()
+          if not raw: raise SystemExit("Missing existing Oracle SSH secret")
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          Path(os.environ["RUNNER_TEMP"]+"/flight-radar-keys/oci.pem").write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("Cannot decode existing Oracle key")
+          PY
+          chmod 600 "$RUNNER_TEMP/flight-radar-keys/oci.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/flight-radar-keys/oci.pem" >/dev/null
+      - name: Run bounded Flight Radar collector and compare Nuvio health
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          trap 'rm -rf "$RUNNER_TEMP/flight-radar-keys"' EXIT
+          ssh -i "$RUNNER_TEMP/flight-radar-keys/oci.pem" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@141.145.215.202 "bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          echo '=== FLIGHT RADAR ORACLE LIVE COLLECTOR SMOKE ==='
+          echo "nuvio_before=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/_oracle/health)"
+          echo "gateway_before=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health)"
+          echo 'Run one bounded, CPU-capped observation cycle:'
+          sudo -n systemctl start flight-radar-collector.service || true
+          systemctl show flight-radar-collector.service -p Result -p ExecMainStatus -p MemoryPeak -p CPUUsageNSec
+          sudo -n journalctl -u flight-radar-collector.service --no-pager -n 14 | sed -e 's/\\x1B\\[[0-9;]*[mK]//g'
+          echo 'Snapshot summary:'
+          python3 - <<'PYTHON'
+          import json
+          from pathlib import Path
+          p=Path('/var/lib/flight-radar/data/market.json')
+          d=json.loads(p.read_text())
+          print('status',d.get('status'))
+          print('observations',d.get('scanned_offers'))
+          print('history',d.get('history_observations'))
+          print('offers',len(d.get('offers',[])))
+          for o in d.get('offers',[])[:5]:
+              print(o.get('origin'),o.get('destination'),o.get('price_eur'),'EUR / indicative')
+          PYTHON
+          echo "nuvio_after=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/_oracle/health)"
+          echo "gateway_after=$(curl -fsS -m 6 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health)"
+          REMOTE
