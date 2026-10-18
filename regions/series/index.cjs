@@ -6,6 +6,7 @@ const sharp = require('sharp');
 const { ADDON_ID, VERSION, GENRES, periods, catalogId, parseCatalog } = require('./src/model.cjs');
 const { SeriesStore, defaultPath } = require('./src/store.cjs');
 const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
+const { decorateSeriesMetas } = require('./src/presentation.cjs');
 
 let cachedStore;
 let cachedPath;
@@ -40,13 +41,16 @@ function buildManifest(origin, now = new Date()) {
   return {
     id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Streaming France',
     description: 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates. Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
-    types: ['series'], resources: ['catalog', { name: 'meta', types: ['series'], idPrefixes: ['tt', 'tmdb:tv:', 'tvmaze:'] }],
-    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => dates.map((date) => ({
-      id: catalogId(mode, genre.id, date.key), type: 'series',
-      name: `${mode === 'seasons' ? 'Nouvelles saisons · France' : 'Streaming France'} · ${genre.name} · ${date.name}`,
+    types: ['series'], language: 'fr', resources: [{ name: 'catalog', types: ['series'] }, { name: 'meta', types: ['series'], idPrefixes: ['tt', 'tmdb:tv:', 'tvmaze:'] }],
+    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => dates.flatMap((date) => [false, true].map((legacy) => ({
+      // Both deployed imports must resolve to a named manifest descriptor.
+      // Changing the French-market filter did not invalidate old collections.
+      id: catalogId(mode, genre.id, date.key).replace('series-fr-', legacy ? 'series-world-' : 'series-fr-'), type: 'series',
+      name: date.name,
       pageSize: 100, showInHome: false,
+      extraSupported: ['skip', 'search'],
       extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
-    })))),
+    }))))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
     background: `${origin}/backdrop.jpg?v=france-v2`, behaviorHints: { configurable: false }
   };
@@ -143,7 +147,7 @@ async function handler(req, res) {
     const skip = Number(extra.get('skip') || url.searchParams.get('skip') || 0);
     const search = String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200);
     if (!store) return send(res, 503, { metas: [], error: 'Index en préparation. Consulter /series/status.json.' });
-    try { return send(res, 200, { metas: store.query({ ...descriptor, skip, search, now }) }, 'public, max-age=300'); }
+    try { return send(res, 200, { metas: decorateSeriesMetas(origin, store.query({ ...descriptor, skip, search, now }), descriptor) }); }
     catch (error) { if (/Invalid/.test(error.message)) return send(res, 400, { metas: [], error: error.message }); throw error; }
   }
   const metaMatch = url.pathname.match(/^\/meta\/series\/([^/]+)\.json$/);

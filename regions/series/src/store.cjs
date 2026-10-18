@@ -229,6 +229,7 @@ class SeriesStore {
     return {
       id, type: 'series', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
       background: row.background || row.poster || undefined,
+      streamingProviders: providers,
       description: [`Disponible en streaming en France${providers.length ? ` : ${providers.join(', ')}` : ''}. Disponibilité : JustWatch via TMDB.`,
         date ? `Première diffusion : ${row.first_air_date || 'inconnue'}${row.event_date && row.event_date !== row.first_air_date ? ` · Nouvelle saison : ${row.event_date}` : ''}` : 'Date de première diffusion inconnue', row.description,
         tvmaze ? `Données complémentaires : TVmaze · https://www.tvmaze.com/shows/${tvmaze.source_id}` : null].filter(Boolean).join('\n\n'),

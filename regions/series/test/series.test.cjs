@@ -10,6 +10,7 @@ const { SeriesStore } = require('../src/store.cjs');
 const addon = require('../index.cjs');
 const { scanFrance, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
 const { offersInFrance, discoverParams } = require('../src/france.cjs');
+const { decorateSeriesMetas } = require('../src/presentation.cjs');
 const NOW = new Date('2026-10-18T17:00:00Z');
 
 function tmdb(id, overrides = {}) {
@@ -128,6 +129,7 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   const manifest = addon._internals.buildManifest(origin, NOW);
   const collections = addon._internals.buildCollections(origin, NOW);
   const keys = new Set(manifest.catalogs.map((c) => c.id));
+  const labels = new Map(manifest.catalogs.map((c) => [c.id, c.name]));
   assert.equal(keys.size, manifest.catalogs.length);
   assert.equal(collections.length, 2);
   assert.equal(manifest.id, ADDON_ID);
@@ -135,7 +137,10 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   assert.equal(collections[0].folders.length, 25);
   for (const parent of collections) for (const folder of parent.folders) {
     assert.deepEqual(folder.sources.slice(1, 6).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
-    for (const source of folder.sources) { assert(keys.has(source.catalogId)); assert.equal(source.addonId, manifest.id); }
+    for (const source of folder.sources) {
+      assert(keys.has(source.catalogId)); assert.equal(source.addonId, manifest.id);
+      assert.equal(labels.get(source.catalogId.replace('series-fr-', 'series-world-')), labels.get(source.catalogId));
+    }
     assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === '1950'));
     assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'before1900'));
   }
@@ -143,7 +148,35 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   assert.equal(collections[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=france-v2`);
   assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=france-v2`);
   assert.match(manifest.name, /France/);
+  assert.equal(labels.get('series-fr-premieres-all-2026-10'), 'Octobre 2026');
+  assert.equal(labels.get('series-world-seasons-35-today'), 'Aujourd’hui');
+  assert(manifest.catalogs.every((c) => c.extraSupported.includes('skip')));
   assert.equal(new Set(collections.map((c) => c.id)).size, 2);
+});
+
+test('every series period uses existing custom Shield and Desktop covers while detail art stays raw', (t) => {
+  const store = memory(t);
+  store.upsert(tmdb(1, { name: 'Les Affaires organisées', poster_path: '/portrait.jpg', backdrop_path: '/backdrop.jpg' }));
+  const raw = store.query({ now: NOW })[0];
+  for (const mode of ['premieres', 'seasons']) for (const period of ['all', 'today', 'tomorrow', '2026-10', '1950', 'before1900', 'undated']) {
+    const [meta] = decorateSeriesMetas('https://example.test/series', [raw], { mode, period });
+    const wide = new URL(meta.background), poster = new URL(meta.poster), desktop = new URL(meta.banner);
+    assert.equal(meta.posterShape, 'landscape');
+    assert.equal(wide.pathname, '/fr/calendar-card.svg');
+    assert.equal(wide.searchParams.get('layout'), 'landscape');
+    assert.equal(wide.searchParams.get('src'), 'https://image.tmdb.org/t/p/w780/backdrop.jpg');
+    assert.equal(wide.searchParams.get('title'), raw.name);
+    assert.equal(wide.searchParams.get('provider'), 'Netflix');
+    assert.equal(poster.searchParams.get('layout'), 'portrait');
+    assert.equal(meta.landscapePoster, meta.background);
+    assert.equal(desktop.pathname, '/fr/desktop-content-card.jpg');
+    assert.equal(desktop.searchParams.get('design'), 'shield3');
+    assert.equal(desktop.searchParams.get('title'), raw.name);
+    assert.match(meta.logo, /\/fr\/calendar-transparent-logo\.svg\?/);
+  }
+  assert.equal(raw.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
+  assert.equal(store.meta(store.row('tmdb:1')).poster, raw.poster);
+  assert.equal(raw.logo, undefined);
 });
 
 test('search treats SQL operators and wildcard characters as text', (t) => {
@@ -276,7 +309,7 @@ test('HTTP addon exposes paged catalogs, rejects animation metadata, and reports
   const previous = process.env.NUVIO_SERIES_DB;
   process.env.NUVIO_SERIES_DB = path.join(dir, 'index.sqlite');
   const store = new SeriesStore(process.env.NUVIO_SERIES_DB);
-  store.upsert(tmdb(1)); store.upsert(tmdb(2, { genres: [{ id: 16 }] }));
+  store.upsert(tmdb(1, { poster_path: '/portrait.jpg', backdrop_path: '/backdrop.jpg' })); store.upsert(tmdb(2, { genres: [{ id: 16 }] }));
   async function call(url) {
     const result = { headers: {} };
     await addon({ url, headers: { host: 'example.test' } }, {
@@ -287,6 +320,11 @@ test('HTTP addon exposes paged catalogs, rejects animation metadata, and reports
   }
   const response = await call('/catalog/series/series-world-premieres-all-all/skip=0.json');
   assert.equal(response.status, 200); assert.equal(response.body.metas.length, 1);
+  assert.match(response.body.metas[0].background, /\/fr\/calendar-card\.svg\?/);
+  assert.match(response.body.metas[0].banner, /\/fr\/desktop-content-card\.jpg\?/);
+  assert.equal(response.headers['Cache-Control'], 'no-store');
+  const current = await call('/catalog/series/series-fr-premieres-all-all.json');
+  assert.deepEqual(current.body, response.body, 'legacy and current imports get the same France results and custom art');
   assert.equal((await call('/catalog/series/series-world-premieres-all-all/skip=-1.json')).status, 400);
   assert.equal((await call('/meta/series/tmdb%3Atv%3A2.json')).status, 404);
   assert.equal((await call('/status.json')).body.animationExcluded, 1);
