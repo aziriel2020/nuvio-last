@@ -33,11 +33,15 @@ Les points de reprise, erreurs et compteurs FR sont publics dans `/series/status
 
 Les identifiants existants sont conservés pour mettre à jour les collections en place. Les anciens IDs contenant `world` sont uniquement des identifiants de compatibilité ; leurs résultats sont désormais filtrés sur le marché FR.
 
-- Addon : `/series/manifest.json` (version 1.1.0, Nuvio Séries Streaming France).
+- Addon : `/series/manifest.json` (version 1.1.1, Nuvio Séries Streaming France).
 - Shield : `/series/nuvio-collections.json`.
 - Desktop : `/series/nuvio-collections-desktop.json`.
 
 Actualiser l'addon et réimporter le JSON adapté au client pour actualiser les titres et visuels. Les quatre addons historiques et leurs collections ne sont pas modifiés.
+
+Depuis la version 1.1.1, le manifest nomme aussi les anciens identifiants `series-world-*` : les collections des deux versions retrouvent les libellés de périodes (« Aujourd’hui », « Octobre 2026 », etc.) après actualisation du manifest dans Nuvio. Le texte générique « Séries - Série » est le fallback du client quand sa copie installée du manifest ne contient pas l'identifiant de la source.
+
+Les fiches des rangées utilisent exactement les renderers des calendriers France : poster portrait custom, `background`/`landscapePoster` 1600×900 pour Shield Modern, `banner` custom pour Desktop et logo transparent contre le doublon de titre. Cela s'applique à toutes les périodes, y compris toutes dates, archives annuelles et dates inconnues. Les fiches détail conservent leurs illustrations originales. Les images portent les URLs révisées des renderers existants ; les catalogues séries sont servis sans cache HTTP.
 
 La cover conserve l'art cinématique choisi et porte maintenant « SÉRIES STREAMING — MARCHÉ FRANÇAIS · TOUTES LES PLATEFORMES ». Son master est `assets/collection-art/series-france-v2.jpg` ; les routes révisées produisent du 1600×900 et du 1920×1080.
 

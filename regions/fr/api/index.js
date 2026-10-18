@@ -2238,7 +2238,7 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
     const originalBackground = meta?.background || null;
     const originalLandscape = meta?.landscapePoster || originalBackground || originalPoster;
     const append = calendarAppend(meta, catalog);
-    const homeVisible = isHomeCalendarPeriod(catalog?.period);
+    const homeVisible = catalog?.forceLandscapeCards === true || isHomeCalendarPeriod(catalog?.period);
 
     // Nuvio Modern Home is special: with "landscape posters" enabled it does
     // NOT prefer landscapePoster. buildCatalogItem() resolves item.backdropUrl,

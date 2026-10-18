@@ -1,7 +1,7 @@
 'use strict';
 
 const ADDON_ID = 'com.nuvio.series.world.liveaction';
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const { offersInFrance } = require('./france.cjs');
 const GENRES = Object.freeze([
   ['all', 'Toutes les séries'],

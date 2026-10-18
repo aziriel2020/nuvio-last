@@ -15,7 +15,7 @@ const port = process.env.SERIES_TEST_PORT || '3328';
 const origin = `http://127.0.0.1:${port}`;
 const filename = path.join(temp, 'index.sqlite');
 const store = new SeriesStore(filename);
-const fixture = (id, animation = false, market = 'FR') => fromTmdb({ id, name: `Fixture ${id}`, genres: [{ id: animation ? 16 : 18 }], first_air_date: '2026-01-01', external_ids: {}, 'watch/providers': { results: { [market]: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } } });
+const fixture = (id, animation = false, market = 'FR') => fromTmdb({ id, name: `Fixture ${id}`, genres: [{ id: animation ? 16 : 18 }], poster_path: '/portrait.jpg', backdrop_path: '/backdrop.jpg', first_air_date: '2026-01-01', external_ids: {}, 'watch/providers': { results: { [market]: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } } });
 for (let id = 1; id <= 205; id++) store.upsert(fixture(id));
 store.upsert(fixture(999, true));
 store.upsert(fixture(998, false, 'US'));
@@ -41,6 +41,8 @@ try {
   assert.equal(manifestResponse.headers.get('cache-control'), 'no-store');
   const manifest = await manifestResponse.json();
   assert.equal(manifest.name, 'Nuvio Séries Streaming France');
+  assert.equal(manifest.catalogs.find((c) => c.id === 'series-world-premieres-all-2026-10').name, 'Octobre 2026');
+  assert.equal(manifest.catalogs.find((c) => c.id === 'series-fr-premieres-all-2026-10').name, 'Octobre 2026');
   const imports = await (await get('/series/nuvio-collections.json')).json();
   const desktop = await (await get('/series/nuvio-collections-desktop.json')).json();
   assert.equal(imports.length, 2); assert.equal(desktop.length, 2);
@@ -52,6 +54,12 @@ try {
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('x-nuvio-runtime'), 'oracle-vm');
     const body = await response.json(); ids.push(...body.metas.map((m) => m.id));
+    for (const meta of body.metas) {
+      assert.equal(meta.posterShape, 'landscape');
+      assert.equal(new URL(meta.background).pathname, '/fr/calendar-card.svg');
+      assert.equal(new URL(meta.banner).pathname, '/fr/desktop-content-card.jpg');
+      assert.equal(new URL(meta.background).searchParams.get('title'), meta.name);
+    }
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
   assert(!ids.includes('tmdb:tv:999'));
