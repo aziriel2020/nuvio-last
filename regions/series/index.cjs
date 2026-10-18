@@ -1,12 +1,31 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
+const sharp = require('sharp');
 const { ADDON_ID, VERSION, GENRES, periods, catalogId, parseCatalog } = require('./src/model.cjs');
 const { SeriesStore, defaultPath } = require('./src/store.cjs');
 const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
 
 let cachedStore;
 let cachedPath;
+const APPROVED_COVER = path.resolve(__dirname, '../../assets/collection-art/series-world-approved-v1.jpg');
+const artwork = new Map();
+
+async function serveArtwork(res, variant) {
+  if (!artwork.has(variant)) {
+    const dimensions = variant === 'cover' ? [1600, 900] : [1920, 1080];
+    artwork.set(variant, sharp(APPROVED_COVER).resize(...dimensions, { fit: 'cover' }).jpeg({ quality: 92, mozjpeg: true }).toBuffer());
+  }
+  let bytes;
+  try { bytes = await artwork.get(variant); }
+  catch (error) { artwork.delete(variant); throw error; }
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  res.end(bytes);
+}
 function reader() {
   const filename = defaultPath();
   if (!fs.existsSync(filename)) return null;
@@ -28,15 +47,16 @@ function buildManifest(origin, now = new Date()) {
       pageSize: 100, showInHome: false,
       extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     })))),
-    logo: new URL('../fr/logo.svg', `${origin}/`).href, behaviorHints: { configurable: false }
+    logo: new URL('../fr/logo.svg', `${origin}/`).href,
+    background: `${origin}/backdrop.jpg?v=approved-v1`, behaviorHints: { configurable: false }
   };
 }
 
 function buildCollections(origin, now = new Date(), mode = 'shield') {
   const root = new URL('..', `${origin}/`).href.replace(/\/$/, '');
   const dates = periods(now);
-  const parentArt = process.env.NUVIO_SERIES_COVER_URL || `${root}/fr/genre-collection-art.jpg?type=series`;
-  // The generated proposal is deliberately not referenced until the user approves it.
+  const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=approved-v1`;
+  const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=approved-v1`;
   return ['premieres', 'seasons'].map((view) => ({
     id: `series-world-${view}`, title: view === 'premieres' ? '🌍 Toutes les séries · Par genres' : '🌍 Retours & nouvelles saisons',
     backdropImageUrl: parentArt, pinToTop: true, focusGlowEnabled: true,
@@ -49,8 +69,8 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
       const sources = dates.map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
       return {
         id: `series-world-${view}-${genre.id}`, title: genre.name,
-        coverImageUrl: genre.id === 'all' && process.env.NUVIO_SERIES_COVER_URL ? parentArt : `${root}/fr/${renderer}-genre-card.jpg?${imageParams}`,
-        heroBackdropUrl: `${root}/fr/genre-backdrop.jpg?genre=${slug}`,
+        coverImageUrl: genre.id === 'all' ? parentCover : `${root}/fr/${renderer}-genre-card.jpg?${imageParams}`,
+        heroBackdropUrl: genre.id === 'all' ? parentArt : `${root}/fr/genre-backdrop.jpg?genre=${slug}`,
         tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
       };
@@ -106,6 +126,7 @@ async function handler(req, res) {
   const url = new URL(req.url, base);
   const origin = `${url.origin}/series`;
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
+  if (url.pathname === '/cover.jpg' || url.pathname === '/backdrop.jpg') return serveArtwork(res, url.pathname === '/cover.jpg' ? 'cover' : 'backdrop');
   if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now), 'public, max-age=300');
   if (['/nuvio-collections.json', '/collections.json', '/nuvio-collections-desktop.json'].includes(url.pathname)) {
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'), 'public, max-age=300');

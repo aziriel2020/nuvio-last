@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import sharp from 'sharp';
 const require = createRequire(import.meta.url);
 const { SeriesStore } = require('../regions/series/src/store.cjs');
 const { fromTmdb } = require('../regions/series/src/model.cjs');
@@ -59,6 +60,11 @@ try {
   assert.equal(status.eligible, 204); assert.equal(status.animationExcluded, 2);
   const image = await get(new URL(imports[0].folders[0].coverImageUrl).pathname + new URL(imports[0].folders[0].coverImageUrl).search);
   assert.equal(image.status, 200); assert.match(image.headers.get('content-type'), /^image\/jpeg/);
+  const imageMeta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
+  assert.equal(imageMeta.width, 1600); assert.equal(imageMeta.height, 900);
+  const background = await get('/series/backdrop.jpg?v=approved-v1');
+  const backgroundMeta = await sharp(Buffer.from(await background.arrayBuffer())).metadata();
+  assert.equal(backgroundMeta.width, 1920); assert.equal(backgroundMeta.height, 1080);
   console.log('Series Oracle integration passed: manifests, Shield/Desktop imports, 205 paginated entries, live animation correction, metadata gate, progress and cover renderer.');
 } finally {
   child.kill('SIGTERM');

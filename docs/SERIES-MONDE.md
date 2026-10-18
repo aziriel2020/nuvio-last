@@ -50,9 +50,9 @@ Installer l'addon puis importer les deux nouvelles collections une fois. Les qua
 
 L'addon fournit catalogues et fiches/épisodes ; les sources vidéo continuent de dépendre des addons de lecture installés. Les séries sans IMDb utilisent les identifiants `tmdb:tv:ID` ou `tvmaze:ID`, dont la prise en charge dépend des addons de lecture.
 
-## Cover à approuver
+## Cover approuvée
 
-La proposition « SÉRIES MONDE — TOUS LES GENRES · TOUTES LES ÉPOQUES » a été générée et présentée dans la conversation. Elle n'est pas copiée dans le dépôt et n'est pas utilisée sans approbation de l'utilisateur. Les routes réutilisent provisoirement les visuels existants pour que le backend soit testable. Après approbation, ajouter l'asset choisi dans le dépôt, produire les variantes 1600×900 / 1920×1080, puis définir `NUVIO_SERIES_COVER_URL` ou sa valeur par défaut versionnée avant la mise en production.
+La cover « SÉRIES MONDE — TOUS LES GENRES · TOUTES LES ÉPOQUES » a été approuvée le 18 octobre 2026. Son master JPEG est conservé dans `assets/collection-art/series-world-approved-v1.jpg`. Les routes `/series/cover.jpg?v=approved-v1` et `/series/backdrop.jpg?v=approved-v1` produisent les variantes 1600×900 et 1920×1080, utilisées par les deux collections. Les dossiers de genres conservent les rendus cinématiques existants. Des surcharges restent possibles via `NUVIO_SERIES_COVER_URL` et `NUVIO_SERIES_BACKDROP_URL`.
 
 ## Validation
 

@@ -138,6 +138,8 @@ test('archive imports reference real unique catalogs, cover old series, and pres
     assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'before1900'));
   }
   assert.equal(JSON.stringify(collections).includes('generated_images'), false, 'unapproved cover must not be integrated');
+  assert.equal(collections[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=approved-v1`);
+  assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=approved-v1`);
   assert.equal(new Set(collections.map((c) => c.id)).size, 2);
 });
 
