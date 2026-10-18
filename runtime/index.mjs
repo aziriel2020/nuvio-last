@@ -61,6 +61,10 @@ async function staticRuntimeAsset(request, env) {
   headers.set('Access-Control-Allow-Origin', '*');
   headers.set('X-Nuvio-Edge', 'oracle-node');
   headers.set('X-Nuvio-Origin', 'oracle-static');
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith('/series/') || /^\/nuvio-collections-series(?:-desktop)?\.json$/.test(pathname)) {
+    headers.set('Cache-Control', 'no-store');
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

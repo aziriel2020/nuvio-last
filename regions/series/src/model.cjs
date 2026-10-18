@@ -1,7 +1,8 @@
 'use strict';
 
 const ADDON_ID = 'com.nuvio.series.world.liveaction';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
+const { offersInFrance } = require('./france.cjs');
 const GENRES = Object.freeze([
   ['all', 'Toutes les séries'],
   ['10759', 'Action & Aventure'], ['35', 'Comédie'], ['80', 'Crime / Policier'],
@@ -63,6 +64,7 @@ function fromTmdb(data) {
     poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
     background: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : null,
     genres: unique(genres), classification: classify({ genres, keywords }),
+    franceOffers: data['watch/providers'] !== undefined ? offersInFrance(data) : undefined,
     countries: data.origin_country || [], languages: unique([data.original_language]), status: data.status || null,
     seasons: (data.seasons || []).filter((s) => Number(s.season_number) > 0).map((s) => ({ number: Number(s.season_number), date: isoDate(s.air_date), name: s.name || null }))
   };
@@ -128,9 +130,9 @@ function periods(now = new Date()) {
   return out.map(([key, name]) => ({ key, name }));
 }
 
-function catalogId(mode, genre, period) { return `series-world-${mode}-${genre}-${period}`; }
+function catalogId(mode, genre, period) { return `series-fr-${mode}-${genre}-${period}`; }
 function parseCatalog(id) {
-  const match = String(id).match(/^series-world-(premieres|seasons)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|\d{4}(?:-\d{2})?)$/);
+  const match = String(id).match(/^series-(?:world|fr)-(premieres|seasons)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|\d{4}(?:-\d{2})?)$/);
   return match && GENRES.some((g) => g.id === match[2]) ? { mode: match[1], genre: match[2], period: match[3] } : null;
 }
 

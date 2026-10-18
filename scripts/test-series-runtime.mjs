@@ -15,9 +15,10 @@ const port = process.env.SERIES_TEST_PORT || '3328';
 const origin = `http://127.0.0.1:${port}`;
 const filename = path.join(temp, 'index.sqlite');
 const store = new SeriesStore(filename);
-const fixture = (id, animation = false) => fromTmdb({ id, name: `Fixture ${id}`, genres: [{ id: animation ? 16 : 18 }], first_air_date: '2026-01-01', external_ids: {} });
+const fixture = (id, animation = false, market = 'FR') => fromTmdb({ id, name: `Fixture ${id}`, genres: [{ id: animation ? 16 : 18 }], first_air_date: '2026-01-01', external_ids: {}, 'watch/providers': { results: { [market]: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } } });
 for (let id = 1; id <= 205; id++) store.upsert(fixture(id));
 store.upsert(fixture(999, true));
+store.upsert(fixture(998, false, 'US'));
 const env = { ...process.env, PUBLIC_ORIGIN: origin, PORT: port, HOST: '127.0.0.1', NUVIO_SERIES_DB: filename,
   NUVIO_CACHE_DIR: path.join(temp, 'cache'), NUVIO_NOW_OVERRIDE: '2026-10-18T17:00:00Z' };
 execFileSync(process.execPath, ['scripts/build-runtime.js'], { env, stdio: 'pipe' });
@@ -36,7 +37,10 @@ try {
   assert(ready, `Oracle test server failed to start: ${logs}`);
   const install = await (await get('/install.json')).json();
   assert.equal(install.seriesManifest, `${origin}/series/manifest.json`);
-  const manifest = await (await get('/series/manifest.json')).json();
+  const manifestResponse = await get('/series/manifest.json');
+  assert.equal(manifestResponse.headers.get('cache-control'), 'no-store');
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.name, 'Nuvio Séries Streaming France');
   const imports = await (await get('/series/nuvio-collections.json')).json();
   const desktop = await (await get('/series/nuvio-collections-desktop.json')).json();
   assert.equal(imports.length, 2); assert.equal(desktop.length, 2);
@@ -51,6 +55,8 @@ try {
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
   assert(!ids.includes('tmdb:tv:999'));
+  assert(!ids.includes('tmdb:tv:998'));
+  assert.equal((await get('/series/meta/series/tmdb%3Atv%3A998.json')).status, 404);
   assert.equal((await get('/series/meta/series/tmdb%3Atv%3A999.json')).status, 404);
   // The independent sync connection changes SQLite while the HTTP reader stays open.
   store.upsert(fixture(1, true));
@@ -62,7 +68,7 @@ try {
   assert.equal(image.status, 200); assert.match(image.headers.get('content-type'), /^image\/jpeg/);
   const imageMeta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
   assert.equal(imageMeta.width, 1600); assert.equal(imageMeta.height, 900);
-  const background = await get('/series/backdrop.jpg?v=approved-v1');
+  const background = await get('/series/backdrop.jpg?v=france-v2');
   const backgroundMeta = await sharp(Buffer.from(await background.arrayBuffer())).metadata();
   assert.equal(backgroundMeta.width, 1920); assert.equal(backgroundMeta.height, 1080);
   console.log('Series Oracle integration passed: manifests, Shield/Desktop imports, 205 paginated entries, live animation correction, metadata gate, progress and cover renderer.');

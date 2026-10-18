@@ -9,7 +9,7 @@ const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
 
 let cachedStore;
 let cachedPath;
-const APPROVED_COVER = path.resolve(__dirname, '../../assets/collection-art/series-world-approved-v1.jpg');
+const APPROVED_COVER = path.resolve(__dirname, '../../assets/collection-art/series-france-v2.jpg');
 const artwork = new Map();
 
 async function serveArtwork(res, variant) {
@@ -38,34 +38,34 @@ function reader() {
 function buildManifest(origin, now = new Date()) {
   const dates = periods(now);
   return {
-    id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Monde',
-    description: 'Séries du monde entier par genres et dates ; premières diffusions et nouvelles saisons. Animation et anime exclus. Indexation progressive TMDB + TVmaze.',
+    id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Streaming France',
+    description: 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates. Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     types: ['series'], resources: ['catalog', { name: 'meta', types: ['series'], idPrefixes: ['tt', 'tmdb:tv:', 'tvmaze:'] }],
     catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => dates.map((date) => ({
       id: catalogId(mode, genre.id, date.key), type: 'series',
-      name: `${mode === 'seasons' ? 'Nouvelles saisons' : 'Séries Monde'} · ${genre.name} · ${date.name}`,
+      name: `${mode === 'seasons' ? 'Nouvelles saisons · France' : 'Streaming France'} · ${genre.name} · ${date.name}`,
       pageSize: 100, showInHome: false,
       extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     })))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
-    background: `${origin}/backdrop.jpg?v=approved-v1`, behaviorHints: { configurable: false }
+    background: `${origin}/backdrop.jpg?v=france-v2`, behaviorHints: { configurable: false }
   };
 }
 
 function buildCollections(origin, now = new Date(), mode = 'shield') {
   const root = new URL('..', `${origin}/`).href.replace(/\/$/, '');
   const dates = periods(now);
-  const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=approved-v1`;
-  const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=approved-v1`;
+  const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=france-v2`;
+  const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=france-v2`;
   return ['premieres', 'seasons'].map((view) => ({
-    id: `series-world-${view}`, title: view === 'premieres' ? '🌍 Toutes les séries · Par genres' : '🌍 Retours & nouvelles saisons',
+    id: `series-world-${view}`, title: view === 'premieres' ? '🇫🇷 Séries en streaming · Tous services' : '🇫🇷 Streaming · Nouvelles saisons',
     backdropImageUrl: parentArt, pinToTop: true, focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
     folders: GENRES.map((genre) => {
       const genreSlugs = { '10759': 'action-adventure', '35': 'comedy', '80': 'crime', '18': 'drama', '9648': 'mystery', '10765': 'scifi-fantasy', '10768': 'war-politics', '37': 'western', '10766': 'soap', '10751': 'family', '10762': 'kids', '99': 'documentary', '10764': 'reality', '10767': 'talk', '10763': 'news', thriller: 'crime', horror: 'mystery', romance: 'drama', history: 'drama', medical: 'drama', legal: 'crime', espionage: 'action-adventure', miniseries: 'drama', unclassified: 'drama', all: 'drama' };
       const slug = genreSlugs[genre.id];
       const renderer = mode === 'desktop' ? 'desktop' : 'shield';
-      const imageParams = new URLSearchParams({ genre: slug, type: 'series', title: genre.name, label: 'SÉRIES MONDE', v: 'series-world-v1' });
+      const imageParams = new URLSearchParams({ genre: slug, type: 'series', title: genre.name, label: 'STREAMING FRANCE', v: 'series-france-v2' });
       const sources = dates.map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
       return {
         id: `series-world-${view}-${genre.id}`, title: genre.name,
@@ -132,7 +132,8 @@ async function handler(req, res) {
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'), 'public, max-age=300');
   }
   const store = reader();
-  if (url.pathname === '/status.json') return send(res, 200, store ? { ok: true, ...store.stats() } : { ok: false, state: 'index-not-created', eligible: 0 });
+  if (url.pathname === '/status.json') return send(res, 200, store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 });
+  if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB', providers: store?.franceProviders() || [] });
   if (url.pathname.startsWith('/catalog/series/')) {
     const match = url.pathname.match(/^\/catalog\/series\/([^/]+)(?:\/([^/]+))?\.json$/);
     if (!match) return send(res, 404, { error: 'Catalogue inconnu' });
@@ -151,7 +152,7 @@ async function handler(req, res) {
     const id = decodeURIComponent(metaMatch[1]);
     const internal = id.replace(/^tmdb:tv:/, 'tmdb:');
     const row = store.row(internal);
-    if (!row || row.classification !== 'eligible') return send(res, 404, { meta: null });
+    if (!row || row.classification !== 'eligible' || !store.hasFranceAvailability(row.id)) return send(res, 404, { meta: null });
     try { return send(res, 200, { meta: await metaFor(store, row, id) }, 'public, max-age=300'); }
     catch { return send(res, 503, { meta: store.meta(row), error: 'Épisodes temporairement indisponibles' }); }
   }
