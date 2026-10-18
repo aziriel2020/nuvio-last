@@ -110,7 +110,9 @@ if (!String(install.combinedCollections || '').startsWith(process.env.PUBLIC_ORI
 console.log('Final Oracle build origin verified:', process.env.PUBLIC_ORIGIN);
 NODE"
 
+install -d -m 0755 -o nuvio -g nuvio /var/lib/nuvio-series
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
+install -m 0644 "$TARGET/oracle/nuvio-series-sync.service" /etc/systemd/system/nuvio-series-sync.service
 install -d -m 0755 /etc/nuvio
 printf 'NUVIO_GIT_SHA=%s\n' "$SHA" > /etc/nuvio/release.env.new
 chmod 0644 /etc/nuvio/release.env.new
@@ -130,6 +132,8 @@ mv -Tf "$BASE/current.new" "$CURRENT"
 chown -h nuvio:nuvio "$CURRENT"
 
 systemctl daemon-reload
+systemctl enable nuvio-series-sync.service
+systemctl restart nuvio-series-sync.service
 systemctl restart nuvio
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
@@ -146,9 +150,11 @@ if ! curl -fsS --max-time 5 http://127.0.0.1:3000/_oracle/health >/dev/null; the
   journalctl -u nuvio -n 80 --no-pager >&2 || true
   if [[ -n "$PREVIOUS" && -d "$PREVIOUS" && "$PREVIOUS" != "$TARGET" ]]; then
     echo "Rolling back to $(basename "$PREVIOUS")" >&2
+    systemctl stop nuvio-series-sync.service || true
     ln -sfn "$PREVIOUS" "$BASE/current.rollback"
     mv -Tf "$BASE/current.rollback" "$CURRENT"
     systemctl restart nuvio
+    if [[ -f "$PREVIOUS/scripts/sync-series-world.cjs" ]]; then systemctl start nuvio-series-sync.service; fi
     systemctl reload caddy 2>/dev/null || true
   fi
   exit 1

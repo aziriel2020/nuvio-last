@@ -205,6 +205,9 @@ jobs:
       - name: Test neutral runtime layer
         run: npm run test:runtime
 
+      - name: Test worldwide series against the Oracle HTTP runtime
+        run: node scripts/test-series-runtime.mjs
+
       - name: Test Oracle VM integration
         run: npm run test:oracle
 

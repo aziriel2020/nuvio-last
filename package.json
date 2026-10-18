@@ -9,6 +9,8 @@
     "build:runtime": "node scripts/build-runtime.js",
     "build:oracle": "npm run build:runtime",
     "test:runtime": "node --test test/runtime.test.js",
+    "test:series": "node --test regions/series/test/*.test.cjs",
+    "sync:series": "node scripts/sync-series-world.cjs",
     "audit:catalogs": "node scripts/audit-production-catalogs.mjs",
     "start:oracle": "node oracle/server.mjs",
     "test:oracle": "node scripts/test-oracle-runtime.mjs",
@@ -18,7 +20,7 @@
     "audit:editorial-backdrops": "node scripts/audit-editorial-backdrops.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "sharp": "^0.34.3",

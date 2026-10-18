@@ -14,7 +14,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y ca-certificates curl git jq ufw sudo debian-keyring debian-archive-keyring apt-transport-https gnupg
 
-if ! command -v node >/dev/null || [[ "$(node -p 'Number(process.versions.node.split(".")[0])')" -lt 22 ]]; then
+if ! command -v node >/dev/null || ! node -e 'const [major,minor]=process.versions.node.split(".").map(Number);process.exit(major>22 || (major===22 && minor>=13) ? 0 : 1)'; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
@@ -30,8 +30,8 @@ fi
 
 id -u nuvio >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/nuvio --shell /bin/bash nuvio
 
-mkdir -p /opt/nuvio/source /opt/nuvio/releases /etc/nuvio /var/cache/nuvio /var/log/caddy
-chown -R nuvio:nuvio /opt/nuvio /var/cache/nuvio
+mkdir -p /opt/nuvio/source /opt/nuvio/releases /etc/nuvio /var/cache/nuvio /var/lib/nuvio-series /var/log/caddy
+chown -R nuvio:nuvio /opt/nuvio /var/cache/nuvio /var/lib/nuvio-series
 chown -R caddy:caddy /var/log/caddy
 
 if [[ ! -d /opt/nuvio/source/.git ]]; then
