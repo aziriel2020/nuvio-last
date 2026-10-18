@@ -1,0 +1,62 @@
+name: Oracle Torrentio Network Probe
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/oracle-torrentio-network.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Install Oracle SSH key
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          printf '%s' "$ORACLE_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/keys/key.raw"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=Path(os.environ["RUNNER_TEMP"]+"/keys/key.raw").read_text().strip()
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      p=Path(os.environ["RUNNER_TEMP"]+"/keys/oracle.pem")
+                      p.write_text(b+"\n"+body+"\n"+e+"\n")
+                      raise SystemExit
+          raise SystemExit("bad key")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle.pem"
+
+      - name: Probe Torrentio from Oracle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$RUNNER_TEMP/keys/oracle.pem" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@141.145.215.202 \
+            "bash -s" <<'REMOTE'
+          set -u
+          for URL in \
+            "https://torrentio.strem.fun/manifest.json" \
+            "https://torrentio.strem.fun/stream/movie/tt1375666.json"
+          do
+            curl -sS -L --connect-timeout 8 --max-time 12 -o /dev/null \
+              -w 'PROBE url=%{url_effective} http=%{http_code} time=%{time_total} bytes=%{size_download}\n' "$URL" || true
+          done
+          REMOTE
