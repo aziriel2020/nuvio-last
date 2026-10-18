@@ -7,6 +7,7 @@ const usHandler = require('../regions/us/api/index');
 const frHandler = require('../regions/fr/api/index');
 const globalHandler = require('../regions/global/api/index');
 const trHandler = require('../regions/tr/api/index');
+const seriesHandler = require('../regions/series/index.cjs');
 
 const VERSION = '1.4.0';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
@@ -445,6 +446,10 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, {
       version: VERSION,
+      seriesManifest: `${origin}/series/manifest.json`,
+      seriesCollections: `${origin}/series/nuvio-collections.json`,
+      seriesDesktopCollections: `${origin}/series/nuvio-collections-desktop.json`,
+      seriesStatus: `${origin}/series/status.json`,
       franceManifest: `${origin}/fr/manifest.json`,
       globalManifest: `${origin}/global/manifest.json`,
       turkeyManifest: `${origin}/tr/manifest.json`,
@@ -457,6 +462,11 @@ module.exports = async function handler(req, res) {
       check: `${origin}/coexistence-check.json`
     }, 'no-store');
   }
+  if (path === '/nuvio-collections-series.json' || path === '/nuvio-collections-series-desktop.json') {
+    const origin = originFromRequest(req);
+    return sendJson(res, 200, seriesHandler._internals.buildCollections(`${origin}/series`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), LARGE_JSON_CACHE);
+  }
+  if (path === '/series' || path.startsWith('/series/')) return delegate(req, res, '/series', seriesHandler);
   if (path === '/global' || path.startsWith('/global/')) return delegate(req, res, '/global', globalHandler);
   if (path === '/tr' || path.startsWith('/tr/')) return delegate(req, res, '/tr', trHandler);
   if (path === '/us' || path.startsWith('/us/')) return delegate(req, res, '/us', usHandler);

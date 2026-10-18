@@ -1,0 +1,28 @@
+[Unit]
+Description=Nuvio Series Monde persistent catalog indexer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nuvio
+Group=nuvio
+WorkingDirectory=/opt/nuvio/current
+Environment=NODE_ENV=production
+Environment=NUVIO_SERIES_DB=/var/lib/nuvio-series/index.sqlite
+EnvironmentFile=/etc/nuvio/nuvio.env
+ExecStart=/usr/bin/flock -n /var/lib/nuvio-series/sync.lock /usr/bin/node /opt/nuvio/current/scripts/sync-series-world.cjs
+Restart=always
+RestartSec=30
+TimeoutStopSec=35
+MemoryMax=768M
+CPUQuota=25%
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nuvio-series
+
+[Install]
+WantedBy=multi-user.target
