@@ -2462,7 +2462,12 @@ async function handleCalendarCard(res, url) {
         const declaredLength = Number(response.headers?.get?.('content-length') || 0);
         if (!declaredLength || declaredLength <= 3.5 * 1024 * 1024) {
           const bytes = Buffer.from(await response.arrayBuffer());
-          if (bytes.length <= 3.5 * 1024 * 1024) imageDataUri = `data:${contentType};base64,${bytes.toString('base64')}`;
+          if (bytes.length <= 3.5 * 1024 * 1024) {
+            // SVG decoders do not all support an embedded WebP bitmap.
+            const embedded = contentType === 'image/webp'
+              ? await sharp(bytes).jpeg({ quality: 92 }).toBuffer() : bytes;
+            imageDataUri = `data:${contentType === 'image/webp' ? 'image/jpeg' : contentType};base64,${embedded.toString('base64')}`;
+          }
         }
       }
     }

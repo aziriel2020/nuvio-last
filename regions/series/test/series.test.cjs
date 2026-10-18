@@ -11,6 +11,8 @@ const addon = require('../index.cjs');
 const { scanFrance, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
 const { offersInFrance, discoverParams } = require('../src/france.cjs');
 const { decorateSeriesMetas } = require('../src/presentation.cjs');
+const sharp = require('sharp');
+const franceAddon = require('../../fr/api/index.js');
 const NOW = new Date('2026-10-18T17:00:00Z');
 
 function tmdb(id, overrides = {}) {
@@ -177,6 +179,20 @@ test('every series period uses existing custom Shield and Desktop covers while d
   assert.equal(raw.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
   assert.equal(store.meta(store.row('tmdb:1')).poster, raw.poster);
   assert.equal(raw.logo, undefined);
+});
+
+test('WebP source art remains visible in SVG decoders that only support JPEG and PNG', async (t) => {
+  const photo = await sharp({ create: { width: 32, height: 18, channels: 3, background: '#e5ad2b' } }).webp().toBuffer();
+  t.mock.method(global, 'fetch', async () => new Response(photo, { headers: { 'content-type': 'image/webp' } }));
+  let svg;
+  await franceAddon({ method: 'GET', url: '/calendar-card.svg?src=https%3A%2F%2Fimage.tmdb.org%2Ft%2Fp%2Fw780%2Fdemo.jpg&layout=landscape&title=Photo&provider=Netflix&type=series', headers: { host: 'example.test' } }, {
+    setHeader() {}, end(body) { svg = body; }
+  });
+  assert.match(svg, /data:image\/jpeg;base64,/);
+  assert(!svg.includes('data:image/webp'));
+  const { data, info } = await sharp(Buffer.from(svg)).raw().toBuffer({ resolveWithObject: true });
+  const pixel = (200 * info.width + 800) * info.channels;
+  assert(data[pixel] > 100 && data[pixel + 1] > 70, 'photography must remain visible, not a black SVG background');
 });
 
 test('search treats SQL operators and wildcard characters as text', (t) => {
