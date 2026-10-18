@@ -2,19 +2,20 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Readable } = require('node:stream');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { fromTmdb, fromTvmaze, windowFor, isoDate, parseCatalog, ADDON_ID } = require('../src/model.cjs');
 const { SeriesStore } = require('../src/store.cjs');
 const addon = require('../index.cjs');
-const { ingestIds, exportDay } = require('../../../scripts/sync-series-world.cjs');
+const { scanFrance, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
+const { offersInFrance, discoverParams } = require('../src/france.cjs');
 const NOW = new Date('2026-10-18T17:00:00Z');
 
 function tmdb(id, overrides = {}) {
   return fromTmdb({ id, name: `Série ${id}`, first_air_date: '2026-10-12', origin_country: ['JP'],
-    original_language: 'ja', genres: [{ id: 18 }], external_ids: {}, ...overrides });
+    original_language: 'ja', genres: [{ id: 18 }], external_ids: {},
+    'watch/providers': { results: { FR: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } }, ...overrides });
 }
 function maze(id, overrides = {}) {
   return fromTvmaze({ id, name: `Show ${id}`, type: 'Scripted', genres: ['Drama'], premiered: '2026-10-12', ...overrides });
@@ -43,7 +44,8 @@ test('cross-source animation signals take precedence over live-action genre labe
 
 test('missing dates and missing genres do not drop classified live-action series', (t) => {
   const store = memory(t);
-  store.upsert(maze(1, { genres: [], premiered: null }));
+  store.upsert(maze(1, { genres: [], premiered: null, externals: { imdb: 'tt10' } }));
+  store.upsert(tmdb(10, { genres: [], first_air_date: null, external_ids: { imdb_id: 'tt10' } }));
   store.upsert(tmdb(2, { genres: [], first_air_date: null }));
   assert.equal(store.query({ genre: 'unclassified', period: 'undated', now: NOW }).length, 1);
   assert.equal(store.query({ now: NOW }).length, 1);
@@ -55,6 +57,7 @@ test('IMDb identity merges sources, preserves French metadata, and does not merg
   store.upsert(maze(1, { name: 'English Title', externals: { imdb: 'tt500', thetvdb: 800 } }));
   store.upsert(tmdb(9, { name: 'Titre français', external_ids: { imdb_id: 'tt500', tvdb_id: 800 } }));
   store.upsert(maze(2, { name: 'English Title', externals: { imdb: 'tt501' } }));
+  store.upsert(tmdb(10, { name: 'English Title', external_ids: { imdb_id: 'tt501' } }));
   store.upsert(maze(1, { name: 'English Title Updated', externals: { imdb: 'tt500', thetvdb: 800 } }));
   const rows = store.query({ now: NOW });
   assert.equal(rows.length, 2);
@@ -118,7 +121,6 @@ test('calendar dates respect Brussels midnight, civil weeks and leap years', () 
   assert.equal(windowFor('2024-02').end, '2024-02-29');
   assert.equal(isoDate('2026-02-30'), null);
   assert.throws(() => windowFor('2026-13'));
-  assert.equal(exportDay(new Date('2026-10-18T07:59:00Z')), '2026-10-17');
 });
 
 test('archive imports reference real unique catalogs, cover old series, and preserve native periods', () => {
@@ -137,9 +139,10 @@ test('archive imports reference real unique catalogs, cover old series, and pres
     assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === '1950'));
     assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'before1900'));
   }
-  assert.equal(JSON.stringify(collections).includes('generated_images'), false, 'unapproved cover must not be integrated');
-  assert.equal(collections[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=approved-v1`);
-  assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=approved-v1`);
+  assert.equal(JSON.stringify(collections).includes('generated_images'), false);
+  assert.equal(collections[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=france-v2`);
+  assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=france-v2`);
+  assert.match(manifest.name, /France/);
   assert.equal(new Set(collections.map((c) => c.id)).size, 2);
 });
 
@@ -152,14 +155,22 @@ test('search treats SQL operators and wildcard characters as text', (t) => {
   assert.throws(() => store.query({ skip: 0.5 }));
 });
 
-test('export ingestion is resumable, idempotent, streaming and rejects malformed rows', async (t) => {
+test('France discovery includes every service, resumes pages, and deduplicates providers', async (t) => {
   const store = memory(t);
-  const body = Array.from({ length: 1201 }, (_, i) => JSON.stringify({ id: i + 1 })).join('\n');
-  assert.equal(await ingestIds(store, Readable.from([body])), 1201);
-  assert.equal(await ingestIds(store, Readable.from([body])), 1201);
-  assert.equal(store.jobs('tmdb', 2000).length, 1201);
-  await assert.rejects(ingestIds(store, Readable.from(['{"id":0}\n'])), /Malformed/);
-  await assert.rejects(ingestIds(store, Readable.from([''])), /Empty/);
+  const calls = [];
+  const api = async (endpoint, params) => {
+    calls.push({ endpoint, params });
+    if (endpoint === '/watch/providers/tv') return { results: [{ provider_id: 8, provider_name: 'Netflix' }, { provider_id: 999999, provider_name: 'Nouveau service FR' }] };
+    assert.equal(params.watch_region, 'FR'); assert.equal(params.with_watch_providers, '8|999999');
+    return { total_pages: 2, results: [{ id: params.page, name: `France ${params.page}`, genre_ids: [18], first_air_date: '2026-01-01' }] };
+  };
+  const first = await scanFrance(store, { api, maxPages: 1, delay: 0 });
+  assert.equal(first.complete, false); assert.equal(store.query({ now: NOW }).length, 1);
+  await scanFrance(store, { api, maxPages: 1, delay: 0 });
+  assert.equal(store.state('frScanProgress').complete, true);
+  assert.equal(store.query({ now: NOW }).length, 2);
+  assert.equal(calls.filter((c) => c.endpoint === '/watch/providers/tv').length, 1);
+  assert.equal(store.franceProviders().length, 2);
 });
 
 test('upstream failures retain existing catalog data and persist retry state across reopen', (t) => {
@@ -181,14 +192,83 @@ test('changed shows are refreshed ahead of the initial archive backlog', (t) => 
   assert.equal(store.jobs('tmdb')[0].source_id, 100);
 });
 
-test('removing a deleted source retains the independently indexed show', (t) => {
+test('removing the availability source removes the title from the France catalog', (t) => {
   const store = memory(t);
   store.upsert(tmdb(1, { external_ids: { imdb_id: 'tt100' } }));
   store.upsert(maze(2, { externals: { imdb: 'tt100' } }));
   store.removeSource('tmdb', 1);
-  assert.equal(store.query({ now: NOW }).length, 1);
+  assert.equal(store.query({ now: NOW }).length, 0);
   store.removeSource('tvmaze', 2);
   assert.equal(store.query({ now: NOW }).length, 0);
+});
+
+test('France availability is required regardless of production country or language', (t) => {
+  const store = memory(t);
+  store.upsert(tmdb(1, { origin_country: ['FR'], original_language: 'fr', 'watch/providers': { results: { US: { flatrate: [{ provider_id: 8, provider_name: 'Netflix' }] } } } }));
+  store.upsert(tmdb(2, { origin_country: ['JP'], original_language: 'ja' }));
+  store.upsert(tmdb(3, { 'watch/providers': { results: { FR: {} } } }));
+  store.upsert(tmdb(4, { 'watch/providers': undefined }));
+  assert.deepEqual(store.query({ now: NOW }).map((m) => m.name), ['Série 2']);
+  assert.equal(store.hasFranceAvailability('tmdb:1'), false);
+  assert.equal(store.stats().market, 'FR'); assert.equal(store.stats().eligible, 1);
+  assert.match(store.query({ now: NOW })[0].description, /France : Netflix/);
+});
+
+test('all French streaming offer types count, including free replay and VOD', () => {
+  const data = { results: { FR: Object.fromEntries(['flatrate', 'free', 'ads', 'rent', 'buy'].map((kind, i) => [kind, [{ provider_id: i + 1, provider_name: kind }]])), BE: { flatrate: [{ provider_id: 99, provider_name: 'Belgium only' }] } } };
+  assert.equal(offersInFrance(data).length, 5);
+  const params = discoverParams([1, 999999]);
+  assert.equal(params.with_watch_monetization_types, 'flatrate|free|ads|rent|buy');
+  assert.equal(params.with_origin_country, undefined); assert.equal(params.with_original_language, undefined);
+});
+
+test('market departures take effect and failed scans never wipe the catalog', async (t) => {
+  const store = memory(t); store.upsert(tmdb(100));
+  await assert.rejects(scanFrance(store, { api: async () => { throw new Error('unavailable'); }, delay: 0 }));
+  assert.equal(store.query({ now: NOW }).length, 1);
+  const api = async (endpoint) => endpoint === '/watch/providers/tv' ? { results: [{ provider_id: 8, provider_name: 'Netflix' }] } : { total_pages: 1, results: [] };
+  await scanFrance(store, { api, delay: 0 });
+  assert.equal(store.query({ now: NOW }).length, 0);
+});
+
+test('provider partitions avoid the 500-page ceiling without silently completing overflows', async (t) => {
+  const store = memory(t);
+  const api = async (endpoint, p) => {
+    if (endpoint === '/watch/providers/tv') return { results: [{ provider_id: 8, provider_name: 'A' }, { provider_id: 9, provider_name: 'B' }] };
+    if (p.with_watch_providers.includes('|')) return { total_pages: 600, results: [] };
+    return { total_pages: 1, results: [{ id: Number(p.with_watch_providers), name: 'Series', genre_ids: [18] }] };
+  };
+  const result = await scanFrance(store, { api, delay: 0 });
+  assert.equal(result.complete, true); assert.equal(result.uniqueCandidates, 2);
+});
+
+test('full offer checks can reject a stale discovery result and enrich real French platforms', async (t) => {
+  const store = memory(t);
+  store.upsert(tmdb(1, { 'watch/providers': undefined })); store.markFranceDiscovered(1); store.enqueue('fr-detail', [1]);
+  assert.equal(store.query({ now: NOW }).length, 1);
+  await runFranceJobs(store, { delay: 0, api: async () => ({ id: 1, name: 'Gone', genres: [{ id: 18 }], 'watch/providers': { results: { BE: { flatrate: [{ provider_id: 8 }] } } } }) });
+  assert.equal(store.query({ now: NOW }).length, 0);
+  store.markFranceDiscovered(1);
+  assert.equal(store.query({ now: NOW }).length, 0, 'recent explicit negative wins');
+  store.enqueue('fr-detail', [1], 1, { refresh: true });
+  await runFranceJobs(store, { delay: 0, api: async () => ({ id: 1, name: 'Back', genres: [{ id: 18 }], 'watch/providers': { results: { FR: { free: [{ provider_id: 999999, provider_name: 'New French Service' }] } } } }) });
+  assert.match(store.query({ now: NOW })[0].description, /New French Service/);
+});
+
+test('unverified global metadata and expired French evidence never leak into catalogs', (t) => {
+  const store = memory(t); store.upsert(tmdb(1));
+  store.db.prepare('UPDATE fr_availability SET checked_at=?').run(Date.now() - 49 * 3600000);
+  assert.equal(store.query({ now: NOW }).length, 0);
+  store.db.exec('DROP TABLE fr_availability');
+  assert.equal(store.query({ now: NOW }).length, 0);
+  assert.equal(store.hasFranceAvailability('tmdb:1'), false);
+});
+
+test('an overflowing individual provider is reported as incomplete', async (t) => {
+  const store = memory(t);
+  const api = async (endpoint) => endpoint === '/watch/providers/tv' ? { results: [{ provider_id: 8, provider_name: 'Netflix' }] } : { total_pages: 501, total_results: 10020, results: [] };
+  const scan = await scanFrance(store, { api, delay: 0 });
+  assert.equal(scan.complete, false); assert.equal(scan.overflow[0].providerId, 8);
 });
 
 test('HTTP addon exposes paged catalogs, rejects animation metadata, and reports progress', async (t) => {

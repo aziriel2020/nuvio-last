@@ -1,5 +1,5 @@
 [Unit]
-Description=Nuvio Series Monde persistent catalog indexer
+Description=Nuvio streaming series France availability indexer
 After=network-online.target
 Wants=network-online.target
 

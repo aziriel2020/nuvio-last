@@ -1,68 +1,50 @@
-# Nuvio Séries Monde
+# Séries en streaming — marché français
 
-Nouvel addon indépendant `com.nuvio.series.world.liveaction`, deux collections natives :
+L'addon est limité aux **séries disponibles sur les services du marché français**, toutes origines et langues de production confondues. Les anime et toute animation sont exclus.
 
-- **🌍 Toutes les séries · Par genres** : date de première diffusion de la série.
-- **🌍 Retours & nouvelles saisons** : date de lancement d'une saison normale numéro 2 ou supérieur. Une seule fiche par série et période, à la dernière date correspondante.
+## Services et disponibilités
 
-Chaque collection a 25 dossiers : toutes les séries, les 15 genres TV hors Animation, genre non renseigné, puis Thriller, Horreur, Romance, Historique, Médical, Judiciaire, Espionnage et Mini-séries. Les thèmes complémentaires sont dérivés des genres TVmaze et des mots-clés exacts TMDB. Ils ne prétendent pas classifier chaque série sans métadonnées suffisantes.
+Le répertoire complet `/watch/providers/tv?watch_region=FR` est chargé automatiquement : aucune liste fermée de plateformes n'est imposée. La découverte utilise tous ces identifiants, `watch_region=FR`, `without_genres=16` et les modes `flatrate|free|ads|rent|buy` (abonnement, gratuit/replay, publicité, achat et location).
 
-## Navigation et dates
+Une fiche n'est visible que si elle possède une preuve FR récente : résultat d'une découverte explicitement filtrée sur ces services et ce marché, ou offres FR de sa fiche. Les offres détaillées sont récupérées ensuite pour afficher les plateformes sur chaque fiche. Une vérification explicite négative prime sur une découverte potentiellement décalée. Une fiche française proposée uniquement aux USA reste exclue ; une série américaine, japonaise avec acteurs ou coréenne disponible en France reste incluse.
 
-Chaque dossier expose « Toutes les dates · Récent → Ancien », les cinq périodes natives existantes (Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante), les mois décroissants jusqu'à janvier 2015, les années 2014 → 1900, Avant 1900 et Date inconnue. Les futurs mois sont pré-câblés jusqu'à au moins 2030, comme les calendriers existants. Les dates civiles utilisent Europe/Brussels ; les dates de diffusion sans heure restent des dates civiles de la source, sans inventer d'heure locale.
+Les disponibilités sont attribuées à **JustWatch via TMDB**, conformément aux conditions de la source. Les données portent sur une série ; elles ne certifient pas la disponibilité de chaque saison/épisode, ni l'existence d'une source vidéo dans les addons de lecture installés. La couverture dépend des offres recensées par la source et n'est pas présentée comme une garantie absolue sur les plateformes non référencées.
 
-La vue générale exclut les dates futures et place les dates absentes à la fin. Les périodes futures explicites et les mois futurs montrent les annonces connues. Pagination de 100 fiches, sans plafond total de résultats ni filtre de popularité, note, pays, langue ou plateforme. Les archives anciennes sont annuelles pour éviter de multiplier les sources mensuelles sur Shield. Tous les résultats éligibles restent accessibles dans leur année.
+## Collections et dates
 
-## Exclusion de l'animation
+Deux collections natives, chacune avec 25 dossiers de genres et thèmes :
 
-Le genre TMDB 16, le type Animation de TVmaze et des mots-clés explicites d'animation excluent une fiche. Une exclusion provenant d'une source prime sur les genres non animés de l'autre source. Les séries japonaises avec acteurs, y compris adaptations de mangas, restent incluses. « Based on manga » n'est pas un signal d'animation.
+- **🇫🇷 Séries en streaming · Tous services** : date de première diffusion de la série.
+- **🇫🇷 Streaming · Nouvelles saisons** : date de lancement des saisons normales numéro 2 et supérieur.
 
-Les fiches dont le médium est indéterminé restent en attente de classification. Les séries identifiées comme non animées mais sans date ou sans genre restent accessibles. Une correction motivée peut être appliquée via `SeriesStore.override(source, id, classification, reason)` ; elle est conservée lors des synchronisations suivantes.
+Les périodes restent celles des autres catalogues : toutes dates en ordre décroissant, Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante, mois décroissants jusqu'à 2015, puis années anciennes et Date inconnue. Les dates concernent la diffusion originale de la série/saison, sans inventer une date d'arrivée sur une plateforme française. La présence au catalogue nécessite toujours une disponibilité actuelle FR, y compris pour une série ancienne.
 
-Le filtrage dépend de la qualité des métadonnées : une fiche mal renseignée peut nécessiter une correction. L'addon n'affirme jamais couvrir toutes les productions ayant existé ni garantir une vidéo lisible.
+Pagination de 100 fiches sans plafond total, sans seuil de notes/popularité. Le genre 16, les mots-clés d'animation et les classifications complémentaires déjà connues servent à exclure l'animation. Les thèmes complémentaires dépendent des métadonnées ; les fiches sans médium déterminable restent en attente de classification.
 
-## Index persistant et synchronisation
+## Synchronisation
 
-SQLite WAL : `/var/lib/nuvio-series/index.sqlite`, hors des releases et du cache HTTP élagué. Node **22.13+** requis (`node:sqlite`). Aucun nouvel abonnement ni service cloud requis.
+Le worker conserve `/var/lib/nuvio-series/index.sqlite` et le même service installé. Le parcours mondial des identifiants et de TVmaze est arrêté, sa file de jobs supprimée. Les métadonnées déjà acquises restent utilisables pour l'identité et le dédoublonnage, mais ne peuvent pas contourner le filtre FR.
 
-Le worker `nuvio-series-sync.service` :
+Le nouveau worker parcourt les résultats FR avec reprise de page, fusionne les doublons entre services, enrichit les offres par titre et rafraîchit le marché toutes les six heures. Si une recherche dépasse 500 pages, les identifiants de plateformes sont divisés en groupes. Un dépassement restant pour un service unique est déclaré explicitement dans `overflow` et le scan n'est jamais marqué complet. Les retraits ne sont appliqués qu'après un scan complet et réussi. Une preuve de disponibilité expire après 48 heures sans rafraîchissement.
 
-1. importe chaque jour la liste complète des identifiants TV TMDB, en streaming ;
-2. remplit une file persistante de récupération des fiches et saisons ;
-3. parcourt tout l'index des séries TVmaze, avec reprise au dernier numéro de page ;
-4. suit les changements des deux sources et rafraîchit les séries ;
-5. conserve ses points de reprise et applique un délai progressif après erreur.
+Les points de reprise, erreurs et compteurs FR sont publics dans `/series/status.json`. Le répertoire effectivement chargé est consultable dans `/series/providers.json`. Le nombre de dossiers/catalogues de périodes n'est pas un nombre de séries.
 
-L'import initial est **progressif** : il peut durer des heures ou plusieurs jours suivant la taille des bases et la disponibilité des API. Les collections peuvent être utilisées pendant ce remplissage. Le nombre de catalogues de périodes n'est pas le nombre de séries indexées. `/series/status.json` expose les compteurs réels, exclusions, fiches en attente, jobs à traiter et dernier cycle. Une panne de source ne vide pas les fiches déjà indexées. Les identifiants externes IMDb/TVDB servent à fusionner les doublons ; les homonymes ne sont pas fusionnés par titre.
+## Mise à jour dans Nuvio
 
-Le worker est limité à 768 Mo et 25 % de CPU, tourne sans privilèges, et utilise un verrou de fichier pour empêcher deux exécutions simultanées. Les appels sont cadencés, les erreurs 429/5xx sont réessayées et les jobs persistent après redémarrage. Le token TMDB existant reste dans `/etc/nuvio/nuvio.env`.
+Les identifiants existants sont conservés pour mettre à jour les collections en place. Les anciens IDs contenant `world` sont uniquement des identifiants de compatibilité ; leurs résultats sont désormais filtrés sur le marché FR.
 
-## Routes à installer après déploiement
+- Addon : `/series/manifest.json` (version 1.1.0, Nuvio Séries Streaming France).
+- Shield : `/series/nuvio-collections.json`.
+- Desktop : `/series/nuvio-collections-desktop.json`.
 
-Sous le domaine de production existant :
+Actualiser l'addon et réimporter le JSON adapté au client pour actualiser les titres et visuels. Les quatre addons historiques et leurs collections ne sont pas modifiés.
 
-- addon : `/series/manifest.json` ;
-- import Shield : `/series/nuvio-collections.json` ou `/nuvio-collections-series.json` ;
-- import Desktop : `/series/nuvio-collections-desktop.json` ou `/nuvio-collections-series-desktop.json` ;
-- état réel de l'index : `/series/status.json`.
-
-Installer l'addon puis importer les deux nouvelles collections une fois. Les quatre addons historiques et leurs imports combinés gardent leurs IDs, leur ordre et leur contenu. Les nouvelles URLs figurent aussi dans `/install.json`.
-
-L'addon fournit catalogues et fiches/épisodes ; les sources vidéo continuent de dépendre des addons de lecture installés. Les séries sans IMDb utilisent les identifiants `tmdb:tv:ID` ou `tvmaze:ID`, dont la prise en charge dépend des addons de lecture.
-
-## Cover approuvée
-
-La cover « SÉRIES MONDE — TOUS LES GENRES · TOUTES LES ÉPOQUES » a été approuvée le 18 octobre 2026. Son master JPEG est conservé dans `assets/collection-art/series-world-approved-v1.jpg`. Les routes `/series/cover.jpg?v=approved-v1` et `/series/backdrop.jpg?v=approved-v1` produisent les variantes 1600×900 et 1920×1080, utilisées par les deux collections. Les dossiers de genres conservent les rendus cinématiques existants. Des surcharges restent possibles via `NUVIO_SERIES_COVER_URL` et `NUVIO_SERIES_BACKDROP_URL`.
+La cover conserve l'art cinématique choisi et porte maintenant « SÉRIES STREAMING — MARCHÉ FRANÇAIS · TOUTES LES PLATEFORMES ». Son master est `assets/collection-art/series-france-v2.jpg` ; les routes révisées produisent du 1600×900 et du 1920×1080.
 
 ## Validation
 
-```bash
-npm run test:series
-npm test
-npm run test:runtime
-node scripts/test-series-runtime.mjs
-```
+`npm run test:series`, `npm test`, `npm run test:runtime`, `node scripts/test-series-runtime.mjs`.
 
-L'intégration lance le véritable serveur Oracle sur une base de test temporaire. Elle contrôle les manifests, les imports Shield/Desktop, plusieurs pages de résultats, une correction d'animation visible sans redémarrage, le refus des fiches animées et le rendu JPEG des dossiers. Aucun credential de production n'est requis pour ces fixtures.
+Les tests contrôlent notamment : FR obligatoire pour les catalogues et les fiches, refus d'une offre uniquement US/BE, indépendance du pays de production, nouvelles plateformes hors liste historique, tous les modes d'offres, expiration/retrait, panne sans effacement, reprise et partition de pagination, exclusion de l'animation et images Shield/Desktop.
 
-Sources de référence : [TMDB Daily ID Exports](https://developer.themoviedb.org/docs/daily-id-exports), [TMDB TV Discovery](https://developer.themoviedb.org/reference/discover-tv), [TVmaze API](https://www.tvmaze.com/api). TVmaze est crédité dans les fiches qui l'utilisent ; ses données sont sous CC BY-SA. Les conditions et crédits TMDB restent applicables.
+Références : [TMDB Discover TV](https://developer.themoviedb.org/reference/discover-tv), [TV Watch Providers](https://developer.themoviedb.org/reference/tv-series-watch-providers). Les crédits et conditions TMDB, JustWatch et des données complémentaires TVmaze restent applicables.

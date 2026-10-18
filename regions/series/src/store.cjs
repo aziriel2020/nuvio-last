@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { GENRES, unique, windowFor } = require('./model.cjs');
+const { AVAILABILITY_TTL } = require('./france.cjs');
 
 const defaultPath = () => process.env.NUVIO_SERIES_DB || '/var/lib/nuvio-series/index.sqlite';
 const json = (value) => JSON.stringify(value);
@@ -48,6 +49,20 @@ class SeriesStore {
           source TEXT NOT NULL, source_id INTEGER NOT NULL, classification TEXT NOT NULL,
           reason TEXT NOT NULL, PRIMARY KEY(source, source_id)
         );
+        CREATE TABLE IF NOT EXISTS fr_availability (
+          tmdb_id INTEGER PRIMARY KEY, available INTEGER NOT NULL, checked_at INTEGER NOT NULL,
+          evidence TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS fr_offers (
+          tmdb_id INTEGER NOT NULL, provider_id INTEGER NOT NULL, kind TEXT NOT NULL,
+          name TEXT NOT NULL, logo TEXT, url TEXT, PRIMARY KEY(tmdb_id,provider_id,kind)
+        );
+        CREATE TABLE IF NOT EXISTS fr_providers (
+          id INTEGER PRIMARY KEY, name TEXT NOT NULL, logo TEXT
+        );
+        CREATE TABLE IF NOT EXISTS fr_seen (
+          scan_id TEXT NOT NULL, tmdb_id INTEGER NOT NULL, PRIMARY KEY(scan_id,tmdb_id)
+        );
       `);
     }
   }
@@ -59,9 +74,12 @@ class SeriesStore {
     return value;
   }
   transaction(fn) {
+    if (this.inTransaction) return fn();
     this.db.exec('BEGIN IMMEDIATE');
+    this.inTransaction = true;
     try { const value = fn(); this.db.exec('COMMIT'); return value; }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    finally { this.inTransaction = false; }
   }
 
   upsert(record) {
@@ -86,6 +104,7 @@ class SeriesStore {
       const seasonInsert = this.db.prepare('INSERT OR REPLACE INTO seasons VALUES (?,?,?,?,?)');
       for (const s of record.seasons || []) if (s.number > 0) seasonInsert.run(id, record.source, s.number, s.date || null, s.name || null);
       this.rebuild(id);
+      if (record.source === 'tmdb' && record.franceOffers !== undefined) this.setFranceOffers(record.sourceId, record.franceOffers);
       return id;
     });
   }
@@ -134,11 +153,51 @@ class SeriesStore {
   }
   sources(id) { return this.db.prepare('SELECT source,source_id,imdb_id,tvdb_id FROM sources WHERE show_id=?').all(id); }
 
+  hasFranceSchema() {
+    return Boolean(this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='fr_availability'").get());
+  }
+  franceClause(alias = 's') {
+    return `EXISTS (SELECT 1 FROM sources fsrc JOIN fr_availability fa ON fa.tmdb_id=fsrc.source_id WHERE fsrc.source='tmdb' AND fsrc.show_id=${alias}.id AND fa.available=1 AND fa.checked_at>${Date.now() - AVAILABILITY_TTL})`;
+  }
+  hasFranceAvailability(id) {
+    if (!this.hasFranceSchema()) return false;
+    return Boolean(this.db.prepare(`SELECT s.id FROM shows s WHERE s.id=? AND ${this.franceClause()}`).get(id));
+  }
+  setFranceOffers(tmdbId, offers) {
+    this.transaction(() => {
+      this.db.prepare('DELETE FROM fr_offers WHERE tmdb_id=?').run(tmdbId);
+      const insert = this.db.prepare('INSERT INTO fr_offers VALUES (?,?,?,?,?,?)');
+      for (const offer of offers) insert.run(tmdbId, offer.providerId, offer.kind, offer.name, offer.logo || null, offer.url || null);
+      this.db.prepare('INSERT OR REPLACE INTO fr_availability VALUES (?,?,?,?)').run(tmdbId, offers.length ? 1 : 0, Date.now(), 'watch-providers-FR');
+    });
+  }
+  markFranceDiscovered(tmdbId) {
+    // A recent explicit per-title negative check takes precedence over a stale
+    // discovery index. A new detail job will re-evaluate it independently.
+    this.db.prepare(`INSERT INTO fr_availability VALUES (?,1,?,'discover-FR') ON CONFLICT(tmdb_id)
+      DO UPDATE SET available=1,checked_at=excluded.checked_at,evidence=excluded.evidence
+      WHERE fr_availability.evidence!='watch-providers-FR' OR fr_availability.checked_at<?`)
+      .run(tmdbId, Date.now(), Date.now() - 6 * 3600000);
+  }
+  franceOffers(id) {
+    if (!this.hasFranceSchema()) return [];
+    return this.db.prepare("SELECT DISTINCT o.* FROM fr_offers o JOIN sources s ON s.source='tmdb' AND s.source_id=o.tmdb_id WHERE s.show_id=? ORDER BY o.name,o.kind").all(id);
+  }
+  setFranceProviders(providers) {
+    this.transaction(() => {
+      this.db.prepare('DELETE FROM fr_providers').run();
+      const insert = this.db.prepare('INSERT INTO fr_providers VALUES (?,?,?)');
+      for (const p of providers) insert.run(p.id, p.name, p.logo || null);
+    });
+  }
+  franceProviders() { return this.hasFranceSchema() ? this.db.prepare('SELECT * FROM fr_providers ORDER BY name').all() : []; }
+
   query({ mode = 'premieres', genre = 'all', period = 'all', skip = 0, search = '', now = new Date() } = {}) {
     if (!GENRES.some((g) => g.id === genre) || !['premieres', 'seasons'].includes(mode)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
     const window = windowFor(period, now);
-    const clauses = ["s.classification='eligible'"];
+    if (!this.hasFranceSchema()) return [];
+    const clauses = ["s.classification='eligible'", this.franceClause()];
     const args = [];
     if (genre === 'unclassified') clauses.push("s.genres='[]'");
     else if (genre !== 'all') { clauses.push('EXISTS (SELECT 1 FROM json_each(s.genres) WHERE value=?)'); args.push(genre); }
@@ -165,16 +224,20 @@ class SeriesStore {
     const date = row.event_date || row.first_air_date;
     const genreIds = parse(row.genres);
     const tvmaze = sources.find((s) => s.source === 'tvmaze');
+    const offers = this.franceOffers(row.id);
+    const providers = [...new Set(offers.map((o) => o.name))];
     return {
       id, type: 'series', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
       background: row.background || row.poster || undefined,
-      description: [date ? `Première diffusion : ${row.first_air_date || 'inconnue'}${row.event_date && row.event_date !== row.first_air_date ? ` · Nouvelle saison : ${row.event_date}` : ''}` : 'Date de première diffusion inconnue', row.description,
+      description: [`Disponible en streaming en France${providers.length ? ` : ${providers.join(', ')}` : ''}. Disponibilité : JustWatch via TMDB.`,
+        date ? `Première diffusion : ${row.first_air_date || 'inconnue'}${row.event_date && row.event_date !== row.first_air_date ? ` · Nouvelle saison : ${row.event_date}` : ''}` : 'Date de première diffusion inconnue', row.description,
         tvmaze ? `Données complémentaires : TVmaze · https://www.tvmaze.com/shows/${tvmaze.source_id}` : null].filter(Boolean).join('\n\n'),
       genres: GENRES.filter((g) => genreIds.includes(g.id)).map((g) => g.name),
       releaseInfo: row.first_air_date?.slice(0, 4) || 'Date inconnue',
       released: date ? `${date}T00:00:00.000Z` : undefined,
       status: row.status || undefined, imdb_id: imdb || undefined,
-      links: sources.map((s) => ({ name: s.source === 'tmdb' ? 'TMDB' : 'TVmaze', category: 'Sources', url: s.source === 'tmdb' ? `https://www.themoviedb.org/tv/${s.source_id}` : `https://www.tvmaze.com/shows/${s.source_id}` })),
+      links: [...sources.map((s) => ({ name: s.source === 'tmdb' ? 'TMDB' : 'TVmaze', category: 'Sources', url: s.source === 'tmdb' ? `https://www.themoviedb.org/tv/${s.source_id}` : `https://www.tvmaze.com/shows/${s.source_id}` })),
+        ...[...new Set(offers.map((o) => o.url).filter(Boolean))].map((url) => ({ name: 'Disponibilité France · JustWatch', category: 'Regarder', url }))],
       behaviorHints: { hasScheduledVideos: true }
     };
   }
@@ -195,12 +258,15 @@ class SeriesStore {
   stats() {
     const counts = Object.fromEntries(this.db.prepare('SELECT classification,COUNT(*) AS count FROM shows GROUP BY classification').all().map((r) => [r.classification, r.count]));
     return {
-      eligible: counts.eligible || 0, animationExcluded: counts.animation || 0, awaitingClassification: counts.review || 0,
-      withoutDate: this.db.prepare("SELECT COUNT(*) AS count FROM shows WHERE classification='eligible' AND first_air_date IS NULL").get().count,
+      market: 'FR', eligible: this.hasFranceSchema() ? this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND ${this.franceClause()}`).get().count : 0,
+      animationExcluded: counts.animation || 0, awaitingClassification: counts.review || 0,
+      withoutDate: this.hasFranceSchema() ? this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND s.first_air_date IS NULL AND ${this.franceClause()}`).get().count : 0,
       sources: this.db.prepare('SELECT source,COUNT(*) AS count FROM sources GROUP BY source').all(),
       jobs: this.db.prepare('SELECT source,COUNT(*) AS total,SUM(CASE WHEN due<=? THEN 1 ELSE 0 END) AS pending,SUM(CASE WHEN attempts>0 THEN 1 ELSE 0 END) AS failed FROM jobs GROUP BY source').all(Date.now()),
-      lastSync: this.state('lastSync'), tmdbExport: this.state('tmdbExport'), tmdbExportCount: this.state('tmdbExportCount'), tvmazeBaselineComplete: Boolean(this.state('tvmazeBaselineComplete')),
-      coverage: 'Sources recensées uniquement ; indexation initiale progressive, sans limite de résultats ni garantie de disponibilité vidéo.'
+      lastSync: this.state('lastSync'),
+      franceProviders: this.franceProviders().length,
+      franceScan: this.state('frScanProgress'),
+      coverage: 'Séries disponibles sur le marché français, toutes plateformes et offres recensées par JustWatch/TMDB. Animation exclue ; pays de production non filtré.'
     };
   }
 }
