@@ -226,7 +226,7 @@ class SeriesStore {
         : window.start ? 's.first_air_date BETWEEN ? AND ?' : 's.first_air_date<=?';
       const eventArgs = window.undated ? [] : window.start ? [window.start, window.end] : [window.end];
       const premiereArgs = window.undated ? [] : window.start ? [window.start, window.end] : [window.end];
-      const noDate = window.undated ? 's.first_air_date IS NULL AND NOT EXISTS (SELECT 1 FROM show_airings e WHERE e.show_id=s.id)' : '0';
+      const noDate = window.undated ? 'first_air_date IS NULL AND NOT EXISTS (SELECT 1 FROM show_airings e WHERE e.show_id=live.id)' : '0';
       const sql = `WITH live AS (
         SELECT s.*, COALESCE(
           (SELECT MAX(e.air_date) FROM show_airings e WHERE e.show_id=s.id AND ${eventWhere}),
