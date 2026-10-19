@@ -228,6 +228,21 @@ test('future series and season episodes never leak into current archives', (t) =
   assert.equal(store.query({ mode: 'seasons', period: '2027-05', now }).length, 0);
 });
 
+test('premium artwork requires a complete exact 25-genre set, never partial activation', (t) => {
+  const assets = fs.mkdtempSync(path.join(os.tmpdir(), 'nuvio-series-covers-'));
+  t.after(() => fs.rmSync(assets, { recursive: true, force: true }));
+  const { genreCoverProgress, genreCoverRoute } = addon._internals;
+  assert.deepEqual(genreCoverProgress(assets), { loaded: 0, total: 25, ready: false });
+  const ids = require('../src/model.cjs').GENRES.map(({ id }) => id);
+  for (const id of ids.slice(0, -1)) fs.writeFileSync(path.join(assets, id + '.webp'), 'test');
+  assert.deepEqual(genreCoverProgress(assets), { loaded: 24, total: 25, ready: false });
+  fs.writeFileSync(path.join(assets, ids.at(-1) + '.webp'), 'test');
+  assert.deepEqual(genreCoverProgress(assets), { loaded: 25, total: 25, ready: true });
+  assert.match(genreCoverRoute('https://example.test/series-v2', 'medical'),
+    /^https:\/\/example\.test\/series-v2\/artwork\/genre\/medical\.webp\?v=premium-/);
+  assert.equal(ids.includes('music'), false, 'do not add an unrecognized genre');
+});
+
 test('archive imports reference real unique catalogs, cover old series, and preserve native periods', () => {
   const origin = 'https://example.test/series';
   const manifest = addon._internals.buildManifest(origin, NOW);
