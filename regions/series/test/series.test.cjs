@@ -139,7 +139,9 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   assert.equal(manifest.catalogs.some((c) => c.id.includes('-16-')), false);
   assert.equal(collections[0].folders.length, 25);
   for (const parent of collections) for (const folder of parent.folders) {
-    assert.deepEqual(folder.sources.slice(1, 6).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
+    assert.deepEqual(folder.sources.slice(0, 5).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
+    assert(!folder.sources.some((source) => parseCatalog(source.catalogId).period === 'all'),
+      'All dates stays callable but must not be a visible Nuvio collection row');
     for (const source of folder.sources) {
       assert(keys.has(source.catalogId)); assert.equal(source.addonId, manifest.id);
       assert.equal(labels.get(source.catalogId.replace('series-fr-', 'series-world-')), labels.get(source.catalogId));
