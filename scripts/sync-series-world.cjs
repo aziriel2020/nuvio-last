@@ -127,6 +127,85 @@ async function scanFrance(store, { api = tmdb, maxPages = 80, delay = 250, now =
   return scan;
 }
 
+
+function utcIsoDay(timestamp) { return new Date(timestamp).toISOString().slice(0, 10); }
+
+// Recent episodes need a separate discovery lane. The historical scan sorts by
+// first_air_date, so a 2010 show with a new 2026 episode would never be reached
+// promptly. Keep this lane independent of full market scan/removal bookkeeping.
+async function scanRecentAirings(store, { api = tmdb, maxPages = 36, delay = 250, now = Date.now() } = {}) {
+  let scan = store.state('frAirScanProgress');
+  const stalled = scan && !scan.complete && scan.tasks?.length
+    && now - (scan.lastProgressAt || scan.startedAt || now) >= MAX_STALLED_SCAN_AGE;
+  const exhausted = scan && !scan.complete && !scan.tasks?.length;
+  if (!scan || (scan.complete && now - scan.completedAt >= REFRESH)
+    || stalled || (exhausted && (!scan.retryAt || now >= scan.retryAt))) {
+    let providers = store.franceProviders();
+    if (!providers.length) {
+      providers = providerDirectory(await api('/watch/providers/tv', { watch_region: 'FR', language: 'fr-FR' }));
+      store.setFranceProviders(providers);
+    }
+    const from = utcIsoDay(now - 21 * DAY);
+    const to = utcIsoDay(now + 7 * DAY);
+    scan = {
+      id: String(now), startedAt: now, lastProgressAt: now, from, to, complete: false,
+      pages: 0, matches: 0, overflow: [],
+      tasks: Array.from({ length: Math.ceil(providers.length / PROVIDERS_PER_REQUEST) },
+        (_, i) => ({ ids: providers.slice(i * PROVIDERS_PER_REQUEST, (i + 1) * PROVIDERS_PER_REQUEST).map((p) => p.id),
+          from, to, page: 1 }))
+    };
+    store.state('frAirScanProgress', scan);
+  }
+  if (scan.complete) return scan;
+  let budget = maxPages;
+  while (scan.tasks.length && budget-- > 0 && !stopping) {
+    const task = scan.tasks[0];
+    const params = discoverParams(task.ids, task.page, {
+      'air_date.gte': task.from, 'air_date.lte': task.to,
+      sort_by: 'popularity.desc', include_null_first_air_dates: false
+    });
+    const payload = await api('/discover/tv', params);
+    if (!Array.isArray(payload.results)) throw new Error('Invalid recent-airing discovery response');
+    const pages = Number(payload.total_pages || 1);
+    if (pages > 500 || Number(payload.total_results || 0) > 10000) {
+      scan.tasks.shift();
+      if (task.ids.length > 1) {
+        const middle = Math.ceil(task.ids.length / 2);
+        scan.tasks.unshift({ ...task, ids: task.ids.slice(0, middle), page: 1 },
+          { ...task, ids: task.ids.slice(middle), page: 1 });
+      } else {
+        const split = splitDateTask(task);
+        if (split) scan.tasks.unshift(...split);
+        else scan.overflow.push({ providerId: task.ids[0], from: task.from, to: task.to, totalResults: payload.total_results });
+      }
+    } else {
+      store.transaction(() => {
+        for (const data of payload.results) {
+          if (!Number.isSafeInteger(data.id) || data.id <= 0 || (data.genre_ids || []).includes(16)) continue;
+          const found = store.db.prepare("SELECT source_id FROM sources WHERE source='tmdb' AND source_id=?").get(data.id);
+          if (!found) store.upsert(candidateRecord(data));
+          store.markFranceDiscovered(data.id);
+          // Aired this week must be enriched before the deep historical queue.
+          store.enqueue('fr-detail', [data.id], 1, { refresh: true });
+          scan.matches++;
+        }
+      });
+      if (task.page >= pages) scan.tasks.shift(); else task.page++;
+      scan.pages++;
+      store.state('lastFranceAirDiscoveryAt', new Date().toISOString());
+    }
+    scan.lastProgressAt = Date.now();
+    store.state('frAirScanProgress', scan);
+    if (delay) await pause(delay);
+  }
+  if (!scan.tasks.length) {
+    if (scan.overflow.length) scan.retryAt = Date.now() + REFRESH;
+    else { scan.complete = true; scan.completedAt = Date.now(); }
+    store.state('frAirScanProgress', scan);
+  }
+  return scan;
+}
+
 async function runFranceJobs(store, { api = tmdb, limit = 160, delay = 250 } = {}) {
   for (const job of store.jobs('fr-detail', limit)) {
     if (stopping) break;
@@ -154,7 +233,9 @@ async function syncCycle(store) {
     store.state('frModeV1', true);
   }
   const errors = [];
-  try { await scanFrance(store); } catch (e) { errors.push(e.message); }
+  // Prioritize new airings (including returning seasons) before older premieres.
+  try { await scanRecentAirings(store); } catch (e) { errors.push('recent-airings: ' + e.message); }
+  try { await scanFrance(store); } catch (e) { errors.push('market: ' + e.message); }
   await runFranceJobs(store);
   store.state('lastSync', { at: new Date().toISOString(), market: 'FR', errors });
   store.db.exec('PRAGMA wal_checkpoint(PASSIVE)');
@@ -171,4 +252,4 @@ async function main() {
   } finally { store.close(); }
 }
 if (require.main === module) main().catch((e) => { log('france-sync-fatal', { message: e.message }); process.exitCode = 1; });
-module.exports = { scanFrance, runFranceJobs, syncCycle, candidateRecord, splitDateTask };
+module.exports = { scanFrance, scanRecentAirings, runFranceJobs, syncCycle, candidateRecord, splitDateTask };
