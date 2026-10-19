@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { fromTmdb, fromTvmaze, windowFor, isoDate, parseCatalog, ADDON_ID } = require('../src/model.cjs');
+const { fromTmdb, fromTvmaze, windowFor, periods, isoDate, parseCatalog, ADDON_ID } = require('../src/model.cjs');
 const { SeriesStore } = require('../src/store.cjs');
 const addon = require('../index.cjs');
 const { scanFrance, scanRecentAirings, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
@@ -102,7 +102,7 @@ test('new season views use season dates, exclude first seasons and specials, and
   ] });
   store.upsert(record);
   const rows = store.query({ mode: 'seasons', period: '2026-10', now: NOW });
-  assert.equal(rows.length, 1); assert.equal(rows[0].released.slice(0, 10), '2026-10-19');
+  assert.equal(rows.length, 1); assert.equal(rows[0].released.slice(0, 10), '2026-10-16');
   assert.equal(store.query({ mode: 'seasons', now: NOW })[0].released.slice(0, 10), '2026-10-16');
   assert.equal(store.query({ period: '2005', now: NOW }).length, 1);
   assert.equal(store.query({ period: '2026-10', now: NOW }).length, 0);
@@ -189,8 +189,43 @@ test('calendar dates respect Brussels midnight, civil weeks and leap years', () 
   assert.deepEqual(windowFor('lastweek', NOW), { start: '2026-10-05', end: '2026-10-11' });
   assert.deepEqual(windowFor('nextweek', NOW), { start: '2026-10-19', end: '2026-10-25' });
   assert.equal(windowFor('2024-02').end, '2024-02-29');
+  assert.equal(windowFor('2026-10', new Date('2026-10-19T12:00:00Z')).end, '2026-10-19');
+  assert.deepEqual(windowFor('2026-11', new Date('2026-10-19T12:00:00Z')),
+    { start: '2026-11-01', end: '2026-10-19' });
+  assert.deepEqual(windowFor('2027', new Date('2026-10-19T12:00:00Z')),
+    { start: '2027-01-01', end: '2026-10-19' });
   assert.equal(isoDate('2026-02-30'), null);
   assert.throws(() => windowFor('2026-13'));
+});
+
+test('series rolling periods never publish future month or year archives', () => {
+  const now = new Date('2026-10-19T14:00:00Z');
+  const current = periods(now);
+  const keys = current.map(({ key }) => key);
+  assert.deepEqual(keys.slice(0, 6), ['all','today','tomorrow','yesterday','lastweek','nextweek']);
+  assert.deepEqual(keys.slice(6, 9), ['2026-10','2026-09','2026-08']);
+  assert(keys.includes('2025-12') && keys.includes('2015-01') && keys.includes('1900'));
+  assert(!keys.includes('2026-11') && !keys.includes('2026-12'));
+  assert(!keys.some((key) => /^202[7-9]/.test(key)));
+  assert(!keys.includes('2030-12'));
+  const december = periods(new Date('2026-12-31T23:30:00Z'));
+  assert.equal(december[6].key, '2027-01', 'Brussels midnight rollover reveals the new month');
+  assert(!december.some(({ key }) => key === '2027-02'));
+});
+
+test('future series and season episodes never leak into current archives', (t) => {
+  const store = memory(t);
+  const now = new Date('2026-10-19T14:00:00Z');
+  store.upsert(tmdb(510, { first_air_date: '2027-05-11',
+    seasons: [{ season_number: 2, air_date: '2027-05-11' }] }));
+  store.upsert(tmdb(511, { first_air_date: '2007-01-01',
+    seasons: [{ season_number: 2, air_date: '2027-05-11' }],
+    next_episode_to_air: { season_number: 2, episode_number: 3, air_date: '2027-05-11' } }));
+  assert.equal(store.query({ mode: 'premieres', period: 'all', now }).some((m) => m.name === 'Série 510'), false);
+  assert.equal(store.query({ mode: 'premieres', period: '2026-10', now }).length, 0);
+  assert.equal(store.query({ mode: 'premieres', period: '2027-05', now }).length, 0);
+  assert.equal(store.query({ mode: 'seasons', period: 'all', now }).length, 0);
+  assert.equal(store.query({ mode: 'seasons', period: '2027-05', now }).length, 0);
 });
 
 test('archive imports reference real unique catalogs, cover old series, and preserve native periods', () => {
@@ -206,6 +241,9 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   assert.equal(collections[0].folders.length, 25);
   for (const parent of collections) for (const folder of parent.folders) {
     assert.deepEqual(folder.sources.slice(0, 5).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
+    assert.equal(parseCatalog(folder.sources[5].catalogId).period, '2026-10');
+    assert(!folder.sources.some((source) => /^2027|^2028|^2029|^2030/.test(parseCatalog(source.catalogId).period)));
+    assert(!folder.sources.some((source) => parseCatalog(source.catalogId).period === '2026-11'));
     assert(!folder.sources.some((source) => parseCatalog(source.catalogId).period === 'all'),
       'All dates stays callable but must not be a visible Nuvio collection row');
     for (const source of folder.sources) {
