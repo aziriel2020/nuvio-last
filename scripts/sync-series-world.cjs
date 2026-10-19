@@ -10,6 +10,7 @@ const { tmdb, pause } = require('../regions/series/src/upstream.cjs');
 const REFRESH = 6 * 3600000;
 const MAX_STALLED_SCAN_AGE = 12 * 3600000;
 const DAY = 86400000;
+const PROVIDERS_PER_REQUEST = 24;
 
 // TMDb discover cannot paginate beyond page 500. Subdivide one provider
 // by inclusive first-air-date ranges instead of silently dropping its shows.
@@ -49,18 +50,30 @@ async function scanFrance(store, { api = tmdb, maxPages = 80, delay = 250, now =
     store.setFranceProviders(providers);
     scan = { id: String(now), startedAt: now, complete: false, pages: 0, uniqueCandidates: 0,
       providers: providers.length, lastProgressAt: now,
-      tasks: [{ ids: providers.map((p) => p.id), page: 1 }], overflow: [] };
+      tasks: Array.from({ length: Math.ceil(providers.length / PROVIDERS_PER_REQUEST) },
+        (_, i) => ({ ids: providers.slice(i * PROVIDERS_PER_REQUEST, (i + 1) * PROVIDERS_PER_REQUEST).map((p) => p.id), page: 1 })),
+      overflow: [] };
     store.state('frScanProgress', scan);
   }
   if (scan.complete) return scan;
   let budget = maxPages;
   while (scan.tasks.length && budget-- > 0 && !stopping) {
     const task = scan.tasks[0];
+    if (task.ids.length > PROVIDERS_PER_REQUEST) {
+      // Repair oversized tasks persisted by older releases before making a request.
+      scan.tasks.shift();
+      const groups = Array.from({ length: Math.ceil(task.ids.length / PROVIDERS_PER_REQUEST) },
+        (_, i) => ({ ...task, ids: task.ids.slice(i * PROVIDERS_PER_REQUEST, (i + 1) * PROVIDERS_PER_REQUEST), page: 1 }));
+      scan.tasks.unshift(...groups);
+      scan.lastProgressAt = Date.now();
+      store.state('frScanProgress', scan);
+      continue;
+    }
     const dates = task.from ? { 'first_air_date.gte': task.from, 'first_air_date.lte': task.to } : {};
     const payload = await api('/discover/tv', discoverParams(task.ids, task.page, dates));
     if (!Array.isArray(payload.results)) throw new Error('Malformed France discovery response');
     const pages = Number(payload.total_pages || 1);
-    if (pages > 500) {
+    if (pages > 500 || Number(payload.total_results || 0) > 10000) {
       scan.tasks.shift();
       if (task.ids.length > 1) {
         const middle = Math.ceil(task.ids.length / 2);
