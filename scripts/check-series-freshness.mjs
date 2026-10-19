@@ -29,10 +29,16 @@ try {
   const scan = status.franceScan;
   const latestDiscovery = status.franceLastDiscoveryAt || (scan?.complete ? scan.completedAt : scan?.lastProgressAt);
   if (age(latestDiscovery) > MAX_DISCOVERY_MS) fail('No successful TMDb discovery in over 12 hours');
+  if (age(status.franceLastAiringDiscoveryAt) > MAX_DISCOVERY_MS) {
+    fail('Recent episode airings have not been discovered in over 12 hours');
+  }
   if (scan?.overflow?.length && !scan.tasks?.length) fail('Unresolved provider/date pagination overflow');
+  if (status.franceAirScan?.overflow?.length && !status.franceAirScan?.tasks?.length)
+    fail('Recent-airing provider/date overflow');
   console.log(JSON.stringify({
     ok: true, at: new Date().toISOString(), eligible: status.eligible,
-    latestDiscovery, lastSync: status.lastSync?.at,
+    latestDiscovery, lastAiringDiscovery: status.franceLastAiringDiscoveryAt,
+    indexedAirings: status.indexedAirings, lastSync: status.lastSync?.at,
     scanComplete: Boolean(scan?.complete), pendingTasks: scan?.tasks?.length || 0,
     version: v2.version, deployment: health.gitSha
   }));

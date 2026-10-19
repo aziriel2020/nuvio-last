@@ -38,7 +38,7 @@ const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
 
-const VERSION = '1.3.2';
+const VERSION = '1.3.3';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -56,7 +56,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-fr-v1.3.2-modern-shield-cinema';
+const SOURCE_VERSION = 'calendar-archives-fr-v1.3.3-editorial-period-titles';
 const VISUAL_REV = 'coex-fr132-cinema';
 
 const REGION_ART_KEY = 'fr';
@@ -1640,7 +1640,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-top-rated-${key}`,
       catalog: {
         type: 'series',
-        name: 'Séries',
+        name: label,
         providerSlug: 'editorial-top-rated',
         cardProvider: 'Séries les mieux notées',
         period,
@@ -1655,7 +1655,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-trendy-${key}`,
       catalog: {
         type: 'series',
-        name: 'Séries',
+        name: label,
         providerSlug: 'editorial-trendy',
         cardProvider: 'Séries les plus trendy',
         period,
@@ -1672,7 +1672,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-new-${key}`,
       catalog: {
         type: 'series',
-        name: 'Séries',
+        name: label,
         providerSlug: 'editorial-series-new',
         cardProvider: 'Nouvelles séries',
         period: key,
@@ -1688,7 +1688,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-series-returning-${key}`,
       catalog: {
         type: 'series',
-        name: 'Séries',
+        name: label,
         providerSlug: 'editorial-series-returning',
         cardProvider: 'Séries renouvelées',
         period: key,
@@ -1704,7 +1704,7 @@ function buildEditorialCatalogEntries() {
       id: `editorial-movies-new-${key}`,
       catalog: {
         type: 'movie',
-        name: 'Films',
+        name: label,
         providerSlug: 'editorial-movies-new',
         cardProvider: 'Nouveaux films',
         period: key,
@@ -1718,11 +1718,11 @@ function buildEditorialCatalogEntries() {
     }
   ]));
 
-  const binge = BINGE_PERIODS.map(({ key }) => ({
+  const binge = BINGE_PERIODS.map(({ key, label }) => ({
     id: `editorial-binge-watch-series-${key}`,
     catalog: {
       type: 'series',
-      name: 'Binge Watch · Séries',
+      name: label,
       providerSlug: 'editorial-binge-watch',
       cardProvider: 'Binge Watch · Séries',
       period: key,
@@ -1742,7 +1742,7 @@ function buildEditorialCatalogEntries() {
       id: 'editorial-movies-cinema-now',
       catalog: {
         type: 'movie',
-        name: 'Films',
+        name: 'À l’affiche actuellement',
         providerSlug: 'editorial-cinema',
         cardProvider: 'Films au cinéma actuellement',
         period: 'nowplaying',

@@ -8,7 +8,7 @@ const path = require('node:path');
 const { fromTmdb, fromTvmaze, windowFor, isoDate, parseCatalog, ADDON_ID } = require('../src/model.cjs');
 const { SeriesStore } = require('../src/store.cjs');
 const addon = require('../index.cjs');
-const { scanFrance, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
+const { scanFrance, scanRecentAirings, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
 const { offersInFrance, discoverParams } = require('../src/france.cjs');
 const { decorateSeriesMetas } = require('../src/presentation.cjs');
 const { V2_ADDON_ID, V2_VERSION } = require('../src/model.cjs');
@@ -108,6 +108,72 @@ test('new season views use season dates, exclude first seasons and specials, and
   assert.equal(store.query({ period: '2026-10', now: NOW }).length, 0);
 });
 
+test('older series reappear on the release date of a new episode and not on their original premiere date', (t) => {
+  const store = memory(t);
+  store.upsert(tmdb(501, {
+    name: 'Returning drama', first_air_date: '2010-04-01',
+    last_episode_to_air: { season_number: 20, episode_number: 3, air_date: '2026-10-18', name: 'Chapter three' },
+    next_episode_to_air: { season_number: 20, episode_number: 4, air_date: '2026-10-19', name: 'Chapter four' }
+  }));
+  const yesterday = store.query({ period: 'yesterday', now: new Date('2026-10-19T14:00:00Z') });
+  assert.equal(yesterday.length, 1);
+  assert.equal(yesterday[0].episodeCode, 'S20E03');
+  assert.equal(yesterday[0].released.slice(0, 10), '2026-10-18');
+  assert.match(yesterday[0].description, /Nouvel épisode : S20E03/);
+  const today = store.query({ period: 'today', now: new Date('2026-10-19T14:00:00Z') });
+  assert.equal(today.length, 1);
+  assert.equal(today[0].episodeCode, 'S20E04');
+  assert.equal(store.query({ period: '2026-10', now: NOW }).length, 1);
+  assert.equal(store.query({ period: '2009', now: NOW }).length, 0);
+  assert.equal(store.query({ now: NOW })[0].episodeCode, 'S20E03');
+  assert.equal(store.stats().indexedAirings, 2);
+});
+
+test('episode corrections replace original release event and animation remains excluded', (t) => {
+  const store = memory(t);
+  store.upsert(tmdb(30, { first_air_date: '2000-01-01',
+    last_episode_to_air: { season_number: 2, episode_number: 5, air_date: '2026-10-17' } }));
+  store.upsert(tmdb(30, { first_air_date: '2000-01-01',
+    last_episode_to_air: { season_number: 2, episode_number: 5, air_date: '2026-10-18' } }));
+  store.upsert(tmdb(40, { genres: [{ id: 16 }],
+    last_episode_to_air: { season_number: 3, episode_number: 1, air_date: '2026-10-18' } }));
+  assert.equal(store.query({ period: 'today', now: new Date('2026-10-17T12:00:00Z') }).length, 0);
+  assert.equal(store.query({ period: 'yesterday', now: new Date('2026-10-19T14:00:00Z') }).length, 1);
+  assert.equal(store.stats().indexedAirings, 2);
+});
+
+test('recent-airing discovery finds old first-air-date titles from all French services', async (t) => {
+  const store = memory(t);
+  let details = 0;
+  const api = async (endpoint, params) => {
+    if (endpoint === '/watch/providers/tv') return { results: [{ provider_id: 8, provider_name: 'Netflix' }] };
+    if (endpoint === '/discover/tv') {
+      assert.equal(params['air_date.gte'], '2026-09-28');
+      assert.equal(params['air_date.lte'], '2026-10-26');
+      assert.equal(params.watch_region, 'FR');
+      return { total_pages: 1, results: [{ id: 88, name: 'Vieille série avec nouvel épisode',
+        first_air_date: '1999-03-01', genre_ids: [18] }] };
+    }
+    if (endpoint === '/tv/88') {
+      details++;
+      return { id: 88, name: 'Vieille série avec nouvel épisode', first_air_date: '1999-03-01',
+        genres: [{ id: 18 }], last_episode_to_air: {
+          season_number: 9, episode_number: 2, air_date: '2026-10-19'
+        }, seasons: [], 'watch/providers': { results: { FR: { flatrate: [{ provider_id: 8 }] } } } };
+    }
+    throw new Error('Unexpected endpoint: ' + endpoint);
+  };
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  const scan = await scanRecentAirings(store, { api, delay: 0, now });
+  assert.equal(scan.complete, true);
+  assert.equal(scan.matches, 1);
+  await runFranceJobs(store, { api, delay: 0 });
+  assert.equal(details, 1);
+  assert.equal(store.query({ period: 'today', now: new Date(now) })[0].episodeCode, 'S09E02');
+  const again = await scanRecentAirings(store, { api, delay: 0, now: now + 1000 });
+  assert.equal(again.id, scan.id, 'full six-hour refresh is not repeated on every loop');
+});
+
 test('season corrections replace old source dates without disturbing another source', (t) => {
   const store = memory(t);
   const record = tmdb(1, { external_ids: { imdb_id: 'tt100' }, seasons: [{ season_number: 2, air_date: '2026-10-01' }] });
@@ -139,7 +205,9 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   assert.equal(manifest.catalogs.some((c) => c.id.includes('-16-')), false);
   assert.equal(collections[0].folders.length, 25);
   for (const parent of collections) for (const folder of parent.folders) {
-    assert.deepEqual(folder.sources.slice(1, 6).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
+    assert.deepEqual(folder.sources.slice(0, 5).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
+    assert(!folder.sources.some((source) => parseCatalog(source.catalogId).period === 'all'),
+      'All dates stays callable but must not be a visible Nuvio collection row');
     for (const source of folder.sources) {
       assert(keys.has(source.catalogId)); assert.equal(source.addonId, manifest.id);
       assert.equal(labels.get(source.catalogId.replace('series-fr-', 'series-world-')), labels.get(source.catalogId));

@@ -68,6 +68,13 @@ function fromTmdb(data) {
     genres: unique(genres), classification: classify({ genres, keywords }),
     franceOffers: data['watch/providers'] !== undefined ? offersInFrance(data) : undefined,
     countries: data.origin_country || [], languages: unique([data.original_language]), status: data.status || null,
+    // Series launch dates alone cannot surface returning shows' new episodes.
+    // TMDb returns last/next episode airings independently of first_air_date.
+    episodeEvents: [data.last_episode_to_air, data.next_episode_to_air]
+      .filter((e) => e && Number.isInteger(e.season_number) && e.season_number > 0
+        && Number.isInteger(e.episode_number) && e.episode_number > 0 && isoDate(e.air_date))
+      .map((e) => ({ season: e.season_number, episode: e.episode_number,
+        date: e.air_date, name: e.name || null })),
     seasons: (data.seasons || []).filter((s) => Number(s.season_number) > 0).map((s) => ({ number: Number(s.season_number), date: isoDate(s.air_date), name: s.name || null }))
   };
 }
