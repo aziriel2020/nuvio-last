@@ -39,6 +39,13 @@ class SeriesStore {
           number INTEGER NOT NULL, air_date TEXT, name TEXT, PRIMARY KEY(show_id, source, number)
         );
         CREATE INDEX IF NOT EXISTS season_date ON seasons(air_date DESC, show_id);
+        CREATE TABLE IF NOT EXISTS show_airings (
+          show_id TEXT NOT NULL REFERENCES shows(id) ON DELETE CASCADE,
+          season INTEGER NOT NULL, episode INTEGER NOT NULL,
+          air_date TEXT NOT NULL, name TEXT,
+          PRIMARY KEY(show_id,season,episode)
+        );
+        CREATE INDEX IF NOT EXISTS show_airing_date ON show_airings(air_date DESC,show_id);
         CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS jobs (
           source TEXT NOT NULL, source_id INTEGER NOT NULL, due INTEGER NOT NULL DEFAULT 0,
@@ -93,6 +100,7 @@ class SeriesStore {
       for (const old of matches.filter((key) => key !== id)) {
         this.db.prepare('INSERT OR REPLACE INTO seasons SELECT ?,source,number,air_date,name FROM seasons WHERE show_id=?').run(id, old);
         this.db.prepare('UPDATE sources SET show_id=? WHERE show_id=?').run(id, old);
+        this.db.prepare('INSERT OR IGNORE INTO show_airings SELECT ?,season,episode,air_date,name FROM show_airings WHERE show_id=?').run(id, old);
         this.db.prepare('DELETE FROM shows WHERE id=?').run(old);
       }
       // Seasons are stored separately, keeping the primary payload compact.
@@ -103,6 +111,10 @@ class SeriesStore {
       if (record.seasonsComplete) this.db.prepare('DELETE FROM seasons WHERE show_id=? AND source=?').run(id, record.source);
       const seasonInsert = this.db.prepare('INSERT OR REPLACE INTO seasons VALUES (?,?,?,?,?)');
       for (const s of record.seasons || []) if (s.number > 0) seasonInsert.run(id, record.source, s.number, s.date || null, s.name || null);
+      if (record.source === 'tmdb') {
+        const eventInsert = this.db.prepare('INSERT INTO show_airings VALUES (?,?,?,?,?) ON CONFLICT(show_id,season,episode) DO UPDATE SET air_date=excluded.air_date,name=excluded.name');
+        for (const event of record.episodeEvents || []) eventInsert.run(id, event.season, event.episode, event.date, event.name);
+      }
       this.rebuild(id);
       if (record.source === 'tmdb' && record.franceOffers !== undefined) this.setFranceOffers(record.sourceId, record.franceOffers);
       return id;
@@ -205,6 +217,28 @@ class SeriesStore {
       clauses.push("(s.title LIKE ? ESCAPE '\\' OR s.original_title LIKE ? ESCAPE '\\')");
       const q = `%${search.replace(/[\\%_]/g, '\\$&')}%`; args.push(q, q);
     }
+    if (mode === 'premieres') {
+      // Prefer an airing inside the selected period; preserve original premieres
+      // for new shows lacking an episode record. No duplicate show per period.
+      const eventWhere = window.undated ? '1=0'
+        : window.start ? 'e.air_date BETWEEN ? AND ?' : 'e.air_date<=?';
+      const premiereWhere = window.undated ? 's.first_air_date IS NULL'
+        : window.start ? 's.first_air_date BETWEEN ? AND ?' : 's.first_air_date<=?';
+      const eventArgs = window.undated ? [] : window.start ? [window.start, window.end] : [window.end];
+      const premiereArgs = window.undated ? [] : window.start ? [window.start, window.end] : [window.end];
+      const noDate = window.undated ? 's.first_air_date IS NULL AND NOT EXISTS (SELECT 1 FROM show_airings e WHERE e.show_id=s.id)' : '0';
+      const sql = `WITH live AS (
+        SELECT s.*, COALESCE(
+          (SELECT MAX(e.air_date) FROM show_airings e WHERE e.show_id=s.id AND ${eventWhere}),
+          CASE WHEN ${premiereWhere} THEN s.first_air_date END
+        ) AS event_date
+        FROM shows s WHERE ${clauses.join(' AND ')}
+      ) SELECT * FROM live
+      WHERE event_date IS NOT NULL OR (${window.undated ? noDate : window.start ? '0' : 'first_air_date IS NULL'})
+      ORDER BY event_date DESC,id ASC LIMIT 100 OFFSET ?`;
+      const rows = this.db.prepare(sql).all(...eventArgs, ...premiereArgs, ...args, skip);
+      return rows.map((row) => this.meta(row));
+    }
     const date = mode === 'seasons' ? 'v.air_date' : 's.first_air_date';
     if (window.undated) clauses.push(`${date} IS NULL`);
     else if (window.start) { clauses.push(`${date} BETWEEN ? AND ?`); args.push(window.start, window.end); }
@@ -222,6 +256,7 @@ class SeriesStore {
     const imdb = sources.find((s) => s.imdb_id)?.imdb_id;
     const id = imdb || (row.id.startsWith('tmdb:') ? `tmdb:tv:${row.id.split(':')[1]}` : `tvmaze:${row.id.split(':')[1]}`);
     const date = row.event_date || row.first_air_date;
+    const recentEpisode = date ? this.db.prepare('SELECT season,episode,name FROM show_airings WHERE show_id=? AND air_date=? ORDER BY season DESC,episode DESC LIMIT 1').get(row.id, date) : null;
     const genreIds = parse(row.genres);
     const tvmaze = sources.find((s) => s.source === 'tvmaze');
     const offers = this.franceOffers(row.id);
@@ -231,11 +266,13 @@ class SeriesStore {
       background: row.background || row.poster || undefined,
       streamingProviders: providers,
       description: [`Disponible en streaming en France${providers.length ? ` : ${providers.join(', ')}` : ''}. Disponibilité : JustWatch via TMDB.`,
-        date ? `Première diffusion : ${row.first_air_date || 'inconnue'}${row.event_date && row.event_date !== row.first_air_date ? ` · Nouvelle saison : ${row.event_date}` : ''}` : 'Date de première diffusion inconnue', row.description,
+        recentEpisode ? `Nouvel épisode : S${String(recentEpisode.season).padStart(2,'0')}E${String(recentEpisode.episode).padStart(2,'0')} · ${date}` : null,
+        date ? `Première diffusion : ${row.first_air_date || 'inconnue'}${row.event_date && row.event_date !== row.first_air_date && !recentEpisode ? ` · Nouvelle saison : ${row.event_date}` : ''}` : 'Date de première diffusion inconnue', row.description,
         tvmaze ? `Données complémentaires : TVmaze · https://www.tvmaze.com/shows/${tvmaze.source_id}` : null].filter(Boolean).join('\n\n'),
       genres: GENRES.filter((g) => genreIds.includes(g.id)).map((g) => g.name),
       releaseInfo: row.first_air_date?.slice(0, 4) || 'Date inconnue',
       released: date ? `${date}T00:00:00.000Z` : undefined,
+      episodeCode: recentEpisode ? `S${String(recentEpisode.season).padStart(2, '0')}E${String(recentEpisode.episode).padStart(2, '0')}` : undefined,
       status: row.status || undefined, imdb_id: imdb || undefined,
       links: [...sources.map((s) => ({ name: s.source === 'tmdb' ? 'TMDB' : 'TVmaze', category: 'Sources', url: s.source === 'tmdb' ? `https://www.themoviedb.org/tv/${s.source_id}` : `https://www.tvmaze.com/shows/${s.source_id}` })),
         ...[...new Set(offers.map((o) => o.url).filter(Boolean))].map((url) => ({ name: 'Disponibilité France · JustWatch', category: 'Regarder', url }))],
@@ -266,6 +303,9 @@ class SeriesStore {
       jobs: this.db.prepare('SELECT source,COUNT(*) AS total,SUM(CASE WHEN due<=? THEN 1 ELSE 0 END) AS pending,SUM(CASE WHEN attempts>0 THEN 1 ELSE 0 END) AS failed FROM jobs GROUP BY source').all(Date.now()),
       lastSync: this.state('lastSync'),
       franceLastDiscoveryAt: this.state('lastFranceDiscoveryAt'),
+      franceLastAiringDiscoveryAt: this.state('lastFranceAirDiscoveryAt'),
+      franceAirScan: this.state('frAirScanProgress'),
+      indexedAirings: this.db.prepare('SELECT COUNT(*) AS total FROM show_airings').get().total,
       franceProviders: this.franceProviders().length,
       franceScan: this.state('frScanProgress'),
       coverage: 'Séries disponibles sur le marché français, toutes plateformes et offres recensées par JustWatch/TMDB. Animation exclue ; pays de production non filtré.'
