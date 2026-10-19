@@ -51,6 +51,9 @@ echo "Preparing Nuvio Oracle release $SHORT"
 run_nuvio "if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi"
 run_nuvio "npm test"
 run_nuvio "npm run test:runtime"
+# Validate the single-file Shield artwork pack before any public release switch.
+# No package => safe fallback. A partial/corrupt uploaded package aborts deployment.
+run_nuvio "node scripts/verify-series-covers.mjs"
 
 # Generated collection covers are release assets consumed by the Oracle integration
 # test itself. Reuse the previous set only as a warm cache; the revisioned generator

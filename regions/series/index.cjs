@@ -11,6 +11,74 @@ const { decorateSeriesMetas } = require('./src/presentation.cjs');
 let cachedStore;
 let cachedPath;
 const APPROVED_COVER = path.resolve(__dirname, '../../assets/collection-art/series-france-v2.jpg');
+// Approved October 2026 artwork: exact genre IDs, never a shared approximate slug.
+const GENRE_COVER_DIR = path.resolve(__dirname, '../../assets/series-covers');
+const GENRE_COVER_VERSION = 'premium-20261019-v1';
+const GENRE_COVER_IDS = new Set(GENRES.map(({ id }) => id));
+const COVER_PACK_NAME = 'series-covers-25-approved.zip';
+const coverZipCache = new Map();
+// Read a tightly scoped ZIP_STORED archive (the approved pack). This lets the
+// user upload one binary file to GitHub rather than 25 independent WebPs.
+// Parsing in memory avoids shelling out, temp files or unzip dependencies.
+function approvedCoverPack(dir = GENRE_COVER_DIR) {
+  const filename = path.join(dir, COVER_PACK_NAME);
+  let stat;
+  try { stat = fs.statSync(filename); }
+  catch (error) { if (error.code === 'ENOENT') return new Map(); throw error; }
+  const cacheKey = filename + ':' + stat.mtimeMs + ':' + stat.size;
+  if (coverZipCache.has(cacheKey)) return coverZipCache.get(cacheKey);
+  const data = fs.readFileSync(filename);
+  const entries = new Map();
+  let offset = 0;
+  while (offset + 4 <= data.length) {
+    const signature = data.readUInt32LE(offset);
+    if (signature === 0x02014b50 || signature === 0x06054b50) break;
+    if (signature !== 0x04034b50 || offset + 30 > data.length) throw new Error('Pack de covers ZIP corrompu');
+    const flags = data.readUInt16LE(offset + 6), compression = data.readUInt16LE(offset + 8);
+    const bytes = data.readUInt32LE(offset + 18);
+    const nameLength = data.readUInt16LE(offset + 26), extraLength = data.readUInt16LE(offset + 28);
+    const start = offset + 30 + nameLength + extraLength;
+    const end = start + bytes;
+    if (flags & 8 || compression !== 0 || end > data.length || nameLength > 180) throw new Error('Format ZIP de covers non pris en charge');
+    const name = data.subarray(offset + 30, offset + 30 + nameLength).toString('utf8');
+    const match = name.match(/^([a-z0-9-]+)\.webp$/);
+    if (match && GENRE_COVER_IDS.has(match[1])) {
+      const raw = data.subarray(start, end);
+      if (raw.length < 16 || raw.toString('ascii', 0, 4) !== 'RIFF'
+          || raw.toString('ascii', 8, 12) !== 'WEBP' || entries.has(match[1]))
+        throw new Error('Cover WebP invalide ou doublonnée : ' + name);
+      entries.set(match[1], raw);
+    }
+    offset = end;
+  }
+  coverZipCache.clear();
+  coverZipCache.set(cacheKey, entries);
+  return entries;
+}
+function genreCoverBuffer(id, dir = GENRE_COVER_DIR) {
+  if (!GENRE_COVER_IDS.has(id)) return null;
+  const filename = path.join(dir, id + '.webp');
+  if (fs.existsSync(filename)) return fs.readFileSync(filename);
+  return approvedCoverPack(dir).get(id) || null;
+}
+function genreCoverProgress(dir = GENRE_COVER_DIR) {
+  const zipped = approvedCoverPack(dir);
+  const ids = GENRES.filter(({ id }) => fs.existsSync(path.join(dir, id + '.webp')) || zipped.has(id));
+  return { loaded: ids.length, total: GENRES.length, ready: ids.length === GENRES.length };
+}
+function genreCoverRoute(origin, id) {
+  return `${origin}/artwork/genre/${encodeURIComponent(id)}.webp?v=${GENRE_COVER_VERSION}`;
+}
+async function serveGenreCover(res, id) {
+  if (!GENRE_COVER_IDS.has(id)) return send(res, 404, { error: 'Genre inconnu' });
+  const bytes = genreCoverBuffer(id);
+  if (!bytes) return send(res, 404, { error: 'Cover non installée' });
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'image/webp');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.end(bytes);
+}
 const artwork = new Map();
 
 async function serveArtwork(res, variant) {
@@ -71,6 +139,9 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
   const dates = periods(now).filter(({ key }) => key !== 'all');
   const release = releaseForOrigin(origin);
   const fresh = release.id === V2_ADDON_ID;
+  // Switch the entire set atomically. A partially uploaded batch must never
+  // give Shield a mix of old and new category covers.
+  const premiumCoversReady = genreCoverProgress().ready;
   const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=france-v2`;
   const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=france-v2`;
   return ['premieres', 'seasons'].map((view) => ({
@@ -87,8 +158,10 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
       const sources = dates.map((date) => ({ provider: 'addon', addonId: release.id, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
       return {
         id: `series-world-${view}-${genre.id}`, title: genre.name,
-        coverImageUrl: genre.id === 'all' ? parentCover : `${root}/fr/${renderer}-genre-card.jpg?${imageParams}`,
-        heroBackdropUrl: genre.id === 'all' ? parentArt : `${root}/fr/genre-backdrop.jpg?genre=${slug}`,
+        coverImageUrl: premiumCoversReady ? genreCoverRoute(origin, genre.id)
+          : (genre.id === 'all' ? parentCover : `${root}/fr/${renderer}-genre-card.jpg?${imageParams}`),
+        heroBackdropUrl: premiumCoversReady ? genreCoverRoute(origin, genre.id)
+          : (genre.id === 'all' ? parentArt : `${root}/fr/genre-backdrop.jpg?genre=${slug}`),
         tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
       };
@@ -146,6 +219,8 @@ async function handler(req, res) {
   const origin = `${url.origin}${routeBase}`;
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/cover.jpg' || url.pathname === '/backdrop.jpg') return serveArtwork(res, url.pathname === '/cover.jpg' ? 'cover' : 'backdrop');
+  const genreArtMatch = url.pathname.match(/^\/artwork\/genre\/([a-z0-9-]+)\.webp$/);
+  if (genreArtMatch) return serveGenreCover(res, genreArtMatch[1]);
   if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now), 'public, max-age=300');
   if (['/nuvio-collections.json', '/collections.json', '/nuvio-collections-desktop.json'].includes(url.pathname)) {
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'), 'public, max-age=300');
@@ -153,7 +228,9 @@ async function handler(req, res) {
   const store = reader();
   if (url.pathname === '/status.json') {
     const release = releaseForOrigin(origin);
-    return send(res, 200, { addonId: release.id, version: release.version, ...(store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 }) });
+    return send(res, 200, { addonId: release.id, version: release.version,
+      genreArtwork: { ...genreCoverProgress(), version: GENRE_COVER_VERSION },
+      ...(store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 }) });
   }
   if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB', providers: store?.franceProviders() || [] });
   if (url.pathname.startsWith('/catalog/series/')) {
@@ -182,4 +259,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor };
+module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor, genreCoverProgress, genreCoverRoute, genreCoverBuffer, approvedCoverPack };

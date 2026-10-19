@@ -69,6 +69,19 @@ try {
   assert(v2Data.metas.every((m) => new URL(m.background).pathname === '/fr/calendar-card.svg'));
   const v2Status = await (await get('/series-v2/status.json')).json();
   assert.equal(v2Status.version, '2.0.0'); assert.equal(v2Status.addonId, v2.id);
+  assert.equal(v2Status.genreArtwork.total, 25);
+  assert.equal(v2Status.genreArtwork.ready, v2Status.genreArtwork.loaded === 25);
+  const importedGenreImage = new URL((await (await get('/series-v2/nuvio-collections.json')).json())[0].folders[0].coverImageUrl);
+  if (v2Status.genreArtwork.ready) {
+    assert.match(importedGenreImage.pathname, /\/series-v2\/artwork\/genre\/all\.webp$/);
+    const response = await get(importedGenreImage.pathname + importedGenreImage.search);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /^image\/webp/);
+    const dimensions = await sharp(Buffer.from(await response.arrayBuffer())).metadata();
+    assert.equal(dimensions.width, 1600); assert.equal(dimensions.height, 900);
+  } else {
+    assert.doesNotMatch(importedGenreImage.pathname, /\/artwork\/genre\//);
+  }
   const v2Cover = await get('/series-v2/cover.jpg?v=france-v2');
   const v2CoverMeta = await sharp(Buffer.from(await v2Cover.arrayBuffer())).metadata();
   assert.equal(v2CoverMeta.width, 1600); assert.equal(v2CoverMeta.height, 900);
@@ -98,7 +111,8 @@ try {
   const status = await (await get('/series/status.json')).json();
   assert.equal(status.eligible, 204); assert.equal(status.animationExcluded, 2);
   const image = await get(new URL(imports[0].folders[0].coverImageUrl).pathname + new URL(imports[0].folders[0].coverImageUrl).search);
-  assert.equal(image.status, 200); assert.match(image.headers.get('content-type'), /^image\/jpeg/);
+  assert.equal(image.status, 200);
+  assert.match(image.headers.get('content-type'), v2Status.genreArtwork.ready ? /^image\/webp/ : /^image\/jpeg/);
   const imageMeta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
   assert.equal(imageMeta.width, 1600); assert.equal(imageMeta.height, 900);
   const background = await get('/series/backdrop.jpg?v=france-v2');
