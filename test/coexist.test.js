@@ -50,7 +50,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12242 + 19 * (138 - 197));
+  assert.equal(fr.catalogs.length, 12242 + 19 * (133 - 197));
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -62,7 +62,13 @@ test('combined live import fails closed without Cinema availability and keeps re
   const filmGenres = combined.find((collection) => collection.id === 'calendar-archives-fr-genres');
   assert(filmGenres && filmGenres.folders.length === 19, 'combined import must include all film genres');
   for (const folder of filmGenres.folders) {
-    assert.equal(folder.sources.length, 138, 'Combined Shield folder must not truncate older-than-2015 films');
+    assert.equal(folder.sources.length, 133, 'Combined Shield must show 2026 to 1900 with no future-year rows');
+    assert.deepEqual(folder.sources.slice(0, 5).map(src=>src.genre),
+      ['Aujourd’hui','Demain','Hier','Semaine passée','Depuis toujours']);
+    assert.equal(folder.sources[5].genre, '2026');
+    assert(!folder.sources.some((src)=>src.catalogId.includes('-nextweek') || /-year-202[7-9]|-year-2030/.test(src.catalogId)));
+    assert(folder.sources.every((src)=>src.genre && src.genre !== 'Films'));
+    assert(folder.catalogSources.every((src,i)=>src.genre===folder.sources[i].genre));
     assert(folder.sources.some((src) => src.catalogId.endsWith('-year-1900')));
     assert(folder.sources.some((src) => src.catalogId.endsWith('-year-2014')));
     assert(folder.sources.some((src) => src.catalogId.endsWith('-alltime')));
