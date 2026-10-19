@@ -16,7 +16,7 @@ const PLATFORM_ART_ROOT = path.join(ROOT, 'assets', 'platform-art');
 const GENRE_ART_ROOT = path.join(ROOT, 'assets', 'genre-art', 'shared');
 const APPROVED_BOARD_ROOT = path.join(ROOT, 'assets', 'approved-board');
 const INDIVIDUAL_MASTER_ROOT = path.join(ROOT, 'assets', 'individual-masters-v8');
-const REVISION = 'generated-v9-netflix-rounded-double-audit';
+const REVISION = 'generated-v10-fr-movie-genre-uniform-frame';
 
 const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 });
 const APPROVED_BOARD_PARTS = Object.freeze([
@@ -678,6 +678,18 @@ async function serviceCover(source, logoBuffer, opts) {
 async function genreCover(source, opts) {
   const width = 1600;
   const height = 900;
+  // On the three reported French film genres, always render one uniform
+  // native 16:9 card, with its title baked inside the same dark-gradient safe
+  // area as every other generated genre. Preserve the photography and never
+  // select a different image just to force the format.
+  if (opts.frFilmUniform === true) {
+    const background = await approvedBackground(source.buffer, width, height);
+    const rendered = await sharp(background)
+      .composite([{ input: genreCardOverlay(width, height, opts), left: 0, top: 0 }])
+      .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+      .toBuffer();
+    return roundedNetflixFrame(rendered, width, height);
+  }
   if (source.individualExact === true) return individualCardFrame(source.buffer, width, height);
   if (source.boardExact === true) {
     const board = await approvedBoardCardFrame(source.buffer, width, height);
@@ -823,10 +835,11 @@ async function genreJob(region, genre) {
   const outDir = path.join(OUT_ROOT, region, 'genres');
   const accent = /^#[0-9a-f]{6}$/i.test(String(genre.color || '')) ? genre.color : '#38bdf8';
   const label = String(genre.name || slug.replace(/-/g, ' '));
+  const frFilmUniform = region === 'fr' && ['history', 'tv-movie', 'war'].includes(slug);
 
   const [shield, desktop, hero] = await Promise.all([
-    genreCover(source, { mode: 'shield', label, accent }),
-    genreCover(source, { mode: 'desktop', label, accent }),
+    genreCover(source, { mode: 'shield', label, accent, frFilmUniform }),
+    genreCover(source, { mode: 'desktop', label, accent, frFilmUniform }),
     approvedHero(source, accent)
   ]);
 
@@ -845,6 +858,7 @@ async function genreJob(region, genre) {
     region,
     genre: slug,
     label,
+    filmUniformFrame: frFilmUniform,
     files: Object.values(files),
     sourceMode: source.individualExact === true ? 'individual-master-v8-hq' : 'approved-board-exact',
     sourceFile: source.sourceFile,
