@@ -66,7 +66,9 @@ function buildManifest(origin, now = new Date()) {
 
 function buildCollections(origin, now = new Date(), mode = 'shield') {
   const root = new URL('..', `${origin}/`).href.replace(/\/$/, '');
-  const dates = periods(now);
+  // In collections, expose rolling periods first; keep 'all' in the manifest
+  // as an internal/backwards-compatible catalog, never as a visible row.
+  const dates = periods(now).filter(({ key }) => key !== 'all');
   const release = releaseForOrigin(origin);
   const fresh = release.id === V2_ADDON_ID;
   const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=france-v2`;
