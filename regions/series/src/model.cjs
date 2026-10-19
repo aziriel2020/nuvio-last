@@ -114,10 +114,14 @@ function windowFor(period, now = new Date(), timeZone = 'Europe/Brussels') {
   if (period === 'yesterday') return { start: shiftDay(today, -1), end: shiftDay(today, -1) };
   if (period === 'lastweek') return { start: shiftDay(monday, -7), end: shiftDay(monday, -1) };
   if (period === 'nextweek') return { start: shiftDay(monday, 7), end: shiftDay(monday, 13) };
-  if (/^\d{4}$/.test(period) && Number(period) >= 1900 && Number(period) <= 9998) return { start: `${period}-01-01`, end: `${period}-12-31` };
+  // Archive periods must never display upcoming airings. Only the explicit
+  // Demain / La semaine suivante rolling rows are allowed into the future.
+  if (/^\d{4}$/.test(period) && Number(period) >= 1900 && Number(period) <= 9998)
+    return { start: `${period}-01-01`, end: `${period}-12-31` < today ? `${period}-12-31` : today };
   if (/^\d{4}-\d{2}$/.test(period) && isoDate(`${period}-01`)) {
     const next = new Date(`${period}-01T12:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1);
-    return { start: `${period}-01`, end: shiftDay(next.toISOString().slice(0, 10), -1) };
+    const monthEnd = shiftDay(next.toISOString().slice(0, 10), -1);
+    return { start: `${period}-01`, end: monthEnd < today ? monthEnd : today };
   }
   throw new Error('Invalid date period');
 }
@@ -127,14 +131,19 @@ function periods(now = new Date()) {
     ['all', 'Toutes les dates · Récent → Ancien'], ['today', 'Aujourd’hui'],
     ['tomorrow', 'Demain'], ['yesterday', 'Hier'], ['lastweek', 'Semaine passée'], ['nextweek', 'La semaine suivante']
   ];
-  for (let year = Math.max(2030, Number(localDay(now).slice(0, 4)) + 4); year >= 2015; year--) {
-    for (let month = 12; month >= 1; month--) {
+  // Do not prewire years/months that have not started yet: the current
+  // calendar month is the newest archive, and it stops on today's date.
+  const currentDay = localDay(now);
+  const currentYear = Number(currentDay.slice(0, 4));
+  const currentMonth = Number(currentDay.slice(5, 7));
+  for (let year = currentYear; year >= 2015; year--) {
+    for (let month = (year === currentYear ? currentMonth : 12); month >= 1; month--) {
       const key = `${year}-${String(month).padStart(2, '0')}`;
       const label = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${key}-01T12:00:00Z`));
       out.push([key, label.charAt(0).toUpperCase() + label.slice(1)]);
     }
   }
-  for (let year = 2014; year >= 1900; year--) out.push([String(year), String(year)]);
+  for (let year = Math.min(2014, currentYear); year >= 1900; year--) out.push([String(year), String(year)]);
   out.push(['before1900', 'Avant 1900'], ['undated', 'Date inconnue']);
   return out.map(([key, name]) => ({ key, name }));
 }
