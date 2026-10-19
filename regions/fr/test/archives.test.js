@@ -231,9 +231,9 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.3.4');
+  assert.equal(manifest.version,'1.3.5');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+19*13+28);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+16*(5+192)+19*(5+1+131+1)+28);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
     ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
@@ -534,8 +534,8 @@ test('France genres are split into Films first and Series second, both with exac
   assert.equal(series.id,'calendar-archives-fr-genres-series');
   assert.equal(films.folders.length,19);
   assert.equal(series.folders.length,16);
-  assert(films.folders.every((f)=>f.sources.length===210),
-    'Each movie genre must cover all time through 2030: 5 rolling + 192 months + 13 heritage eras');
+  assert(films.folders.every((f)=>f.sources.length===138),
+    'Every film genre must expose ALL TIME and 1900–2030 before the Shield source limit');
   assert(series.folders.every((f)=>f.sources.length===197),
     'Series genre catalog must remain unchanged');
   const action=films.folders.find((f)=>f.title==='Action');
@@ -547,18 +547,16 @@ test('France genres are split into Films first and Series second, both with exac
     'genres-fr-movie-28-lastweek',
     'genres-fr-movie-28-nextweek'
   ]);
-  assert.equal(action.sources[5].catalogId,'genres-fr-movie-28-2030-12');
-  assert.equal(action.sources[196].catalogId,'genres-fr-movie-28-2015-01');
-  assert.deepEqual(action.sources.slice(197).map((s)=>s.catalogId), [
-    'genres-fr-movie-28-era-2010-2014',
-    ...Array.from({ length: 11 }, (_, i) => {
-      const y = 2000 - i * 10;
-      return `genres-fr-movie-28-era-${y}-${y + 9}`;
-    }),
-    'genres-fr-movie-28-era-before1900'
-  ]);
-  assert.equal(action.sources.at(-1).catalogId,'genres-fr-movie-28-era-before1900');
-  assert(!action.sources.some((s)=>s.catalogId === 'genres-fr-movie-28-2015-2030'));
+  assert.equal(action.sources[5].catalogId, 'genres-fr-movie-28-alltime');
+  assert.equal(action.sources[6].catalogId, 'genres-fr-movie-28-year-2030');
+  assert.equal(action.sources[21].catalogId, 'genres-fr-movie-28-year-2015');
+  assert.equal(action.sources[22].catalogId, 'genres-fr-movie-28-year-2014');
+  assert.equal(action.sources[136].catalogId, 'genres-fr-movie-28-year-1900');
+  assert.equal(action.sources[137].catalogId, 'genres-fr-movie-28-era-before1900');
+  assert(action.sources.length < 200, 'Shield must expose the full history without truncating sources');
+  assert(films.folders.every((folder) => folder.sources.some((source) => source.catalogId.endsWith('-year-1900'))));
+  assert(!action.sources.some((source) => source.catalogId.endsWith('2015-01')),
+    'Keep legacy monthly URLs callable, but do not use them for the visible collection');
   const actionSeries=series.folders.find((f)=>f.title==='Action & Aventure');
   assert(actionSeries);
   assert.equal(actionSeries.sources[0].catalogId,'genres-fr-series-10759');
@@ -568,9 +566,20 @@ test('France genres are split into Films first and Series second, both with exac
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-series-10759-nextweek','series',fixedNow,tz).period,'nextweek');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-era-2010-2014','movie',fixedNow,tz).period,'genre-era-2010-2014');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-alltime','movie',fixedNow,tz).period,'genre-ever');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-year-1900','movie',fixedNow,tz).period,'genre-year-1900');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-year-2030','movie',fixedNow,tz).period,'genre-year-2030');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-year-1899','movie',fixedNow,tz),null);
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-year-2031','movie',fixedNow,tz),null);
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-series-10759-year-1990','series',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-era-before1900','movie',fixedNow,tz).period,'genre-era-before1900');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-era-2030-2039','movie',fixedNow,tz),null);
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-series-10759-era-2010-2014','series',fixedNow,tz),null);
+  assert.equal(calendar.dateWindow('genre-year-1900',fixedNow,tz).start,'1900-01-01');
+  assert.equal(calendar.dateWindow('genre-year-2014',fixedNow,tz).end,'2014-12-31');
+  assert.equal(calendar.dateWindow('genre-year-2030',fixedNow,tz).end,'2030-12-31');
+  assert.equal(calendar.dateWindow('genre-ever',fixedNow,tz).start,'1800-01-01');
+  assert.equal(calendar.dateWindow('genre-ever',fixedNow,tz).end,'2030-12-31');
   assert.equal(calendar.dateWindow('genre-era-2010-2014',fixedNow,tz).start,'2010-01-01');
   assert.equal(calendar.dateWindow('genre-era-2010-2014',fixedNow,tz).end,'2014-12-31');
   assert.equal(calendar.dateWindow('genre-era-before1900',fixedNow,tz).end,'1899-12-31');
@@ -608,9 +617,9 @@ test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG backgro
 });
 
 
-test('France manifest 1.3.4 explicitly publishes every Cinema du moment catalog',()=>{
+test('France manifest 1.3.5 explicitly publishes every Cinema du moment catalog',()=>{
   const manifest=api._internals.buildManifest('https://example.invalid/fr',fixedNow,'Europe/Brussels');
-  assert.equal(manifest.version,'1.3.4');
+  assert.equal(manifest.version,'1.3.5');
   const cinemaIds=manifest.catalogs.filter(c=>c.type==='movie'&&c.id.startsWith('cinema-torrentio-')).map(c=>c.id);
   assert.deepEqual(cinemaIds,[
     'cinema-torrentio-nowplaying',
