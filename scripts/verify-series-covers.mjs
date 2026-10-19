@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 'use strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const sharp = require('sharp');
 const { GENRES } = require('../regions/series/src/model.cjs');
 const { genreCoverProgress, genreCoverBuffer } = require('../regions/series/index.cjs')._internals;
