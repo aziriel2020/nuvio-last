@@ -15,8 +15,55 @@ const APPROVED_COVER = path.resolve(__dirname, '../../assets/collection-art/seri
 const GENRE_COVER_DIR = path.resolve(__dirname, '../../assets/series-covers');
 const GENRE_COVER_VERSION = 'premium-20261019-v1';
 const GENRE_COVER_IDS = new Set(GENRES.map(({ id }) => id));
+const COVER_PACK_NAME = 'series-covers-25-approved.zip';
+const coverZipCache = new Map();
+// Read a tightly scoped ZIP_STORED archive (the approved pack). This lets the
+// user upload one binary file to GitHub rather than 25 independent WebPs.
+// Parsing in memory avoids shelling out, temp files or unzip dependencies.
+function approvedCoverPack(dir = GENRE_COVER_DIR) {
+  const filename = path.join(dir, COVER_PACK_NAME);
+  let stat;
+  try { stat = fs.statSync(filename); }
+  catch (error) { if (error.code === 'ENOENT') return new Map(); throw error; }
+  const cacheKey = filename + ':' + stat.mtimeMs + ':' + stat.size;
+  if (coverZipCache.has(cacheKey)) return coverZipCache.get(cacheKey);
+  const data = fs.readFileSync(filename);
+  const entries = new Map();
+  let offset = 0;
+  while (offset + 4 <= data.length) {
+    const signature = data.readUInt32LE(offset);
+    if (signature === 0x02014b50 || signature === 0x06054b50) break;
+    if (signature !== 0x04034b50 || offset + 30 > data.length) throw new Error('Pack de covers ZIP corrompu');
+    const flags = data.readUInt16LE(offset + 6), compression = data.readUInt16LE(offset + 8);
+    const bytes = data.readUInt32LE(offset + 18);
+    const nameLength = data.readUInt16LE(offset + 26), extraLength = data.readUInt16LE(offset + 28);
+    const start = offset + 30 + nameLength + extraLength;
+    const end = start + bytes;
+    if (flags & 8 || compression !== 0 || end > data.length || nameLength > 180) throw new Error('Format ZIP de covers non pris en charge');
+    const name = data.subarray(offset + 30, offset + 30 + nameLength).toString('utf8');
+    const match = name.match(/^([a-z0-9-]+)\.webp$/);
+    if (match && GENRE_COVER_IDS.has(match[1])) {
+      const raw = data.subarray(start, end);
+      if (raw.length < 16 || raw.toString('ascii', 0, 4) !== 'RIFF'
+          || raw.toString('ascii', 8, 12) !== 'WEBP' || entries.has(match[1]))
+        throw new Error('Cover WebP invalide ou doublonnée : ' + name);
+      entries.set(match[1], raw);
+    }
+    offset = end;
+  }
+  coverZipCache.clear();
+  coverZipCache.set(cacheKey, entries);
+  return entries;
+}
+function genreCoverBuffer(id, dir = GENRE_COVER_DIR) {
+  if (!GENRE_COVER_IDS.has(id)) return null;
+  const filename = path.join(dir, id + '.webp');
+  if (fs.existsSync(filename)) return fs.readFileSync(filename);
+  return approvedCoverPack(dir).get(id) || null;
+}
 function genreCoverProgress(dir = GENRE_COVER_DIR) {
-  const ids = GENRES.filter(({ id }) => fs.existsSync(path.join(dir, id + '.webp')));
+  const zipped = approvedCoverPack(dir);
+  const ids = GENRES.filter(({ id }) => fs.existsSync(path.join(dir, id + '.webp')) || zipped.has(id));
   return { loaded: ids.length, total: GENRES.length, ready: ids.length === GENRES.length };
 }
 function genreCoverRoute(origin, id) {
@@ -24,13 +71,8 @@ function genreCoverRoute(origin, id) {
 }
 async function serveGenreCover(res, id) {
   if (!GENRE_COVER_IDS.has(id)) return send(res, 404, { error: 'Genre inconnu' });
-  const filename = path.join(GENRE_COVER_DIR, id + '.webp');
-  let bytes;
-  try { bytes = await fs.promises.readFile(filename); }
-  catch (err) {
-    if (err.code === 'ENOENT') return send(res, 404, { error: 'Cover non installée' });
-    throw err;
-  }
+  const bytes = genreCoverBuffer(id);
+  if (!bytes) return send(res, 404, { error: 'Cover non installée' });
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/webp');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -217,4 +259,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor, genreCoverProgress, genreCoverRoute };
+module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor, genreCoverProgress, genreCoverRoute, genreCoverBuffer, approvedCoverPack };
