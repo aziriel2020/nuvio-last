@@ -77,9 +77,21 @@ function localTime(now = new Date(), timeZone = DEFAULT_TIMEZONE) {
 function dateWindow(period = 'next7', now = new Date(), timeZone = DEFAULT_TIMEZONE) {
   const today = localIsoDate(now, timeZone, 0);
 
-  // Films by genre retain every archive month from 2015 to 2030 and group
-  // earlier cinema history into fixed periods. This avoids 100+ extra TV rows
-  // for each genre while preserving the entire available history.
+  // Direct chronological cinema shelf, including pre-2015 years. Shield
+  // must not be forced to scroll through 192 monthly rows to reach them.
+  const yearlyGenre = String(period || '').match(/^genre-year-(\d{4})$/);
+  if (yearlyGenre) {
+    const year = Number(yearlyGenre[1]);
+    return { start: `${year}-01-01`, end: `${year}-12-31`,
+      kind: 'genre-year', today, allowPast: true,
+      empty: year < 1900 || year > 2030, archiveYear: year };
+  }
+  if (period === 'genre-ever') {
+    return { start: '1800-01-01', end: '2030-12-31',
+      kind: 'genre-ever', today, allowPast: true, empty: false };
+  }
+
+  // Old decade/year links remain callable for backwards compatibility.
   const era = String(period || '').match(/^genre-era-(\d{4})-(\d{4})$/);
   if (era) {
     const first = Number(era[1]), last = Number(era[2]);
