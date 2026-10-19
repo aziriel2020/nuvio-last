@@ -348,11 +348,58 @@ test('unverified global metadata and expired French evidence never leak into cat
   assert.equal(store.hasFranceAvailability('tmdb:1'), false);
 });
 
-test('an overflowing individual provider is reported as incomplete', async (t) => {
+test('an overflowing provider is partitioned by air-date until it can be scanned', async (t) => {
   const store = memory(t);
-  const api = async (endpoint) => endpoint === '/watch/providers/tv' ? { results: [{ provider_id: 8, provider_name: 'Netflix' }] } : { total_pages: 501, total_results: 10020, results: [] };
+  const calls = [];
+  const api = async (endpoint, params) => {
+    if (endpoint === '/watch/providers/tv') return { results: [{ provider_id: 8, provider_name: 'Netflix' }] };
+    calls.push(params);
+    if (!params['first_air_date.gte']) return { total_pages: 501, total_results: 10020, results: [] };
+    return { total_pages: 1, results: [{
+      id: params['first_air_date.gte'] === '0001-01-01' ? 10 : 11,
+      name: 'Série test', genre_ids: [18], first_air_date: '2026-10-19'
+    }] };
+  };
   const scan = await scanFrance(store, { api, delay: 0 });
-  assert.equal(scan.complete, false); assert.equal(scan.overflow[0].providerId, 8);
+  assert.equal(scan.complete, true);
+  assert.equal(scan.overflow.length, 0);
+  assert.equal(scan.uniqueCandidates, 2);
+  assert(calls.some((p) => p['first_air_date.gte'] === '0001-01-01'));
+  assert(calls.some((p) => p['first_air_date.lte'] === '9999-12-31'));
+  assert(store.state('lastFranceDiscoveryAt'));
+});
+
+test('a single-day overflow remains explicitly incomplete and is not prematurely retried', async (t) => {
+  const store = memory(t);
+  store.state('frScanProgress', {
+    id: '20261019', startedAt: Date.now(), lastProgressAt: Date.now(), complete: false,
+    pages: 0, uniqueCandidates: 0, providers: 1,
+    tasks: [{ ids: [8], from: '2026-10-19', to: '2026-10-19', page: 1 }], overflow: []
+  });
+  let calls = 0;
+  const api = async () => { calls++; return { total_pages: 501, total_results: 10020, results: [] }; };
+  const scan = await scanFrance(store, { api, delay: 0 });
+  assert.equal(scan.complete, false);
+  assert.equal(scan.overflow[0].providerId, 8);
+  assert(scan.retryAt > Date.now());
+  await scanFrance(store, { api, delay: 0 });
+  assert.equal(calls, 1, 'retry backoff must prevent an immediate tight loop');
+});
+
+test('legacy persisted overflowing scans automatically recover', async (t) => {
+  const store = memory(t);
+  store.state('frScanProgress', {
+    id: 'stalled', startedAt: Date.now() - 86400000, complete: false,
+    pages: 0, uniqueCandidates: 0, providers: 1, tasks: [],
+    overflow: [{ providerId: 8, totalResults: 10020 }]
+  });
+  const api = async (endpoint) => endpoint === '/watch/providers/tv'
+    ? { results: [{ provider_id: 8, provider_name: 'Netflix' }] }
+    : { total_pages: 1, results: [{ id: 42, name: 'Nouvelle série', genre_ids: [18] }] };
+  const scan = await scanFrance(store, { api, delay: 0 });
+  assert.equal(scan.complete, true);
+  assert.equal(scan.uniqueCandidates, 1);
+  assert.equal(scan.overflow.length, 0);
 });
 
 test('HTTP addon exposes paged catalogs, rejects animation metadata, and reports progress', async (t) => {
