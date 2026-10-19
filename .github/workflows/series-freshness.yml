@@ -1,0 +1,27 @@
+name: Series France Freshness
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuvio-series-france-freshness
+  cancel-in-progress: true
+
+jobs:
+  verify-series:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ensure live series index is updating on Oracle
+        env:
+          PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+        run: node scripts/check-series-freshness.mjs
