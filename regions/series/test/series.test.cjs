@@ -269,7 +269,9 @@ test('archive imports reference real unique catalogs, cover old series, and pres
     assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'before1900'));
   }
   assert.equal(JSON.stringify(collections).includes('generated_images'), false);
-  assert.equal(collections[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=france-v2`);
+  assert.equal(collections[0].folders[0].coverImageUrl,
+    addon._internals.genreCoverProgress().ready
+      ? addon._internals.genreCoverRoute(origin, 'all') : `${origin}/cover.jpg?v=france-v2`);
   assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=france-v2`);
   assert.match(manifest.name, /France/);
   assert.equal(labels.get('series-fr-premieres-all-2026-10'), 'Octobre 2026');
@@ -333,7 +335,9 @@ test('V2 escapes the old addon cache and replaces collection sources without dup
     for (const collection of imported) combined[combined.findIndex((c) => c.id === collection.id)] = collection;
     assert.equal(combined.length, 2);
     assert(combined.every((c) => c.folders.every((f) => f.sources.every((s) => s.addonId === fresh.id))));
-    assert.equal(imported[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=france-v2`);
+    assert.equal(imported[0].folders[0].coverImageUrl,
+      addon._internals.genreCoverProgress().ready
+        ? addon._internals.genreCoverRoute(origin, 'all') : `${origin}/cover.jpg?v=france-v2`);
   }
 });
 
