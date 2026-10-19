@@ -8,6 +8,26 @@ const { providerDirectory, discoverParams } = require('../regions/series/src/fra
 const { tmdb, pause } = require('../regions/series/src/upstream.cjs');
 
 const REFRESH = 6 * 3600000;
+const MAX_STALLED_SCAN_AGE = 12 * 3600000;
+const DAY = 86400000;
+
+// TMDb discover cannot paginate beyond page 500. Subdivide one provider
+// by inclusive first-air-date ranges instead of silently dropping its shows.
+function splitDateTask(task) {
+  const from = task.from || '0001-01-01';
+  const to = task.to || '9999-12-31';
+  const first = Date.parse(from + 'T00:00:00Z');
+  const last = Date.parse(to + 'T00:00:00Z');
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first >= last) return null;
+  const midpoint = new Date(Math.floor((first + last) / (2 * DAY)) * DAY).toISOString().slice(0, 10);
+  if (midpoint < from || midpoint >= to) return null;
+  const next = new Date(Date.parse(midpoint + 'T00:00:00Z') + DAY).toISOString().slice(0, 10);
+  return [
+    { ids: [...task.ids], from, to: midpoint, page: 1 },
+    { ids: [...task.ids], from: next, to, page: 1 }
+  ];
+}
+
 let stopping = false;
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopping = true; });
 const log = (event, details = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...details }));
@@ -18,18 +38,26 @@ function candidateRecord(data) {
 
 async function scanFrance(store, { api = tmdb, maxPages = 80, delay = 250, now = Date.now() } = {}) {
   let scan = store.state('frScanProgress');
-  if (!scan || scan.complete && now - scan.completedAt >= REFRESH) {
+  // Previous releases could persist {tasks: [], overflow: [...]} forever.
+  // Reopen them on upgrade; resume genuinely stalled in-progress snapshots.
+  const exhausted = scan && !scan.complete && !scan.tasks?.length && scan.overflow?.length;
+  const stalled = scan && !scan.complete && scan.tasks?.length
+    && now - (scan.lastProgressAt || scan.startedAt || now) >= MAX_STALLED_SCAN_AGE;
+  if (!scan || (scan.complete && now - scan.completedAt >= REFRESH)
+    || (exhausted && (!scan.retryAt || now >= scan.retryAt)) || stalled) {
     const providers = providerDirectory(await api('/watch/providers/tv', { watch_region: 'FR', language: 'fr-FR' }));
     store.setFranceProviders(providers);
     scan = { id: String(now), startedAt: now, complete: false, pages: 0, uniqueCandidates: 0,
-      providers: providers.length, tasks: [{ ids: providers.map((p) => p.id), page: 1 }], overflow: [] };
+      providers: providers.length, lastProgressAt: now,
+      tasks: [{ ids: providers.map((p) => p.id), page: 1 }], overflow: [] };
     store.state('frScanProgress', scan);
   }
   if (scan.complete) return scan;
   let budget = maxPages;
   while (scan.tasks.length && budget-- > 0 && !stopping) {
     const task = scan.tasks[0];
-    const payload = await api('/discover/tv', discoverParams(task.ids, task.page));
+    const dates = task.from ? { 'first_air_date.gte': task.from, 'first_air_date.lte': task.to } : {};
+    const payload = await api('/discover/tv', discoverParams(task.ids, task.page, dates));
     if (!Array.isArray(payload.results)) throw new Error('Malformed France discovery response');
     const pages = Number(payload.total_pages || 1);
     if (pages > 500) {
@@ -38,9 +66,16 @@ async function scanFrance(store, { api = tmdb, maxPages = 80, delay = 250, now =
         const middle = Math.ceil(task.ids.length / 2);
         scan.tasks.unshift({ ids: task.ids.slice(0, middle), page: 1 }, { ids: task.ids.slice(middle), page: 1 });
       } else {
-        // Never turn a capped scan into a falsely complete catalog.
-        scan.overflow.push({ providerId: task.ids[0], totalResults: payload.total_results });
+        const shards = splitDateTask(task);
+        if (shards) scan.tasks.unshift(...shards);
+        else {
+          // A single date still exceeds the cap: retain the old catalog,
+          // report incomplete coverage and retry the scan in six hours.
+          scan.overflow.push({ providerId: task.ids[0], from: task.from, to: task.to,
+            totalResults: payload.total_results, reason: 'TMDb page limit' });
+        }
       }
+      scan.lastProgressAt = Date.now();
       store.state('frScanProgress', scan); continue;
     }
     store.transaction(() => { for (const data of payload.results) {
@@ -57,8 +92,14 @@ async function scanFrance(store, { api = tmdb, maxPages = 80, delay = 250, now =
     scan.pages++;
     scan.uniqueCandidates = store.db.prepare('SELECT COUNT(*) AS count FROM fr_seen WHERE scan_id=?').get(scan.id).count;
     if (task.page >= pages) scan.tasks.shift(); else task.page++;
+    scan.lastProgressAt = Date.now();
+    store.state('lastFranceDiscoveryAt', new Date(scan.lastProgressAt).toISOString());
     store.state('frScanProgress', scan);
     if (delay) await pause(delay);
+  }
+  if (!scan.tasks.length && scan.overflow.length && !scan.retryAt) {
+    scan.retryAt = Date.now() + REFRESH;
+    store.state('frScanProgress', scan);
   }
   if (!scan.tasks.length && !scan.overflow.length) {
     store.transaction(() => {
@@ -66,6 +107,7 @@ async function scanFrance(store, { api = tmdb, maxPages = 80, delay = 250, now =
       store.db.prepare('UPDATE fr_availability SET available=0 WHERE tmdb_id NOT IN (SELECT tmdb_id FROM fr_seen WHERE scan_id=?)').run(scan.id);
       store.db.prepare('DELETE FROM fr_seen WHERE scan_id!=?').run(scan.id);
       scan.complete = true; scan.completedAt = Date.now();
+      scan.lastProgressAt = scan.completedAt;
       store.state('frScanProgress', scan);
     });
   }
@@ -116,4 +158,4 @@ async function main() {
   } finally { store.close(); }
 }
 if (require.main === module) main().catch((e) => { log('france-sync-fatal', { message: e.message }); process.exitCode = 1; });
-module.exports = { scanFrance, runFranceJobs, syncCycle, candidateRecord };
+module.exports = { scanFrance, runFranceJobs, syncCycle, candidateRecord, splitDateTask };
