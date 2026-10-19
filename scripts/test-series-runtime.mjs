@@ -36,7 +36,9 @@ try {
   }
   assert(ready, `Oracle test server failed to start: ${logs}`);
   const install = await (await get('/install.json')).json();
-  assert.equal(install.seriesManifest, `${origin}/series/manifest.json`);
+  assert.equal(install.seriesManifest, `${origin}/series-v2/manifest.json`);
+  assert.equal(install.seriesLegacyManifest, `${origin}/series/manifest.json`);
+  assert.equal(install.seriesVersion, '2.0.0');
   const manifestResponse = await get('/series/manifest.json');
   assert.equal(manifestResponse.headers.get('cache-control'), 'no-store');
   const manifest = await manifestResponse.json();
@@ -47,6 +49,29 @@ try {
   const desktop = await (await get('/series/nuvio-collections-desktop.json')).json();
   assert.equal(imports.length, 2); assert.equal(desktop.length, 2);
   assert(manifest.catalogs.some((c) => c.id === imports[0].folders[0].sources[0].catalogId));
+  const v2Response = await get('/series-v2/manifest.json');
+  assert.equal(v2Response.headers.get('cache-control'), 'no-store');
+  const v2 = await v2Response.json();
+  assert.notEqual(v2.id, manifest.id); assert.equal(v2.version, '2.0.0');
+  assert.match(v2.name, /V2.*2\.0\.0/);
+  assert.equal(v2.catalogs.length * 2, manifest.catalogs.length);
+  const v2Names = new Map(v2.catalogs.map((c) => [c.id, c.name]));
+  for (const route of ['/series-v2/nuvio-collections.json', '/series-v2/nuvio-collections-desktop.json']) {
+    const response = await get(route); assert.equal(response.headers.get('cache-control'), 'no-store');
+    const collections = await response.json();
+    assert.deepEqual(collections.map((c) => c.id), imports.map((c) => c.id));
+    for (const collection of collections) for (const folder of collection.folders) for (const source of folder.sources) {
+      assert.equal(source.addonId, v2.id); assert(v2Names.has(source.catalogId));
+    }
+  }
+  const v2Data = await (await get('/series-v2/catalog/series/series-fr-premieres-all-all.json')).json();
+  assert.equal(v2Data.metas.length, 100);
+  assert(v2Data.metas.every((m) => new URL(m.background).pathname === '/fr/calendar-card.svg'));
+  const v2Status = await (await get('/series-v2/status.json')).json();
+  assert.equal(v2Status.version, '2.0.0'); assert.equal(v2Status.addonId, v2.id);
+  const v2Cover = await get('/series-v2/cover.jpg?v=france-v2');
+  const v2CoverMeta = await sharp(Buffer.from(await v2Cover.arrayBuffer())).metadata();
+  assert.equal(v2CoverMeta.width, 1600); assert.equal(v2CoverMeta.height, 900);
   const all = '/series/catalog/series/series-world-premieres-all-all';
   const ids = [];
   for (const skip of [0, 100, 200]) {

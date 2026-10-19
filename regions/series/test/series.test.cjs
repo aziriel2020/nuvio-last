@@ -11,6 +11,7 @@ const addon = require('../index.cjs');
 const { scanFrance, runFranceJobs } = require('../../../scripts/sync-series-world.cjs');
 const { offersInFrance, discoverParams } = require('../src/france.cjs');
 const { decorateSeriesMetas } = require('../src/presentation.cjs');
+const { V2_ADDON_ID, V2_VERSION } = require('../src/model.cjs');
 const sharp = require('sharp');
 const franceAddon = require('../../fr/api/index.js');
 const NOW = new Date('2026-10-18T17:00:00Z');
@@ -179,6 +180,40 @@ test('every series period uses existing custom Shield and Desktop covers while d
   assert.equal(raw.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
   assert.equal(store.meta(store.row('tmdb:1')).poster, raw.poster);
   assert.equal(raw.logo, undefined);
+});
+
+test('V2 escapes the old addon cache and replaces collection sources without duplicate collections', () => {
+  const legacyOrigin = 'https://example.test/series';
+  const origin = 'https://example.test/series-v2';
+  const legacy = addon._internals.buildManifest(legacyOrigin, NOW);
+  const fresh = addon._internals.buildManifest(origin, NOW);
+  assert.notEqual(fresh.id, legacy.id);
+  assert.equal(fresh.id, V2_ADDON_ID); assert.equal(fresh.version, V2_VERSION);
+  assert.match(fresh.name, /V2.*2\.0\.0/);
+  assert.equal(fresh.catalogs.length * 2, legacy.catalogs.length);
+  const names = new Map(fresh.catalogs.map((c) => [c.id, c.name]));
+  assert.equal(names.get('series-fr-premieres-all-2026-10'), 'Octobre 2026');
+  assert.equal(names.has('series-world-premieres-all-all'), false);
+  for (const mode of ['shield', 'desktop']) {
+    const previous = addon._internals.buildCollections(legacyOrigin, NOW, mode);
+    const imported = addon._internals.buildCollections(origin, NOW, mode);
+    assert.deepEqual(imported.map((c) => c.id), previous.map((c) => c.id));
+    for (const [index, collection] of imported.entries()) {
+      assert.match(collection.title, /V2/);
+      assert.deepEqual(collection.folders.map((f) => f.id), previous[index].folders.map((f) => f.id));
+      for (const folder of collection.folders) {
+        assert.equal(folder.tileShape, 'LANDSCAPE');
+        assert.deepEqual(folder.catalogSources.map((s) => s.addonId), folder.sources.map((s) => s.addonId));
+        for (const source of folder.sources) { assert.equal(source.addonId, fresh.id); assert(names.has(source.catalogId)); }
+      }
+    }
+    // Mirrors CollectionManagementViewModel.confirmImport: matching IDs replace.
+    const combined = [...previous];
+    for (const collection of imported) combined[combined.findIndex((c) => c.id === collection.id)] = collection;
+    assert.equal(combined.length, 2);
+    assert(combined.every((c) => c.folders.every((f) => f.sources.every((s) => s.addonId === fresh.id))));
+    assert.equal(imported[0].folders[0].coverImageUrl, `${origin}/cover.jpg?v=france-v2`);
+  }
 });
 
 test('WebP source art remains visible in SVG decoders that only support JPEG and PNG', async (t) => {

@@ -446,10 +446,13 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, {
       version: VERSION,
-      seriesManifest: `${origin}/series/manifest.json`,
-      seriesCollections: `${origin}/series/nuvio-collections.json`,
-      seriesDesktopCollections: `${origin}/series/nuvio-collections-desktop.json`,
-      seriesStatus: `${origin}/series/status.json`,
+      seriesAddonId: seriesHandler._internals.releaseForOrigin(`${origin}/series-v2`).id,
+      seriesVersion: seriesHandler._internals.releaseForOrigin(`${origin}/series-v2`).version,
+      seriesManifest: `${origin}/series-v2/manifest.json`,
+      seriesCollections: `${origin}/series-v2/nuvio-collections.json`,
+      seriesDesktopCollections: `${origin}/series-v2/nuvio-collections-desktop.json`,
+      seriesStatus: `${origin}/series-v2/status.json`,
+      seriesLegacyManifest: `${origin}/series/manifest.json`,
       franceManifest: `${origin}/fr/manifest.json`,
       globalManifest: `${origin}/global/manifest.json`,
       turkeyManifest: `${origin}/tr/manifest.json`,
@@ -466,6 +469,7 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, seriesHandler._internals.buildCollections(`${origin}/series`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), LARGE_JSON_CACHE);
   }
+  if (path === '/series-v2' || path.startsWith('/series-v2/')) return delegate(req, res, '/series-v2', seriesHandler);
   if (path === '/series' || path.startsWith('/series/')) return delegate(req, res, '/series', seriesHandler);
   if (path === '/global' || path.startsWith('/global/')) return delegate(req, res, '/global', globalHandler);
   if (path === '/tr' || path.startsWith('/tr/')) return delegate(req, res, '/tr', trHandler);

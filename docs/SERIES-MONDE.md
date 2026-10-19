@@ -31,13 +31,28 @@ Les points de reprise, erreurs et compteurs FR sont publics dans `/series/status
 
 ## Mise à jour dans Nuvio
 
+### Installation V2 sans conflit avec les anciennes versions
+
+La version **2.0.0**, nommée **Nuvio Séries France V2 · 2.0.0**, utilise un nouvel identifiant `com.nuvio.series.france.liveaction.v2` et une nouvelle base `/series-v2`. Le cache des versions 1.x, attaché à l'ancienne URL/identité dans Nuvio, ne peut pas être réutilisé pour cette installation.
+
+1. Retirer uniquement l'ancienne extension Séries Monde / Séries Streaming France.
+2. Installer `/series-v2/manifest.json` et vérifier que le nom affiche V2 · 2.0.0.
+3. Importer `/series-v2/nuvio-collections.json` pour Shield, ou `/series-v2/nuvio-collections-desktop.json` pour Desktop.
+4. Fermer et relancer Nuvio.
+
+**Cette migration exige le nouvel import**, car les sources doivent pointer vers le nouvel addon. Les IDs des deux collections et de leurs dossiers restent identiques ; l'import Nuvio remplace donc ces collections en place. Les autres collections ne sont pas présentes dans cet import. La V2 réutilise le même index France, les mêmes exclusions et les mêmes covers custom ; aucun deuxième worker ni index n'est créé. Le manifest V2 ne publie que les IDs canoniques, sans doubler chaque catalogue avec les alias historiques.
+
+Le bouton « Actualiser les extensions » du client Nuvio consulté synchronise les URLs mais ne force pas `fetchAddon` pour une URL inchangée. L'installation explicite de la V2 force une lecture du nouveau manifest. `/install.json` recommande désormais la V2 et expose séparément le lien historique.
+
+### Compatibilité des installations historiques
+
 Les identifiants existants sont conservés pour mettre à jour les collections en place. Les anciens IDs contenant `world` sont uniquement des identifiants de compatibilité ; leurs résultats sont désormais filtrés sur le marché FR.
 
 - Addon : `/series/manifest.json` (version 1.1.1, Nuvio Séries Streaming France).
 - Shield : `/series/nuvio-collections.json`.
 - Desktop : `/series/nuvio-collections-desktop.json`.
 
-Actualiser l'addon et réimporter le JSON adapté au client pour actualiser les titres et visuels. Les quatre addons historiques et leurs collections ne sont pas modifiés.
+Les endpoints historiques restent disponibles pour les collections encore liées à l'ancien identifiant. Pour sortir d'un conflit de versions ou d'un manifest local ancien, utiliser la migration V2 ci-dessus.
 
 Depuis la version 1.1.1, le manifest nomme aussi les anciens identifiants `series-world-*` : les collections des deux versions retrouvent les libellés de périodes (« Aujourd’hui », « Octobre 2026 », etc.) après actualisation du manifest dans Nuvio. Le texte générique « Séries - Série » est le fallback du client quand sa copie installée du manifest ne contient pas l'identifiant de la source.
 

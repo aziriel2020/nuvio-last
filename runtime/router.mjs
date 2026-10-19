@@ -40,9 +40,8 @@ export function edgeTtl(input) {
   const url = normalizedUrl(input);
   const path = url.pathname;
 
-  if (path === '/series/status.json') return 0;
   // Empty/error series responses must not become a cached successful catalog.
-  if (path.startsWith('/series/')) return 0;
+  if (/^\/series(?:-v2)?\//.test(path)) return 0;
 
   if (path === '/health' || path.includes('/debug/') || path.startsWith('/internal/')) return 0;
 

@@ -2,6 +2,8 @@
 
 const ADDON_ID = 'com.nuvio.series.world.liveaction';
 const VERSION = '1.1.1';
+const V2_ADDON_ID = 'com.nuvio.series.france.liveaction.v2';
+const V2_VERSION = '2.0.0';
 const { offersInFrance } = require('./france.cjs');
 const GENRES = Object.freeze([
   ['all', 'Toutes les séries'],
@@ -136,4 +138,4 @@ function parseCatalog(id) {
   return match && GENRES.some((g) => g.id === match[2]) ? { mode: match[1], genre: match[2], period: match[3] } : null;
 }
 
-module.exports = { ADDON_ID, VERSION, GENRES, isoDate, unique, classify, fromTmdb, fromTvmaze, localDay, shiftDay, windowFor, periods, catalogId, parseCatalog };
+module.exports = { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, isoDate, unique, classify, fromTmdb, fromTvmaze, localDay, shiftDay, windowFor, periods, catalogId, parseCatalog };

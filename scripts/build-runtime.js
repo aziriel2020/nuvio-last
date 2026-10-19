@@ -89,7 +89,8 @@ async function main() {
     '/nuvio-collections-tr.json',
     '/nuvio-collections-turkiye.json',
     '/nuvio-collections-series.json', '/nuvio-collections-series-desktop.json',
-    '/series/manifest.json', '/series/nuvio-collections.json', '/series/nuvio-collections-desktop.json', '/series/collections.json'
+    '/series/manifest.json', '/series/nuvio-collections.json', '/series/nuvio-collections-desktop.json', '/series/collections.json',
+    '/series-v2/manifest.json', '/series-v2/nuvio-collections.json', '/series-v2/nuvio-collections-desktop.json', '/series-v2/collections.json'
   ];
 
   for (const region of ['fr', 'global', 'tr', 'us']) {
