@@ -217,4 +217,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor };
+module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor, genreCoverProgress, genreCoverRoute };
