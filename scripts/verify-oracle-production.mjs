@@ -267,7 +267,7 @@ assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Sh
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
 const generatedManifest = generatedManifestResult.data;
-assert(generatedManifest?.revision === 'generated-v10-fr-movie-genre-uniform-frame', `generated cover revision mismatch: ${generatedManifest?.revision}`);
+assert(generatedManifest?.revision === 'generated-v11-genre-photo-frames-period-labels', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
 assert(generatedManifest?.artDirection === 'netflix-rounded-unified-v9', `wrong art direction: ${generatedManifest?.artDirection}`);
 assert(generatedManifest?.visualReference === 'netflix-master-frame-plus-approved-local-art', 'validated individual asset reference missing');
@@ -402,7 +402,7 @@ assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield service
 for (const value of generatedShieldVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Shield cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v10-fr-movie-genre-uniform-frame', `generated Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v11-genre-photo-frames-period-labels', `generated Shield cover has stale revision: ${value}`);
 }
 
 const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
@@ -411,7 +411,7 @@ const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
 assert(generatedGenreShieldUrls.length >= 20, `too few generated Shield genre covers in collection payload: ${generatedGenreShieldUrls.length}`);
 for (const value of generatedGenreShieldUrls) {
   const visualUrl = new URL(value);
-  assert(visualUrl.searchParams.get('v') === 'generated-v10-fr-movie-genre-uniform-frame', `generated genre Shield cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v11-genre-photo-frames-period-labels', `generated genre Shield cover has stale revision: ${value}`);
 }
 
 const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
@@ -439,7 +439,7 @@ assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop servi
 for (const value of generatedDesktopVisualUrls) {
   const visualUrl = new URL(value);
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
-  assert(visualUrl.searchParams.get('v') === 'generated-v10-fr-movie-genre-uniform-frame', `generated Desktop cover has stale revision: ${value}`);
+  assert(visualUrl.searchParams.get('v') === 'generated-v11-genre-photo-frames-period-labels', `generated Desktop cover has stale revision: ${value}`);
 }
 const generatedGenreDesktopUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }

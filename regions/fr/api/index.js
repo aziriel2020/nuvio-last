@@ -38,7 +38,7 @@ const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
 
-const VERSION = '1.3.5';
+const VERSION = '1.3.6';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -56,7 +56,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-fr-v1.3.5-editorial-period-titles';
+const SOURCE_VERSION = 'calendar-archives-fr-v1.3.6-fr-genre-visible-periods';
 const VISUAL_REV = 'coex-fr132-cinema';
 
 const REGION_ART_KEY = 'fr';
@@ -913,10 +913,12 @@ function buildGenreCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZON
     { type: 'series', genres: TMDB_TV_GENRES }
   ];
 
-  // Exactly the same five predefined rolling periods as every platform folder.
+  // Only the explicit "Demain" slot can extend into the future for film
+  // genres. Keep original series genre periods untouched.
   for (const group of groups) {
     for (const genre of group.genres) {
-      for (const definition of ARCHIVE_DYNAMIC_PERIODS) {
+      for (const definition of ARCHIVE_DYNAMIC_PERIODS.filter((p) =>
+        group.type !== 'movie' || p.key !== 'nextweek')) {
         entries.push({
           id: genreDynamicCatalogId(group.type, genre.id, definition.key),
           catalog: genreDescriptor(group.type, genre, {
@@ -929,11 +931,11 @@ function buildGenreCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZON
     }
   }
 
-  // Shield has a practical per-folder source limit: 192 monthly rows would
-  // bury pre-2015 films beyond the accessible end of the genre carousel.
-  // Each film genre now has just 138 visible rows: 5 rolling, 1 ALL TIME,
-  // 131 individual year rows (2030 through 1900), and Before 1900.
-  // Existing legacy monthly and decade catalog URLs remain resolvable.
+  // Generate *visible* film years only up to the viewer's current year:
+  // October 2026 -> 2026, 2025, ... 1900. Tomorrow has its own row.
+  // Historical and future URLs remain callable for backwards compatibility
+  // but future-year catalogs return no entries before those years begin.
+  const latestFilmYear = Math.min(MOVIE_GENRE_LAST_YEAR, Number(localIsoDate(now, timeZone).slice(0, 4)));
   for (const genre of TMDB_MOVIE_GENRES) {
     entries.push({
       id: genreAllTimeCatalogId(genre.id),
@@ -944,7 +946,7 @@ function buildGenreCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZON
         archiveYear: 3000, archiveMonth: 0
       })
     });
-    for (let year = MOVIE_GENRE_LAST_YEAR; year >= MOVIE_GENRE_FIRST_YEAR; year--) {
+    for (let year = latestFilmYear; year >= MOVIE_GENRE_FIRST_YEAR; year--) {
       entries.push({
         id: genreYearCatalogId(genre.id, year),
         catalog: genreDescriptor('movie', genre, {
@@ -1023,8 +1025,15 @@ function buildGenreFolder(entries, origin, genre, type) {
     // standardized Shield/Desktop art. Do not overlay a second floating logo
     // underneath the image (reported on Shield for "Histoire").
     titleLogoUrl: isMovie && ['history', 'tv-movie', 'war'].includes(genre.slug) ? null : images.logo,
-    sources: sourceEntries.map(collectionAddonSource),
-    catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
+    // On Nuvio Shield the row title is read from the collection source's
+    // "genre" field, NOT solely from the Stremio manifest catalog name.
+    // Without this, the UI falls back to generic "Films - Film".
+    sources: sourceEntries.map((entry) => ({
+      ...collectionAddonSource(entry), genre: entry.catalog.name
+    })),
+    catalogSources: sourceEntries.map((entry) => ({
+      ...collectionLegacyCatalogSource(entry), genre: entry.catalog.name
+    }))
   };
 }
 

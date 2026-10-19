@@ -16,7 +16,7 @@ const PLATFORM_ART_ROOT = path.join(ROOT, 'assets', 'platform-art');
 const GENRE_ART_ROOT = path.join(ROOT, 'assets', 'genre-art', 'shared');
 const APPROVED_BOARD_ROOT = path.join(ROOT, 'assets', 'approved-board');
 const INDIVIDUAL_MASTER_ROOT = path.join(ROOT, 'assets', 'individual-masters-v8');
-const REVISION = 'generated-v10-fr-movie-genre-uniform-frame';
+const REVISION = 'generated-v11-genre-photo-frames-period-labels';
 
 const APPROVED_BOARD_REFERENCE_SIZE = Object.freeze({ width: 1536, height: 864 });
 const APPROVED_BOARD_PARTS = Object.freeze([
@@ -683,6 +683,10 @@ async function genreCover(source, opts) {
   // area as every other generated genre. Preserve the photography and never
   // select a different image just to force the format.
   if (opts.frFilmUniform === true) {
+    // Force Histoire / Téléfilm / Guerre through the *same* fixed 16:9
+    // photographic background + single title overlay + rounded frame
+    // regardless of whether their original came from an individual master.
+    // In particular, do not fall through to board/individual poster framing.
     const background = await approvedBackground(source.buffer, width, height);
     const rendered = await sharp(background)
       .composite([{ input: genreCardOverlay(width, height, opts), left: 0, top: 0 }])

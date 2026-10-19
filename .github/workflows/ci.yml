@@ -59,7 +59,7 @@ jobs:
 
           (async () => {
             const manifest = JSON.parse(fs.readFileSync('assets/generated-covers/manifest.json', 'utf8'));
-            if (manifest.revision !== 'generated-v10-fr-movie-genre-uniform-frame') throw new Error('unexpected cover revision: ' + manifest.revision);
+            if (manifest.revision !== 'generated-v11-genre-photo-frames-period-labels') throw new Error('unexpected cover revision: ' + manifest.revision);
             if (manifest.artDirection !== 'netflix-rounded-unified-v9') throw new Error('unexpected art direction: ' + manifest.artDirection);
             if (manifest.visualReference !== 'netflix-master-frame-plus-approved-local-art') throw new Error('individual visual reference missing');
             if (manifest.doubleAudit?.stable !== true || manifest.doubleAudit?.requiredPasses !== 2) throw new Error('double cover audit missing');

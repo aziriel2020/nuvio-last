@@ -82,12 +82,15 @@ function dateWindow(period = 'next7', now = new Date(), timeZone = DEFAULT_TIMEZ
   const yearlyGenre = String(period || '').match(/^genre-year-(\d{4})$/);
   if (yearlyGenre) {
     const year = Number(yearlyGenre[1]);
-    return { start: `${year}-01-01`, end: `${year}-12-31`,
-      kind: 'genre-year', today, allowPast: true,
-      empty: year < 1900 || year > 2030, archiveYear: year };
+    const start = `${year}-01-01`;
+    const end = `${year}-12-31` < today ? `${year}-12-31` : today;
+    return { start, end, kind: 'genre-year', today, allowPast: true,
+      empty: year < 1900 || year > 2030 || start > today, archiveYear: year };
   }
   if (period === 'genre-ever') {
-    return { start: '1800-01-01', end: '2030-12-31',
+    // All-time means the full historical catalog up to the present day,
+    // not premieres scheduled for a future year or next week.
+    return { start: '1800-01-01', end: today,
       kind: 'genre-ever', today, allowPast: true, empty: false };
   }
 
