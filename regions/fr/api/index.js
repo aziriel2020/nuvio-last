@@ -781,6 +781,17 @@ const TMDB_MOVIE_GENRES = Object.freeze([
   { id: 10752, slug: 'war', name: 'Guerre', color: '#78716c', icon: '🪖' },
   { id: 37, slug: 'western', name: 'Western', color: '#ca8a04', icon: '🤠' }
 ]);
+// Decade-sized heritage shelves make every Film genre searchable from the
+// earliest cinema through 2030, without thousands of historical rows on Shield.
+const FILM_GENRE_HISTORIC_PERIODS = Object.freeze([
+  { key: '2010-2014', label: '2010–2014', first: 2010, last: 2014 },
+  ...Array.from({ length: 11 }, (_, i) => {
+    const first = 2000 - i * 10;
+    return { key: `${first}-${first + 9}`, label: `${first}–${first + 9}`, first, last: first + 9 };
+  }),
+  { key: 'before1900', label: 'Avant 1900', first: 1800, last: 1899 }
+]);
+const FILM_GENRE_HISTORIC_BY_KEY = new Map(FILM_GENRE_HISTORIC_PERIODS.map((entry) => [entry.key, entry]));
 const TMDB_TV_GENRES = Object.freeze([
   { id: 10759, slug: 'action-adventure', name: 'Action & Aventure', color: '#ef4444', icon: '⚡' },
   { id: 16, slug: 'animation', name: 'Animation', color: '#8b5cf6', icon: '✨' },
@@ -852,6 +863,10 @@ function genreMonthlyCatalogId(type, genreId, year, month) {
   return `${genreCatalogBaseId(type, genreId)}-${year}-${String(month).padStart(2, '0')}`;
 }
 
+function genreHistoricCatalogId(genreId, periodKey) {
+  return `${genreCatalogBaseId('movie', genreId)}-era-${periodKey}`;
+}
+
 function genreDescriptor(type, genre, options = {}) {
   const period = options.period || 'today';
   const name = options.name || genre.name;
@@ -877,6 +892,7 @@ function genreDescriptor(type, genre, options = {}) {
     archiveKind: options.archivePeriodKey ? 'genre-period' : 'genre-month'
   };
   if (options.archivePeriodKey) descriptor.archivePeriodKey = options.archivePeriodKey;
+  if (options.genreArchiveHistoric === true) descriptor.genreArchiveHistoric = true;
   if (Number.isInteger(options.archiveYear)) descriptor.archiveYear = options.archiveYear;
   if (Number.isInteger(options.archiveMonth)) descriptor.archiveMonth = options.archiveMonth;
   return descriptor;
@@ -921,6 +937,22 @@ function buildGenreCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZON
           });
         }
       }
+    }
+  }
+  // Year/decade shelves BEFORE January 2015, for films only. Genres · Séries
+  // and all streaming platform collections retain their existing period IDs.
+  for (const genre of TMDB_MOVIE_GENRES) {
+    for (const era of FILM_GENRE_HISTORIC_PERIODS) {
+      entries.push({
+        id: genreHistoricCatalogId(genre.id, era.key),
+        catalog: genreDescriptor('movie', genre, {
+          name: era.label,
+          period: 'genre-era-' + era.key,
+          genreArchiveHistoric: true,
+          archiveYear: era.last,
+          archiveMonth: 0
+        })
+      });
     }
   }
   return entries;
@@ -1022,13 +1054,23 @@ function genreDiscoverParams(catalog, providerIds, page, window) {
     with_watch_providers: providerIds.join('|'),
     with_watch_monetization_types: 'flatrate|free|ads'
   };
-  if (catalog.type === 'movie') return {
-    ...common,
-    region: DEFAULT_COUNTRY,
-    with_release_type: '4',
-    'release_date.gte': window.start,
-    'release_date.lte': window.end
-  };
+  if (catalog.type === 'movie') {
+    if (catalog.genreArchiveHistoric === true) {
+      // Historic cinema is grouped by the film's original premiere year;
+      // requiring a twentieth-century French DIGITAL release would exclude
+      // almost every classic still available on today's FR streaming services.
+      return { ...common,
+        'primary_release_date.gte': window.start,
+        'primary_release_date.lte': window.end };
+    }
+    return {
+      ...common,
+      region: DEFAULT_COUNTRY,
+      with_release_type: '4',
+      'release_date.gte': window.start,
+      'release_date.lte': window.end
+    };
+  }
   return {
     ...common,
     'first_air_date.gte': window.start,
@@ -1062,7 +1104,9 @@ function genreMovieDigitalDate(details, window) {
 function detailsToGenreMeta(details, catalog, window) {
   const type = catalog.type === 'movie' ? 'movie' : 'series';
   const date = type === 'movie'
-    ? genreMovieDigitalDate(details, window)
+    ? (catalog.genreArchiveHistoric === true
+      ? normalizeIsoDate(details?.release_date)
+      : genreMovieDigitalDate(details, window))
     : normalizeIsoDate(details?.first_air_date);
   if (!date) return { meta: null, reason: 'date-unknown' };
   if (date < window.start || date > window.end) return { meta: null, reason: date < window.today ? 'past' : 'outside-window' };
@@ -1271,6 +1315,17 @@ function resolveArchiveCatalog(catalogId, type, now = runtimeNow(), timeZone = D
     return buildCinemaTorrentioCatalogEntries().find((entry) => entry.id === raw)?.catalog || null;
   }
 
+  const genreHistoric = raw.match(/^genres-fr-movie-(\d+)-era-(2010-2014|(?:19|20)\d0-(?:19|20)\d9|before1900)$/);
+  if (genreHistoric) {
+    if (type !== 'movie') return null;
+    const genre = TMDB_MOVIE_GENRES.find((item) => item.id === Number(genreHistoric[1]));
+    const era = FILM_GENRE_HISTORIC_BY_KEY.get(genreHistoric[2]);
+    if (!genre || !era) return null;
+    return genreDescriptor('movie', genre, {
+      name: era.label, period: 'genre-era-' + era.key,
+      genreArchiveHistoric: true, archiveYear: era.last, archiveMonth: 0
+    });
+  }
   const genreMonthly = raw.match(/^genres-fr-(series|movie)-(\d+)-(\d{4})-(\d{2})$/);
   if (genreMonthly) {
     const expectedType = genreMonthly[1] === 'movie' ? 'movie' : 'series';
