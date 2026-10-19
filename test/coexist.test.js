@@ -50,7 +50,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12242 + 19 * 13);
+  assert.equal(fr.catalogs.length, 12242 + 19 * (138 - 197));
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
@@ -58,6 +58,16 @@ test('single deployment exposes four distinct addon manifests', async () => {
 test('combined live import fails closed without Cinema availability and keeps regional ordering', async () => {
   const response = await call('/nuvio-collections-fr-global-tr-usa.json');
   assert.equal(response.statusCode, 200);
+  const combined = JSON.parse(response.text);
+  const filmGenres = combined.find((collection) => collection.id === 'calendar-archives-fr-genres');
+  assert(filmGenres && filmGenres.folders.length === 19, 'combined import must include all film genres');
+  for (const folder of filmGenres.folders) {
+    assert.equal(folder.sources.length, 138, 'Combined Shield folder must not truncate older-than-2015 films');
+    assert(folder.sources.some((src) => src.catalogId.endsWith('-year-1900')));
+    assert(folder.sources.some((src) => src.catalogId.endsWith('-year-2014')));
+    assert(folder.sources.some((src) => src.catalogId.endsWith('-alltime')));
+    assert(folder.sources.length < 200);
+  }
   assertCdnCache(response, 300);
   const collections = JSON.parse(response.text);
   assert.equal(collections.length, 50);

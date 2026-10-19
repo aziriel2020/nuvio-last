@@ -38,7 +38,7 @@ const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
 
-const VERSION = '1.3.4';
+const VERSION = '1.3.5';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const TVMAZE_BASE = 'https://api.tvmaze.com';
 const ANILIST_URL = 'https://graphql.anilist.co';
@@ -56,7 +56,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-fr-v1.3.4-editorial-period-titles';
+const SOURCE_VERSION = 'calendar-archives-fr-v1.3.5-editorial-period-titles';
 const VISUAL_REV = 'coex-fr132-cinema';
 
 const REGION_ART_KEY = 'fr';
@@ -783,6 +783,8 @@ const TMDB_MOVIE_GENRES = Object.freeze([
 ]);
 // Decade-sized heritage shelves make every Film genre searchable from the
 // earliest cinema through 2030, without thousands of historical rows on Shield.
+const MOVIE_GENRE_FIRST_YEAR = 1900;
+const MOVIE_GENRE_LAST_YEAR = 2030;
 const FILM_GENRE_HISTORIC_PERIODS = Object.freeze([
   { key: '2010-2014', label: '2010–2014', first: 2010, last: 2014 },
   ...Array.from({ length: 11 }, (_, i) => {
@@ -866,6 +868,12 @@ function genreMonthlyCatalogId(type, genreId, year, month) {
 function genreHistoricCatalogId(genreId, periodKey) {
   return `${genreCatalogBaseId('movie', genreId)}-era-${periodKey}`;
 }
+function genreYearCatalogId(genreId, year) {
+  return `${genreCatalogBaseId('movie', genreId)}-year-${year}`;
+}
+function genreAllTimeCatalogId(genreId) {
+  return `${genreCatalogBaseId('movie', genreId)}-alltime`;
+}
 
 function genreDescriptor(type, genre, options = {}) {
   const period = options.period || 'today';
@@ -921,38 +929,55 @@ function buildGenreCatalogEntries(now = runtimeNow(), timeZone = DEFAULT_TIMEZON
     }
   }
 
-  // Then the same pre-wired month/year rows, in the same range as the platform archives.
-  for (const year of archivePrewiredYears(now, timeZone)) {
-    for (const group of groups) {
-      for (const genre of group.genres) {
-        for (let month = 12; month >= 1; month -= 1) {
-          entries.push({
-            id: genreMonthlyCatalogId(group.type, genre.id, year, month),
-            catalog: genreDescriptor(group.type, genre, {
-              name: `${ARCHIVE_MONTHS_FR[month - 1]} ${year}`,
-              period: archivePeriod(year, month),
-              archiveYear: year,
-              archiveMonth: month
-            })
-          });
-        }
-      }
-    }
-  }
-  // Year/decade shelves BEFORE January 2015, for films only. Genres · Séries
-  // and all streaming platform collections retain their existing period IDs.
+  // Shield has a practical per-folder source limit: 192 monthly rows would
+  // bury pre-2015 films beyond the accessible end of the genre carousel.
+  // Each film genre now has just 138 visible rows: 5 rolling, 1 ALL TIME,
+  // 131 individual year rows (2030 through 1900), and Before 1900.
+  // Existing legacy monthly and decade catalog URLs remain resolvable.
   for (const genre of TMDB_MOVIE_GENRES) {
-    for (const era of FILM_GENRE_HISTORIC_PERIODS) {
+    entries.push({
+      id: genreAllTimeCatalogId(genre.id),
+      catalog: genreDescriptor('movie', genre, {
+        name: 'Depuis toujours',
+        period: 'genre-ever',
+        genreArchiveHistoric: true,
+        archiveYear: 3000, archiveMonth: 0
+      })
+    });
+    for (let year = MOVIE_GENRE_LAST_YEAR; year >= MOVIE_GENRE_FIRST_YEAR; year--) {
       entries.push({
-        id: genreHistoricCatalogId(genre.id, era.key),
+        id: genreYearCatalogId(genre.id, year),
         catalog: genreDescriptor('movie', genre, {
-          name: era.label,
-          period: 'genre-era-' + era.key,
+          name: String(year),
+          period: 'genre-year-' + year,
           genreArchiveHistoric: true,
-          archiveYear: era.last,
-          archiveMonth: 0
+          archiveYear: year, archiveMonth: 0
         })
       });
+    }
+    const before1900 = FILM_GENRE_HISTORIC_BY_KEY.get('before1900');
+    entries.push({
+      id: genreHistoricCatalogId(genre.id, before1900.key),
+      catalog: genreDescriptor('movie', genre, {
+        name: before1900.label, period: 'genre-era-before1900',
+        genreArchiveHistoric: true, archiveYear: 1899, archiveMonth: 0
+      })
+    });
+  }
+
+  // Series retain their existing monthly rows and exact identifiers.
+  for (const year of archivePrewiredYears(now, timeZone)) {
+    for (const genre of TMDB_TV_GENRES) {
+      for (let month = 12; month >= 1; month--) {
+        entries.push({
+          id: genreMonthlyCatalogId('series', genre.id, year, month),
+          catalog: genreDescriptor('series', genre, {
+            name: `${ARCHIVE_MONTHS_FR[month - 1]} ${year}`,
+            period: archivePeriod(year, month),
+            archiveYear: year, archiveMonth: month
+          })
+        });
+      }
     }
   }
   return entries;
@@ -1051,7 +1076,8 @@ function genreDiscoverParams(catalog, providerIds, page, window) {
     language: getConfig().language,
     page,
     include_adult: false,
-    sort_by: 'popularity.desc',
+    // Year and all-time views must sort newest first, not by popularity.
+    sort_by: catalog.genreArchiveHistoric ? 'primary_release_date.desc' : 'popularity.desc',
     with_genres: String(catalog.tmdbGenreId),
     watch_region: DEFAULT_COUNTRY,
     with_watch_providers: providerIds.join('|'),
@@ -1318,6 +1344,24 @@ function resolveArchiveCatalog(catalogId, type, now = runtimeNow(), timeZone = D
     return buildCinemaTorrentioCatalogEntries().find((entry) => entry.id === raw)?.catalog || null;
   }
 
+  const genreAllTime = raw.match(/^genres-fr-movie-(\d+)-alltime$/);
+  if (genreAllTime && type === 'movie') {
+    const genre = TMDB_MOVIE_GENRES.find(({ id }) => id === Number(genreAllTime[1]));
+    return genre ? genreDescriptor('movie', genre, {
+      name: 'Depuis toujours', period: 'genre-ever',
+      genreArchiveHistoric: true, archiveYear: 3000, archiveMonth: 0
+    }) : null;
+  }
+  const genreYear = raw.match(/^genres-fr-movie-(\d+)-year-(\d{4})$/);
+  if (genreYear && type === 'movie') {
+    const year = Number(genreYear[2]);
+    const genre = TMDB_MOVIE_GENRES.find(({ id }) => id === Number(genreYear[1]));
+    if (!genre || year < MOVIE_GENRE_FIRST_YEAR || year > MOVIE_GENRE_LAST_YEAR) return null;
+    return genreDescriptor('movie', genre, {
+      name: String(year), period: 'genre-year-' + year,
+      genreArchiveHistoric: true, archiveYear: year, archiveMonth: 0
+    });
+  }
   const genreHistoric = raw.match(/^genres-fr-movie-(\d+)-era-(2010-2014|(?:19|20)\d0-(?:19|20)\d9|before1900)$/);
   if (genreHistoric) {
     if (type !== 'movie') return null;
