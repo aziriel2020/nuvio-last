@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
-const { ADDON_ID, VERSION, GENRES, periods, catalogId, parseCatalog } = require('./src/model.cjs');
+const { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, periods, catalogId, parseCatalog } = require('./src/model.cjs');
 const { SeriesStore, defaultPath } = require('./src/store.cjs');
 const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
 const { decorateSeriesMetas } = require('./src/presentation.cjs');
@@ -36,16 +36,24 @@ function reader() {
   return cachedStore;
 }
 
+function releaseForOrigin(origin) {
+  const fresh = new URL(origin).pathname.replace(/\/$/, '') === '/series-v2';
+  return fresh
+    ? { id: V2_ADDON_ID, version: V2_VERSION, name: 'Nuvio Séries France V2 · 2.0.0', prefixes: ['fr'] }
+    : { id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Streaming France', prefixes: ['fr', 'world'] };
+}
+
 function buildManifest(origin, now = new Date()) {
   const dates = periods(now);
+  const release = releaseForOrigin(origin);
   return {
-    id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Streaming France',
+    id: release.id, version: release.version, name: release.name,
     description: 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates. Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     types: ['series'], language: 'fr', resources: [{ name: 'catalog', types: ['series'] }, { name: 'meta', types: ['series'], idPrefixes: ['tt', 'tmdb:tv:', 'tvmaze:'] }],
-    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => dates.flatMap((date) => [false, true].map((legacy) => ({
+    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => dates.flatMap((date) => release.prefixes.map((prefix) => ({
       // Both deployed imports must resolve to a named manifest descriptor.
       // Changing the French-market filter did not invalidate old collections.
-      id: catalogId(mode, genre.id, date.key).replace('series-fr-', legacy ? 'series-world-' : 'series-fr-'), type: 'series',
+      id: catalogId(mode, genre.id, date.key).replace('series-fr-', `series-${prefix}-`), type: 'series',
       name: date.name,
       pageSize: 100, showInHome: false,
       extraSupported: ['skip', 'search'],
@@ -59,10 +67,14 @@ function buildManifest(origin, now = new Date()) {
 function buildCollections(origin, now = new Date(), mode = 'shield') {
   const root = new URL('..', `${origin}/`).href.replace(/\/$/, '');
   const dates = periods(now);
+  const release = releaseForOrigin(origin);
+  const fresh = release.id === V2_ADDON_ID;
   const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=france-v2`;
   const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=france-v2`;
   return ['premieres', 'seasons'].map((view) => ({
-    id: `series-world-${view}`, title: view === 'premieres' ? '🇫🇷 Séries en streaming · Tous services' : '🇫🇷 Streaming · Nouvelles saisons',
+    id: `series-world-${view}`, title: view === 'premieres'
+      ? (fresh ? '🇫🇷 Séries France V2 · Tous services' : '🇫🇷 Séries en streaming · Tous services')
+      : (fresh ? '🇫🇷 Séries France V2 · Nouvelles saisons' : '🇫🇷 Streaming · Nouvelles saisons'),
     backdropImageUrl: parentArt, pinToTop: true, focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
     folders: GENRES.map((genre) => {
@@ -70,7 +82,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
       const slug = genreSlugs[genre.id];
       const renderer = mode === 'desktop' ? 'desktop' : 'shield';
       const imageParams = new URLSearchParams({ genre: slug, type: 'series', title: genre.name, label: 'STREAMING FRANCE', v: 'series-france-v2' });
-      const sources = dates.map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
+      const sources = dates.map((date) => ({ provider: 'addon', addonId: release.id, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
       return {
         id: `series-world-${view}-${genre.id}`, title: genre.name,
         coverImageUrl: genre.id === 'all' ? parentCover : `${root}/fr/${renderer}-genre-card.jpg?${imageParams}`,
@@ -128,7 +140,8 @@ async function metaFor(store, row, requestedId) {
 async function handler(req, res) {
   const base = req.headers?.['x-nuvio-public-origin'] || `${req.headers?.['x-forwarded-proto'] || 'https'}://${req.headers?.host || 'localhost'}`;
   const url = new URL(req.url, base);
-  const origin = `${url.origin}/series`;
+  const routeBase = req.headers?.['x-nuvio-base-path'] === '/series-v2' ? '/series-v2' : '/series';
+  const origin = `${url.origin}${routeBase}`;
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/cover.jpg' || url.pathname === '/backdrop.jpg') return serveArtwork(res, url.pathname === '/cover.jpg' ? 'cover' : 'backdrop');
   if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now), 'public, max-age=300');
@@ -136,7 +149,10 @@ async function handler(req, res) {
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'), 'public, max-age=300');
   }
   const store = reader();
-  if (url.pathname === '/status.json') return send(res, 200, store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 });
+  if (url.pathname === '/status.json') {
+    const release = releaseForOrigin(origin);
+    return send(res, 200, { addonId: release.id, version: release.version, ...(store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 }) });
+  }
   if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB', providers: store?.franceProviders() || [] });
   if (url.pathname.startsWith('/catalog/series/')) {
     const match = url.pathname.match(/^\/catalog\/series\/([^/]+)(?:\/([^/]+))?\.json$/);
@@ -164,4 +180,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, reader, metaFor };
+module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor };
