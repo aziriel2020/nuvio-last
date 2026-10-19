@@ -101,6 +101,13 @@ test('Editorial collection keeps period catalogs inside seven folders with Shiel
     'editorial-series-top-rated-lastweek',
     'editorial-series-top-rated-lastmonth'
   ]);
+  const manifest = JSON.parse((await call('/fr/manifest.json')).text);
+  const titles = new Map(manifest.catalogs.map((c) => [c.id, c.name]));
+  for (const folder of editorial.folders) for (const source of folder.sources) {
+    assert.notEqual(titles.get(source.catalogId), 'Séries', 'generic series heading leaked');
+    assert.notEqual(titles.get(source.catalogId), 'Films', 'generic films heading leaked');
+    assert.equal(titles.get(source.catalogId), source.genre, 'editorial period heading must match its Nuvio row');
+  }
   assert.deepEqual(editorial.folders[1].sources.map((x) => x.catalogId), [
     'editorial-series-trendy-yesterday',
     'editorial-series-trendy-lastweek',
