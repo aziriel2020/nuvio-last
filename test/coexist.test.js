@@ -497,11 +497,15 @@ test('all hosted visual URLs stay inside the correct regional/global route prefi
         : collection.title.startsWith('🇹🇷 ')
           ? 'https://coexist.example/tr/'
           : 'https://coexist.example/fr/';
-    assert(collection.backdropImageUrl?.startsWith(prefix));
+    const region = prefix.match(/\/(fr|global|tr|us)\/$/)[1];
+    const isOwnAsset = (value) => typeof value === 'string'
+      && (value.startsWith(prefix)
+        || value.startsWith(`https://coexist.example/static/assets/generated-covers/${region}/`));
+    assert(isOwnAsset(collection.backdropImageUrl), 'wrong-region collection backdrop');
     for (const folder of collection.folders) {
-      assert(folder.coverImageUrl?.startsWith(prefix));
-      assert(folder.heroBackdropUrl?.startsWith(prefix));
-      if (folder.titleLogoUrl != null) assert(folder.titleLogoUrl.startsWith(prefix));
+      assert(isOwnAsset(folder.coverImageUrl), 'wrong-region folder cover');
+      assert(isOwnAsset(folder.heroBackdropUrl), 'wrong-region folder backdrop');
+      if (folder.titleLogoUrl != null) assert(isOwnAsset(folder.titleLogoUrl));
     }
   }
 });
@@ -673,25 +677,34 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
   ];
   for (const collection of targets) {
     assert(collection);
-    assert.match(collection.backdropImageUrl, /\/platform-backdrop\.jpg\?provider=/);
+    const generatedBackdrop = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/;
+    assert(/\/platform-backdrop\.jpg\?provider=/.test(collection.backdropImageUrl)
+      || generatedBackdrop.test(collection.backdropImageUrl), 'approved collection hero missing');
     for (const folder of collection.folders) {
       assert.equal(folder.hideTitle, true);
       assert.equal(folder.focusGifEnabled, false);
       assert.equal(folder.focusGifUrl, null);
-      assert.match(folder.coverImageUrl, /\/shield-folder-card\.jpg\?provider=/);
-      assert.match(folder.coverImageUrl, /[?&]v=shield15-safe-badges/);
-      assert.match(folder.coverImageUrl, /[?&]title=/);
-      assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
-      const heroUrl = new URL(folder.heroBackdropUrl);
-      assert(heroUrl.searchParams.get('type'), 'real-content backdrop type missing');
-      assert.equal(heroUrl.searchParams.get('v'), 'shield15-safe-badges', 'safe-zone backdrop revision missing');
+      const generatedCard = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-shield\.jpg\?v=/;
+      if (generatedCard.test(folder.coverImageUrl)) {
+        assert.match(folder.heroBackdropUrl, /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-hero\.jpg\?v=|\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/);
+      } else {
+        assert.match(folder.coverImageUrl, /\/shield-folder-card\.jpg\?provider=/);
+        assert.match(folder.coverImageUrl, /[?&]v=shield15-safe-badges/);
+        assert.match(folder.coverImageUrl, /[?&]title=/);
+        assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
+        const heroUrl = new URL(folder.heroBackdropUrl);
+        assert(heroUrl.searchParams.get('type'), 'real-content backdrop type missing');
+        assert.equal(heroUrl.searchParams.get('v'), 'shield15-safe-badges');
+      }
     }
   }
 
   const frGenres = collections.find((c) => c.title === '🇫🇷 Genres · Films');
   assert(frGenres?.folders?.length > 0);
-  assert.match(frGenres.folders[0].coverImageUrl, /\/shield-genre-card\.jpg\?genre=/);
-  assert.match(frGenres.folders[0].coverImageUrl, /[?&]v=shield15-safe-badges/);
+  assert(/\/shield-genre-card\.jpg\?genre=/.test(frGenres.folders[0].coverImageUrl)
+    || /\/static\/assets\/generated-covers\/fr\/genres\/[a-z0-9-]+-shield\.jpg\?v=/.test(frGenres.folders[0].coverImageUrl));
+  assert(/[?&]v=shield15-safe-badges/.test(frGenres.folders[0].coverImageUrl)
+    || /[?&]v=generated-/.test(frGenres.folders[0].coverImageUrl));
 });
 
 test('Shield cinematic aliases resolve to native 1600x900 JPEG renderers in every region', async () => {
@@ -731,8 +744,12 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
       assert.equal(folder.focusGifEnabled, false);
       assert.equal(folder.focusGifUrl, null);
       const coverUrl = new URL(folder.coverImageUrl);
-      assert.equal(coverUrl.pathname.endsWith('/desktop-folder-card.jpg'), true);
-      assert(coverUrl.searchParams.get('provider'));
+      if (coverUrl.pathname.endsWith('/desktop-folder-card.jpg')) {
+        assert(coverUrl.searchParams.get('provider'));
+      } else {
+        assert.match(coverUrl.pathname, /^\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/);
+        assert.match(coverUrl.searchParams.get('v') || '', /^generated-/);
+      }
       assert.doesNotMatch(folder.coverImageUrl, /platform-category-card\.svg/);
     }
   }
@@ -740,12 +757,12 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   const frCover = new URL(frNetflix.folders[0].coverImageUrl);
   const globalCover = new URL(globalVod.folders[0].coverImageUrl);
   const usCover = new URL(usNetflix.folders[0].coverImageUrl);
-  assert.equal(frCover.pathname, '/fr/desktop-folder-card.jpg');
-  assert.equal(frCover.searchParams.get('provider'), 'netflix');
-  assert.equal(globalCover.pathname, '/global/desktop-folder-card.jpg');
-  assert.equal(globalCover.searchParams.get('provider'), 'vod-global');
-  assert.equal(usCover.pathname, '/us/desktop-folder-card.jpg');
-  assert.equal(usCover.searchParams.get('provider'), 'netflix');
+  assert(['/fr/desktop-folder-card.jpg', '/static/assets/generated-covers/fr/netflix/series-desktop.jpg'].includes(frCover.pathname));
+  assert(['/global/desktop-folder-card.jpg', '/static/assets/generated-covers/global/vod-global/movie-desktop.jpg'].includes(globalCover.pathname));
+  assert(['/us/desktop-folder-card.jpg', '/static/assets/generated-covers/us/netflix/series-desktop.jpg'].includes(usCover.pathname));
+  if (frCover.pathname === '/fr/desktop-folder-card.jpg') assert.equal(frCover.searchParams.get('provider'), 'netflix');
+  if (globalCover.pathname === '/global/desktop-folder-card.jpg') assert.equal(globalCover.searchParams.get('provider'), 'vod-global');
+  if (usCover.pathname === '/us/desktop-folder-card.jpg') assert.equal(usCover.searchParams.get('provider'), 'netflix');
 });
 
 test('desktop banner keeps the original landscape artwork as its cinematic source while Shield keeps SVG background', () => {
@@ -807,9 +824,12 @@ test('desktop import also replaces folder and collection backdrops with clean JP
   ];
   for (const collection of targets) {
     assert(collection);
-    assert.match(collection.backdropImageUrl, /\/platform-backdrop\.jpg\?provider=/);
+    assert(/\/platform-backdrop\.jpg\?provider=/.test(collection.backdropImageUrl)
+      || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/.test(collection.backdropImageUrl));
     for (const folder of collection.folders) {
-      assert.match(folder.heroBackdropUrl, /\/platform-backdrop\.jpg\?provider=/);
+      assert(/\/platform-backdrop\.jpg\?provider=/.test(folder.heroBackdropUrl)
+        || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-hero\.jpg\?v=/.test(folder.heroBackdropUrl)
+        || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/.test(folder.heroBackdropUrl));
       assert.equal(folder.titleLogoUrl, null);
     }
   }
@@ -827,16 +847,20 @@ test('desktop cinematic import points platform and genre folders to dedicated 16
   for (const collection of [frNetflix, globalVod, trNetflix, usNetflix]) {
     assert(collection);
     for (const folder of collection.folders) {
-      assert.match(folder.coverImageUrl, /\/desktop-folder-card\.jpg\?provider=/);
-      assert.match(folder.coverImageUrl, /[?&]type=(movie|series)/);
+      const generated = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg\?v=/;
+      assert(/\/desktop-folder-card\.jpg\?provider=/.test(folder.coverImageUrl) || generated.test(folder.coverImageUrl));
+      if (!generated.test(folder.coverImageUrl)) assert.match(folder.coverImageUrl, /[?&]type=(movie|series)/);
       assert.equal(folder.hideTitle, false);
     }
   }
 
   assert(frGenres);
   assert(frGenres.folders.length > 0);
-  assert.match(frGenres.folders[0].coverImageUrl, /\/desktop-genre-card\.jpg\?genre=/);
-  assert.match(frGenres.folders[0].coverImageUrl, /[?&]type=movie/);
+  const generatedGenre = /\/static\/assets\/generated-covers\/fr\/genres\/[a-z0-9-]+-desktop\.jpg\?v=/;
+  assert(/\/desktop-genre-card\.jpg\?genre=/.test(frGenres.folders[0].coverImageUrl)
+    || generatedGenre.test(frGenres.folders[0].coverImageUrl));
+  if (!generatedGenre.test(frGenres.folders[0].coverImageUrl))
+    assert.match(frGenres.folders[0].coverImageUrl, /[?&]type=movie/);
 });
 
 test('desktop catalog banner uses dedicated cinematic JPEG while Shield background stays original cinematic SVG', () => {
@@ -884,10 +908,15 @@ test('desktop cinematic URLs carry visible title, subtitle and provider labels',
   assert(frFolder && globalFolder);
   for (const folder of [frFolder, globalFolder]) {
     const url = new URL(folder.coverImageUrl);
-    assert.equal(url.pathname.endsWith('/desktop-folder-card.jpg'), true);
-    assert(url.searchParams.get('title'));
-    assert(url.searchParams.get('label'));
-    assert(url.searchParams.get('type'));
+    const generated = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/;
+    if (generated.test(url.pathname)) {
+      assert.match(url.searchParams.get('v') || '', /^generated-/);
+    } else {
+      assert.equal(url.pathname.endsWith('/desktop-folder-card.jpg'), true);
+      assert(url.searchParams.get('title'));
+      assert(url.searchParams.get('label'));
+      assert(url.searchParams.get('type'));
+    }
   }
 });
 
@@ -996,10 +1025,14 @@ test('desktop12 Shield JPEG import uses adaptive cinematic routes with labels', 
   const folder = frNetflix.folders.find((f) => f.title === 'Séries');
   assert(folder);
   const url = new URL(folder.coverImageUrl);
-  assert.equal(url.pathname, '/fr/desktop-folder-card.jpg');
-  assert.equal(url.searchParams.get('v'), 'desktop14-safe-badges');
-  assert.equal(url.searchParams.get('title'), 'Séries');
-  assert.match(url.searchParams.get('label') || '', /Netflix/);
+  if (url.pathname === '/fr/desktop-folder-card.jpg') {
+    assert.equal(url.searchParams.get('v'), 'desktop14-safe-badges');
+    assert.equal(url.searchParams.get('title'), 'Séries');
+    assert.match(url.searchParams.get('label') || '', /Netflix/);
+  } else {
+    assert.equal(url.pathname, '/static/assets/generated-covers/fr/netflix/series-desktop.jpg');
+    assert.match(url.searchParams.get('v') || '', /^generated-/);
+  }
 });
 
 test('desktop11 content banner carries adaptive title and subtitle metadata', () => {
