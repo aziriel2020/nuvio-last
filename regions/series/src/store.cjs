@@ -270,7 +270,9 @@ class SeriesStore {
         date ? `Première diffusion : ${row.first_air_date || 'inconnue'}${row.event_date && row.event_date !== row.first_air_date && !recentEpisode ? ` · Nouvelle saison : ${row.event_date}` : ''}` : 'Date de première diffusion inconnue', row.description,
         tvmaze ? `Données complémentaires : TVmaze · https://www.tvmaze.com/shows/${tvmaze.source_id}` : null].filter(Boolean).join('\n\n'),
       genres: GENRES.filter((g) => genreIds.includes(g.id)).map((g) => g.name),
-      releaseInfo: row.first_air_date?.slice(0, 4) || 'Date inconnue',
+      releaseInfo: recentEpisode
+        ? `S${String(recentEpisode.season).padStart(2, '0')}E${String(recentEpisode.episode).padStart(2, '0')}`
+        : (row.first_air_date?.slice(0, 4) || 'Date inconnue'),
       released: date ? `${date}T00:00:00.000Z` : undefined,
       episodeCode: recentEpisode ? `S${String(recentEpisode.season).padStart(2, '0')}E${String(recentEpisode.episode).padStart(2, '0')}` : undefined,
       status: row.status || undefined, imdb_id: imdb || undefined,
