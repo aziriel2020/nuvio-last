@@ -50,7 +50,7 @@ test('single deployment exposes four distinct addon manifests', async () => {
   assert.equal(tr.id, 'com.nuvio.calendar.archives.tr.coexist');
   assert.equal(new Set([us.id, fr.id, globalVod.id, tr.id]).size, 4);
   assert.equal(us.catalogs.length, 10638);
-  assert.equal(fr.catalogs.length, 12242);
+  assert.equal(fr.catalogs.length, 12242 + 19 * 13);
   assert.equal(globalVod.catalogs.length, 591);
   assert.equal(tr.catalogs.length, 6895);
 });
