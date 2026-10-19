@@ -994,7 +994,10 @@ function buildGenreFolder(entries, origin, genre, type) {
     hideTitle: true,
     heroBackdropUrl: images.backdrop,
     heroVideoUrl: null,
-    titleLogoUrl: images.logo,
+    // These three film genres already have the title burned into their
+    // standardized Shield/Desktop art. Do not overlay a second floating logo
+    // underneath the image (reported on Shield for "Histoire").
+    titleLogoUrl: isMovie && ['history', 'tv-movie', 'war'].includes(genre.slug) ? null : images.logo,
     sources: sourceEntries.map(collectionAddonSource),
     catalogSources: sourceEntries.map(collectionLegacyCatalogSource)
   };
