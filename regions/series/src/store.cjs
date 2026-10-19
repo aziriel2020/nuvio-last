@@ -265,6 +265,7 @@ class SeriesStore {
       sources: this.db.prepare('SELECT source,COUNT(*) AS count FROM sources GROUP BY source').all(),
       jobs: this.db.prepare('SELECT source,COUNT(*) AS total,SUM(CASE WHEN due<=? THEN 1 ELSE 0 END) AS pending,SUM(CASE WHEN attempts>0 THEN 1 ELSE 0 END) AS failed FROM jobs GROUP BY source').all(Date.now()),
       lastSync: this.state('lastSync'),
+      franceLastDiscoveryAt: this.state('lastFranceDiscoveryAt'),
       franceProviders: this.franceProviders().length,
       franceScan: this.state('frScanProgress'),
       coverage: 'Séries disponibles sur le marché français, toutes plateformes et offres recensées par JustWatch/TMDB. Animation exclue ; pays de production non filtré.'
