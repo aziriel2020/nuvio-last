@@ -252,7 +252,7 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
       'editorial-movies-cinema-now'
     ]
   );
-  assert(manifest.catalogs.filter(c=>c.id.startsWith('editorial-series-')).every(c=>c.name==='Séries'));
+  assert(manifest.catalogs.filter(c=>c.id.startsWith('editorial-series-')).every(c=>['Hier','Semaine passée','Mois dernier','Cette semaine','Ce mois'].includes(c.name)));
   assert.equal(manifest.catalogs.find(c=>c.id==='editorial-movies-cinema-now')?.name,'Films');
   assert(manifest.catalogs.every(c=>c.showInHome===false));
 });
