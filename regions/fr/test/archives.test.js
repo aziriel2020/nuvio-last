@@ -231,9 +231,9 @@ test('manifest uses unique France addon id and remains Collection-only on Home',
   const manifest=api._internals.buildManifest('https://fr-archives.example',fixedNow,tz);
   const providerCategoryCount=api._internals.ARCHIVE_SERIES_PROVIDERS.length+api._internals.ARCHIVE_FILM_PROVIDERS.length;
   assert.equal(manifest.id,'com.nuvio.calendar.archives.fr.coexist');
-  assert.equal(manifest.version,'1.3.3');
+  assert.equal(manifest.version,'1.3.4');
   assert.equal(manifest.name,'Nuvio Calendar Archives France');
-  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+28);
+  assert.equal(manifest.catalogs.length,providerCategoryCount*(5+192)+35*(5+192)+19*13+28);
   assert.deepEqual(
     manifest.catalogs.filter(c=>c.id.startsWith('cinema-torrentio-')).map(c=>c.id),
     ['cinema-torrentio-nowplaying','cinema-torrentio-recent','cinema-torrentio-today','cinema-torrentio-yesterday','cinema-torrentio-thisweek','cinema-torrentio-lastweek','cinema-torrentio-thismonth','cinema-torrentio-previousmonth','cinema-torrentio-nextweek','cinema-torrentio-nextmonth']
@@ -534,8 +534,10 @@ test('France genres are split into Films first and Series second, both with exac
   assert.equal(series.id,'calendar-archives-fr-genres-series');
   assert.equal(films.folders.length,19);
   assert.equal(series.folders.length,16);
-  assert(films.folders.every((f)=>f.sources.length===197));
-  assert(series.folders.every((f)=>f.sources.length===197));
+  assert(films.folders.every((f)=>f.sources.length===210),
+    'Each movie genre must cover all time through 2030: 5 rolling + 192 months + 13 heritage eras');
+  assert(series.folders.every((f)=>f.sources.length===197),
+    'Series genre catalog must remain unchanged');
   const action=films.folders.find((f)=>f.title==='Action');
   assert(action);
   assert.deepEqual(action.sources.slice(0,5).map((s)=>s.catalogId),[
@@ -546,7 +548,17 @@ test('France genres are split into Films first and Series second, both with exac
     'genres-fr-movie-28-nextweek'
   ]);
   assert.equal(action.sources[5].catalogId,'genres-fr-movie-28-2030-12');
-  assert.equal(action.sources.at(-1).catalogId,'genres-fr-movie-28-2015-01');
+  assert.equal(action.sources[196].catalogId,'genres-fr-movie-28-2015-01');
+  assert.deepEqual(action.sources.slice(197).map((s)=>s.catalogId), [
+    'genres-fr-movie-28-era-2010-2014',
+    ...Array.from({ length: 11 }, (_, i) => {
+      const y = 2000 - i * 10;
+      return `genres-fr-movie-28-era-${y}-${y + 9}`;
+    }),
+    'genres-fr-movie-28-era-before1900'
+  ]);
+  assert.equal(action.sources.at(-1).catalogId,'genres-fr-movie-28-era-before1900');
+  assert(!action.sources.some((s)=>s.catalogId === 'genres-fr-movie-28-2015-2030'));
   const actionSeries=series.folders.find((f)=>f.title==='Action & Aventure');
   assert(actionSeries);
   assert.equal(actionSeries.sources[0].catalogId,'genres-fr-series-10759');
@@ -555,6 +567,18 @@ test('France genres are split into Films first and Series second, both with exac
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28','movie',fixedNow,tz).period,'today');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-series-10759-nextweek','series',fixedNow,tz).period,'nextweek');
   assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-2026-08','movie',fixedNow,tz).period,'archive-2026-08');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-era-2010-2014','movie',fixedNow,tz).period,'genre-era-2010-2014');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-era-before1900','movie',fixedNow,tz).period,'genre-era-before1900');
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-movie-28-era-2030-2039','movie',fixedNow,tz),null);
+  assert.equal(api._internals.resolveArchiveCatalog('genres-fr-series-10759-era-2010-2014','series',fixedNow,tz),null);
+  assert.equal(calendar.dateWindow('genre-era-2010-2014',fixedNow,tz).start,'2010-01-01');
+  assert.equal(calendar.dateWindow('genre-era-2010-2014',fixedNow,tz).end,'2014-12-31');
+  assert.equal(calendar.dateWindow('genre-era-before1900',fixedNow,tz).end,'1899-12-31');
+  for(const folder of films.folders.filter(f=>['Histoire','Téléfilm','Guerre'].includes(f.title))) {
+    assert.equal(folder.titleLogoUrl,null,'no duplicate native text below branded genre image');
+    assert.equal(folder.tileShape,'LANDSCAPE');
+    assert.equal(folder.hideTitle,true);
+  }
 });
 
 
@@ -584,9 +608,9 @@ test('desktop gets a dedicated cinematic JPEG while Shield keeps its SVG backgro
 });
 
 
-test('France manifest 1.3.3 explicitly publishes every Cinema du moment catalog',()=>{
+test('France manifest 1.3.4 explicitly publishes every Cinema du moment catalog',()=>{
   const manifest=api._internals.buildManifest('https://example.invalid/fr',fixedNow,'Europe/Brussels');
-  assert.equal(manifest.version,'1.3.3');
+  assert.equal(manifest.version,'1.3.4');
   const cinemaIds=manifest.catalogs.filter(c=>c.type==='movie'&&c.id.startsWith('cinema-torrentio-')).map(c=>c.id);
   assert.deepEqual(cinemaIds,[
     'cinema-torrentio-nowplaying',

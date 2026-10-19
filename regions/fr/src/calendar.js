@@ -77,6 +77,23 @@ function localTime(now = new Date(), timeZone = DEFAULT_TIMEZONE) {
 function dateWindow(period = 'next7', now = new Date(), timeZone = DEFAULT_TIMEZONE) {
   const today = localIsoDate(now, timeZone, 0);
 
+  // Films by genre retain every archive month from 2015 to 2030 and group
+  // earlier cinema history into fixed periods. This avoids 100+ extra TV rows
+  // for each genre while preserving the entire available history.
+  const era = String(period || '').match(/^genre-era-(\d{4})-(\d{4})$/);
+  if (era) {
+    const first = Number(era[1]), last = Number(era[2]);
+    const start = `${era[1]}-01-01`;
+    const plannedEnd = `${era[2]}-12-31`;
+    const empty = first > last || start > today;
+    return { start, end: plannedEnd < today ? plannedEnd : today,
+      kind: 'genre-era', today, allowPast: true, empty, archiveYear: last };
+  }
+  if (period === 'genre-era-before1900') {
+    return { start: '1800-01-01', end: '1899-12-31',
+      kind: 'genre-era', today, allowPast: true, empty: false, archiveYear: 1899 };
+  }
+
   // Standalone Archives project: archive-YYYY-MM is a calendar month.
   // Past months are complete; the current month stops at the viewer-local
   // current day; future months are empty and therefore cost zero upstream calls.
