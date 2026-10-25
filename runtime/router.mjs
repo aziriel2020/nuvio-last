@@ -41,7 +41,7 @@ export function edgeTtl(input) {
   const path = url.pathname;
 
   // Empty/error series responses must not become a cached successful catalog.
-  if (/^\/series(?:-v2)?\//.test(path)) return 0;
+  if (/^\/(?:series(?:-v2)?|movies)\//.test(path)) return 0;
 
   if (path === '/health' || path.includes('/debug/') || path.startsWith('/internal/')) return 0;
 

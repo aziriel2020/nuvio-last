@@ -8,6 +8,8 @@ const frHandler = require('../regions/fr/api/index');
 const globalHandler = require('../regions/global/api/index');
 const trHandler = require('../regions/tr/api/index');
 const seriesHandler = require('../regions/series/index.cjs');
+const moviesHandler = require('../regions/movies/index.cjs');
+const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
 const VERSION = '1.4.0';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
@@ -453,6 +455,12 @@ module.exports = async function handler(req, res) {
       seriesDesktopCollections: `${origin}/series-v2/nuvio-collections-desktop.json`,
       seriesStatus: `${origin}/series-v2/status.json`,
       seriesLegacyManifest: `${origin}/series/manifest.json`,
+      moviesAddonId: MOVIES_ADDON_ID,
+      moviesVersion: MOVIES_VERSION,
+      moviesManifest: `${origin}/movies/manifest.json`,
+      moviesCollections: `${origin}/movies/nuvio-collections.json`,
+      moviesDesktopCollections: `${origin}/movies/nuvio-collections-desktop.json`,
+      moviesStatus: `${origin}/movies/status.json`,
       franceManifest: `${origin}/fr/manifest.json`,
       globalManifest: `${origin}/global/manifest.json`,
       turkeyManifest: `${origin}/tr/manifest.json`,
@@ -469,6 +477,11 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, seriesHandler._internals.buildCollections(`${origin}/series`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), LARGE_JSON_CACHE);
   }
+  if (path === '/nuvio-collections-movies.json' || path === '/nuvio-collections-movies-desktop.json') {
+    const origin = originFromRequest(req);
+    return sendJson(res, 200, moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), 'no-store');
+  }
+  if (path === '/movies' || path.startsWith('/movies/')) return delegate(req, res, '/movies', moviesHandler);
   if (path === '/series-v2' || path.startsWith('/series-v2/')) return delegate(req, res, '/series-v2', seriesHandler);
   if (path === '/series' || path.startsWith('/series/')) return delegate(req, res, '/series', seriesHandler);
   if (path === '/global' || path.startsWith('/global/')) return delegate(req, res, '/global', globalHandler);

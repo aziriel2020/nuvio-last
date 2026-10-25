@@ -28,6 +28,11 @@ jobs:
       - name: Run full test suite
         run: npm test
 
+      - name: Validate Films Monde custom artwork and Oracle integration
+        run: |
+          node scripts/verify-movie-covers.mjs
+          node scripts/test-movies-runtime.mjs
+
       - name: Render and audit all six Tendances & Cinéma covers
         run: npm run audit:editorial-covers
 

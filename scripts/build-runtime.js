@@ -90,7 +90,9 @@ async function main() {
     '/nuvio-collections-turkiye.json',
     '/nuvio-collections-series.json', '/nuvio-collections-series-desktop.json',
     '/series/manifest.json', '/series/nuvio-collections.json', '/series/nuvio-collections-desktop.json', '/series/collections.json',
-    '/series-v2/manifest.json', '/series-v2/nuvio-collections.json', '/series-v2/nuvio-collections-desktop.json', '/series-v2/collections.json'
+    '/series-v2/manifest.json', '/series-v2/nuvio-collections.json', '/series-v2/nuvio-collections-desktop.json', '/series-v2/collections.json',
+    '/movies/manifest.json', '/movies/nuvio-collections.json', '/movies/nuvio-collections-desktop.json', '/movies/collections.json',
+    '/nuvio-collections-movies.json', '/nuvio-collections-movies-desktop.json'
   ];
 
   for (const region of ['fr', 'global', 'tr', 'us']) {

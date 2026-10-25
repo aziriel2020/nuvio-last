@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const suites = [
+  { name: 'Worldwide movies France', cwd: root, args: ['--test', 'regions/movies/test/movies.test.cjs'] },
   { name: 'Worldwide live-action series', cwd: root, args: ['--test', 'regions/series/test/series.test.cjs'] },
   { name: 'USA engine', cwd: path.join(root, 'regions', 'us'), args: ['--test'] },
   { name: 'France engine', cwd: path.join(root, 'regions', 'fr'), args: ['--test'] },

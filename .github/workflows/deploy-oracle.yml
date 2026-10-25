@@ -137,11 +137,13 @@ jobs:
           previous="$(cat /var/tmp/nuvio-pre-main-release 2>/dev/null || true)"
           if [[ -n "$previous" && -d "$previous" ]]; then
             systemctl stop nuvio-series-sync.service || true
+            systemctl stop nuvio-movies-sync.service || true
             ln -sfn "$previous" /opt/nuvio/current.rollback
             mv -Tf /opt/nuvio/current.rollback /opt/nuvio/current
             systemctl daemon-reload
             systemctl restart nuvio
             if [[ -f "$previous/scripts/sync-series-world.cjs" ]]; then systemctl start nuvio-series-sync.service; fi
+            if [[ -f "$previous/scripts/sync-movies-world.cjs" ]]; then systemctl start nuvio-movies-sync.service; else systemctl disable nuvio-movies-sync.service || true; fi
             systemctl reload caddy 2>/dev/null || systemctl restart caddy
           fi
           systemctl start nuvio-update.timer || true

@@ -1,0 +1,148 @@
+{
+  "revision": "movies-premium-20261025-v1",
+  "styleReference": "series-covers-25-approved.zip",
+  "width": 1600,
+  "height": 900,
+  "items": [
+    {
+      "id": "all",
+      "title": "Tous les films",
+      "file": "all.webp",
+      "bytes": 185972,
+      "sha256": "cac2d17d3351daa8ea13b662377802ab76cd4041888713a9ea1c63b17e10b996"
+    },
+    {
+      "id": "28",
+      "title": "Action",
+      "file": "28.webp",
+      "bytes": 133560,
+      "sha256": "4644e70d07581d84706f8450233acc7cc9bf3e705c510c5e9443bec1163a14fd"
+    },
+    {
+      "id": "12",
+      "title": "Aventure",
+      "file": "12.webp",
+      "bytes": 124476,
+      "sha256": "238e5a6f9c92891e7152f4db2a6908b77bce6b3731c26d6023bbe724df0805f4"
+    },
+    {
+      "id": "35",
+      "title": "Comédie",
+      "file": "35.webp",
+      "bytes": 92452,
+      "sha256": "15d77a6ebfa1034a9ad5535ebbe2bc8e92797d5be3316fdecf8df38b1ee33176"
+    },
+    {
+      "id": "80",
+      "title": "Crime / Policier",
+      "file": "80.webp",
+      "bytes": 131716,
+      "sha256": "670c8028fee1d47cbe0ee7f72e8377ba659790c8d1b79cbcaeec3b81b18df67c"
+    },
+    {
+      "id": "99",
+      "title": "Documentaires",
+      "file": "99.webp",
+      "bytes": 155976,
+      "sha256": "d9d9bddbb08aca80b3f7cd024936ef9a8adde7824702654ab50b9f5ee829d759"
+    },
+    {
+      "id": "18",
+      "title": "Drame",
+      "file": "18.webp",
+      "bytes": 86640,
+      "sha256": "cac55514c9b107b85ab5916c4f0e252d7f78f58d2098b88d219e18f8c7cbaae8"
+    },
+    {
+      "id": "10751",
+      "title": "Famille",
+      "file": "10751.webp",
+      "bytes": 109580,
+      "sha256": "a8c9d20f6c1d8f88f8454dda8d818c3a01c239778805e76ba0c2738f76f7c4f9"
+    },
+    {
+      "id": "14",
+      "title": "Fantastique",
+      "file": "14.webp",
+      "bytes": 156160,
+      "sha256": "c62864c70b816e90f1e30d819619698f4bc84b99ceaa19cb2ce241416c77a33d"
+    },
+    {
+      "id": "36",
+      "title": "Histoire",
+      "file": "36.webp",
+      "bytes": 117464,
+      "sha256": "dda0042a42984f225508d5d314073f4c9320936d441bc0d836e3342eb8292f91"
+    },
+    {
+      "id": "27",
+      "title": "Horreur",
+      "file": "27.webp",
+      "bytes": 94898,
+      "sha256": "9e5a6a355a1696162829a5dc77fd2cff61840a0639c032c49c56c719cad29665"
+    },
+    {
+      "id": "10402",
+      "title": "Musique",
+      "file": "10402.webp",
+      "bytes": 73838,
+      "sha256": "0a3c8437c1c57ba3ea19133e356a4058905d9a49c97ee6bdae6398d37fe17949"
+    },
+    {
+      "id": "9648",
+      "title": "Mystère",
+      "file": "9648.webp",
+      "bytes": 101578,
+      "sha256": "4fff7de825ba697c2a0d0a152f2e00f4acf12da512a1a96ed7f726624ef46de5"
+    },
+    {
+      "id": "10749",
+      "title": "Romance",
+      "file": "10749.webp",
+      "bytes": 89250,
+      "sha256": "507c06a09edb9ef2fab31c31787d1676f0e3a81ce161a11b49d67137636bcdcf"
+    },
+    {
+      "id": "878",
+      "title": "Science-fiction",
+      "file": "878.webp",
+      "bytes": 121064,
+      "sha256": "6fea71f06f963ef61b643985c9bc94436c0c7f3b5f4c88e099b5656a9d81f585"
+    },
+    {
+      "id": "10770",
+      "title": "Téléfilms",
+      "file": "10770.webp",
+      "bytes": 62514,
+      "sha256": "7ddd7b7bf69eb3af1e149956a882736b41f76f40f4c5a898790b03c82ca966b4"
+    },
+    {
+      "id": "53",
+      "title": "Thriller",
+      "file": "53.webp",
+      "bytes": 85076,
+      "sha256": "23376b99766eb00e139e50c0c155ad601a4d9e5312b59b50600a5ecfbf3d91f7"
+    },
+    {
+      "id": "10752",
+      "title": "Guerre",
+      "file": "10752.webp",
+      "bytes": 103154,
+      "sha256": "9de7bd6f67c6f3138b575b6f1c79331d1a17a1a8bce4e2512599e5205b2ea9bf"
+    },
+    {
+      "id": "37",
+      "title": "Western",
+      "file": "37.webp",
+      "bytes": 106880,
+      "sha256": "e480d59c5a8698f0b567268171b5289b48167241f3bf48ec6026d4ff1b3ebe0b"
+    },
+    {
+      "id": "unclassified",
+      "title": "Genre non renseigné",
+      "file": "unclassified.webp",
+      "bytes": 81108,
+      "sha256": "bd5d4bf759fd968f0917a8aa29c3518a01e7e95da38e6ad5a50616d310707e18"
+    }
+  ]
+}
