@@ -21,6 +21,12 @@ const STATIC_EXACT_PATHS = new Set([
   '/series-v2/nuvio-collections.json',
   '/series-v2/nuvio-collections-desktop.json',
   '/series-v2/collections.json',
+  '/movies/manifest.json',
+  '/movies/nuvio-collections.json',
+  '/movies/nuvio-collections-desktop.json',
+  '/movies/collections.json',
+  '/nuvio-collections-movies.json',
+  '/nuvio-collections-movies-desktop.json',
   '/coexistence-check.json',
   '/nuvio-collections-fr-global-tr-usa.json',
   '/nuvio-collections-fr-global-usa.json',
@@ -66,7 +72,7 @@ async function staticRuntimeAsset(request, env) {
   headers.set('X-Nuvio-Edge', 'oracle-node');
   headers.set('X-Nuvio-Origin', 'oracle-static');
   const pathname = new URL(request.url).pathname;
-  if (/^\/series(?:-v2)?\//.test(pathname) || /^\/nuvio-collections-series(?:-desktop)?\.json$/.test(pathname)) {
+  if (/^\/(?:series(?:-v2)?|movies)\//.test(pathname) || /^\/nuvio-collections-(?:series|movies)(?:-desktop)?\.json$/.test(pathname)) {
     headers.set('Cache-Control', 'no-store');
   }
   return new Response(response.body, {

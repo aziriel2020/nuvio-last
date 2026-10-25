@@ -30,8 +30,8 @@ fi
 
 id -u nuvio >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/nuvio --shell /bin/bash nuvio
 
-mkdir -p /opt/nuvio/source /opt/nuvio/releases /etc/nuvio /var/cache/nuvio /var/lib/nuvio-series /var/log/caddy
-chown -R nuvio:nuvio /opt/nuvio /var/cache/nuvio /var/lib/nuvio-series
+mkdir -p /opt/nuvio/source /opt/nuvio/releases /etc/nuvio /var/cache/nuvio /var/lib/nuvio-series /var/lib/nuvio-movies /var/log/caddy
+chown -R nuvio:nuvio /opt/nuvio /var/cache/nuvio /var/lib/nuvio-series /var/lib/nuvio-movies
 chown -R caddy:caddy /var/log/caddy
 
 if [[ ! -d /opt/nuvio/source/.git ]]; then

@@ -32,6 +32,16 @@ test('Oracle runtime has bounded resources and automatic restart', () => {
   assert.match(service, /NoNewPrivileges=true/);
 });
 
+test('Films Monde indexing is isolated, bounded and included in rollback handling', () => {
+  const movies = fs.readFileSync(path.join(root, 'oracle/nuvio-movies-sync.service'), 'utf8');
+  assert.match(movies, /MemoryMax=512M/); assert.match(movies, /CPUQuota=20%/);
+  assert.match(movies, /flock -n \/var\/lib\/nuvio-movies\/sync.lock/);
+  assert.match(movies, /ReadWritePaths=\/var\/lib\/nuvio-movies/);
+  assert.match(updater, /systemctl restart nuvio-movies-sync.service/);
+  assert.match(updater, /systemctl stop nuvio-movies-sync.service/);
+  assert.match(updater, /test-movies-runtime.mjs/);
+});
+
 test('Oracle release tests run before the final public build and atomic switch', () => {
   const testIndex = updater.indexOf('npm test');
   const runtimeTestIndex = updater.indexOf('npm run test:runtime');

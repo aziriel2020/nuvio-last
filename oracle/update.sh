@@ -54,6 +54,8 @@ run_nuvio "npm run test:runtime"
 # Validate the single-file Shield artwork pack before any public release switch.
 # No package => safe fallback. A partial/corrupt uploaded package aborts deployment.
 run_nuvio "node scripts/verify-series-covers.mjs"
+run_nuvio "node scripts/verify-movie-covers.mjs"
+run_nuvio "node scripts/test-movies-runtime.mjs"
 
 # Generated collection covers are release assets consumed by the Oracle integration
 # test itself. Reuse the previous set only as a warm cache; the revisioned generator
@@ -114,8 +116,10 @@ console.log('Final Oracle build origin verified:', process.env.PUBLIC_ORIGIN);
 NODE"
 
 install -d -m 0755 -o nuvio -g nuvio /var/lib/nuvio-series
+install -d -m 0755 -o nuvio -g nuvio /var/lib/nuvio-movies
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
 install -m 0644 "$TARGET/oracle/nuvio-series-sync.service" /etc/systemd/system/nuvio-series-sync.service
+install -m 0644 "$TARGET/oracle/nuvio-movies-sync.service" /etc/systemd/system/nuvio-movies-sync.service
 install -d -m 0755 /etc/nuvio
 printf 'NUVIO_GIT_SHA=%s\n' "$SHA" > /etc/nuvio/release.env.new
 chmod 0644 /etc/nuvio/release.env.new
@@ -137,6 +141,8 @@ chown -h nuvio:nuvio "$CURRENT"
 systemctl daemon-reload
 systemctl enable nuvio-series-sync.service
 systemctl restart nuvio-series-sync.service
+systemctl enable nuvio-movies-sync.service
+systemctl restart nuvio-movies-sync.service
 systemctl restart nuvio
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
@@ -154,10 +160,12 @@ if ! curl -fsS --max-time 5 http://127.0.0.1:3000/_oracle/health >/dev/null; the
   if [[ -n "$PREVIOUS" && -d "$PREVIOUS" && "$PREVIOUS" != "$TARGET" ]]; then
     echo "Rolling back to $(basename "$PREVIOUS")" >&2
     systemctl stop nuvio-series-sync.service || true
+    systemctl stop nuvio-movies-sync.service || true
     ln -sfn "$PREVIOUS" "$BASE/current.rollback"
     mv -Tf "$BASE/current.rollback" "$CURRENT"
     systemctl restart nuvio
     if [[ -f "$PREVIOUS/scripts/sync-series-world.cjs" ]]; then systemctl start nuvio-series-sync.service; fi
+    if [[ -f "$PREVIOUS/scripts/sync-movies-world.cjs" ]]; then systemctl start nuvio-movies-sync.service; else systemctl disable nuvio-movies-sync.service || true; fi
     systemctl reload caddy 2>/dev/null || true
   fi
   exit 1

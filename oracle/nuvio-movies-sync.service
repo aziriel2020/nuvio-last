@@ -1,0 +1,28 @@
+[Unit]
+Description=Nuvio Films Monde France streaming VOD and cinema indexer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nuvio
+Group=nuvio
+WorkingDirectory=/opt/nuvio/current
+Environment=NODE_ENV=production
+Environment=NUVIO_MOVIES_DB=/var/lib/nuvio-movies/index.sqlite
+EnvironmentFile=/etc/nuvio/nuvio.env
+ExecStart=/usr/bin/flock -n /var/lib/nuvio-movies/sync.lock /usr/bin/node /opt/nuvio/current/scripts/sync-movies-world.cjs
+Restart=always
+RestartSec=30
+TimeoutStopSec=35
+MemoryMax=512M
+CPUQuota=20%
+Nice=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nuvio-movies
+
+[Install]
+WantedBy=multi-user.target
