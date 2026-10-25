@@ -57,7 +57,7 @@ export function edgeTtl(input) {
   if (path.includes('/meta/')) return META_TTL;
 
   if (
-    /\/(?:binge-watch-cover\.jpg|binge-watch-backdrop\.jpg|calendar-card\.svg|desktop-content-card\.jpg|desktop-folder-card\.jpg|desktop-genre-card\.jpg|shield-folder-card\.jpg|shield-genre-card\.jpg|platform-card\.jpg|platform-backdrop\.jpg|platform-category-card\.svg|platform-backdrop\.svg|platform-logo|archive-year-card\.svg|genre-folder-art\.svg|genre-poster\.png)$/.test(path)
+    /\/(?:binge-watch-cover\.jpg|binge-watch-backdrop\.jpg|calendar-card\.(?:svg|jpg)|desktop-content-card\.jpg|desktop-folder-card\.jpg|desktop-genre-card\.jpg|shield-folder-card\.jpg|shield-genre-card\.jpg|platform-card\.jpg|platform-backdrop\.jpg|platform-category-card\.svg|platform-backdrop\.svg|platform-logo|archive-year-card\.svg|genre-folder-art\.svg|genre-poster\.png)$/.test(path)
   ) {
     return GENERATED_ART_TTL;
   }
@@ -631,7 +631,8 @@ async function dynamicResponse(request, env, ctx) {
 
   let finalResponse = withHeaders(response, { 'X-Nuvio-Cache': 'MISS' });
 
-  if (key && cache && finalResponse.ok && ttl > 0) {
+  if (key && cache && finalResponse.ok && ttl > 0
+    && !/(?:no-store|private|max-age=0)(?:\b|,)/i.test(finalResponse.headers.get('cache-control') || '')) {
     const headers = new Headers(finalResponse.headers);
     headers.set('Cache-Control', `public, max-age=${ttl}, stale-while-revalidate=${Math.max(ttl, 900)}`);
     finalResponse = new Response(finalResponse.body, {

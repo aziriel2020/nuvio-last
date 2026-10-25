@@ -26,7 +26,7 @@ test('Oracle infrastructure is hard-pinned inside the Always Free profile', () =
 test('Oracle runtime has bounded resources and automatic restart', () => {
   assert.match(service, /Restart=always/);
   assert.match(service, /MemoryMax=9G/);
-  assert.match(service, /NUVIO_CACHE_MAX_ENTRIES=2048/);
+  assert.match(service, /NUVIO_CACHE_MAX_ENTRIES=8192/);
   assert.match(service, /EnvironmentFile=-\/etc\/nuvio\/release\.env/);
   assert.match(service, /HOST=127\.0\.0\.1/);
   assert.match(service, /NoNewPrivileges=true/);
@@ -85,10 +85,10 @@ test('Oracle provisioning verifies the free plan before apply', () => {
   assert.match(workflow, /ORACLE_SSH_PRIVATE_KEY/);
 });
 
-test('Oracle disk cache is release-scoped and concurrent writes are collision-safe', () => {
+test('Oracle JSON cache stays release-scoped, artwork persists, and concurrent writes are collision-safe', () => {
   assert.match(server, /CACHE_NAMESPACE/);
   assert.match(server, /process\.env\.NUVIO_GIT_SHA/);
-  assert.match(server, /CACHE_NAMESPACE \+ '\\n' \+ url/);
+  assert.match(server, /artwork \? 'artwork-v2' : CACHE_NAMESPACE/);
   assert.match(server, /randomUUID\(\)/);
   assert.match(server, /this\.writes = new Map\(\)/);
   assert.match(server, /this\.writeEntry\(input, stored\)/);

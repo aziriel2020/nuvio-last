@@ -12,7 +12,7 @@ BRANCH="${NUVIO_BRANCH:-main}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git jq ufw sudo debian-keyring debian-archive-keyring apt-transport-https gnupg
+apt-get install -y ca-certificates curl git jq ufw sudo debian-keyring debian-archive-keyring apt-transport-https gnupg fontconfig fonts-dejavu-core fonts-noto-core fonts-noto-cjk
 
 if ! command -v node >/dev/null || ! node -e 'const [major,minor]=process.versions.node.split(".").map(Number);process.exit(major>22 || (major===22 && minor>=13) ? 0 : 1)'; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -

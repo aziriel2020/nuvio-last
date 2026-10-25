@@ -229,12 +229,12 @@ test('movie cards preserve custom Modern/desktop targeting and detail art, inclu
   const raw = s.query({ now: NOW })[0];
   const [decorated] = decorateMovieMetas('https://example.test/movies', [raw], { period: 'all' });
   assert.equal(decorated.posterShape, 'landscape');
-  assert.equal(new URL(decorated.background).pathname, '/fr/calendar-card.svg');
+  assert.equal(new URL(decorated.background).pathname, '/fr/calendar-card.jpg');
   assert.equal(new URL(decorated.banner).pathname, '/fr/desktop-content-card.jpg');
   assert.equal(new URL(decorated.background).searchParams.get('type'), 'movie');
   assert.equal(raw.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
   const [fallback] = decorateMovieMetas('https://example.test/movies', [{ ...raw, poster: undefined, background: undefined }], { period: 'all' });
-  assert.equal(new URL(fallback.background).pathname, '/movies/content-card.jpg');
+  assert.equal(new URL(fallback.background).pathname, '/fr/calendar-card.jpg');
 });
 
 test('streaming and VOD cards display a provider for that offer type', (t) => {

@@ -12,6 +12,7 @@ const suites = [
   { name: 'Global VOD engine', cwd: path.join(root, 'regions', 'global'), args: ['--test'] },
   { name: 'Coexistence wrapper', cwd: root, args: ['--test', 'test/coexist.test.js'] },
   { name: 'Production audit helpers', cwd: root, args: ['--test', 'test/audit.test.mjs'] },
+  { name: 'Artwork recovery and persistent cache', cwd: root, args: ['--test', 'test/artwork-runtime.test.mjs'] },
   { name: 'Oracle Always Free guardrails', cwd: root, args: ['--test', 'test/oracle-config.test.mjs'] }
 ];
 

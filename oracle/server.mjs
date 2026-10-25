@@ -13,7 +13,7 @@ const DIST = path.join(ROOT, 'dist');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
 const CACHE_DIR = process.env.NUVIO_CACHE_DIR || '/var/cache/nuvio';
-const CACHE_MAX_ENTRIES = Math.max(128, Number(process.env.NUVIO_CACHE_MAX_ENTRIES || 2048));
+const CACHE_MAX_ENTRIES = Math.max(128, Number(process.env.NUVIO_CACHE_MAX_ENTRIES || 8192));
 const DEFAULT_TIMEZONE = process.env.NUVIO_TIMEZONE || 'Europe/Brussels';
 const MAX_RESPONSE_BYTES = Math.max(1024 * 1024, Number(process.env.NUVIO_MAX_RESPONSE_BYTES || 24 * 1024 * 1024));
 const CACHE_NAMESPACE = String(process.env.NUVIO_GIT_SHA || process.env.NUVIO_CACHE_NAMESPACE || 'unversioned').trim() || 'unversioned';
@@ -40,7 +40,11 @@ class FileCache {
 
   key(input) {
     const url = typeof input === 'string' ? input : input?.url || String(input);
-    return sha(CACHE_NAMESPACE + '\n' + url);
+    // Image URLs already carry a renderer revision (and source file hash).
+    // Keep their disk cache warm across application deployments.
+    let artwork = false;
+    try { artwork = /\.(?:jpe?g|png|webp|svg)$/.test(new URL(url).pathname); } catch {}
+    return sha((artwork ? 'artwork-v2' : CACHE_NAMESPACE) + '\n' + url);
   }
 
   paths(input) {
@@ -77,7 +81,7 @@ class FileCache {
   }
 
   async put(input, response) {
-    if (!response?.ok) return;
+    if (!response?.ok || /(?:no-store|private)/i.test(response.headers.get('cache-control') || '')) return;
 
     // Serialize writes per cache key. Multiple simultaneous Nuvio requests can
     // render the same card/catalog in the same millisecond; without this guard
@@ -122,9 +126,10 @@ class FileCache {
       await fs.rename(metaTmp, files.meta);
 
       this.puts += 1;
-      if (this.puts % 64 === 0 || Date.now() - this.lastPrune > 10 * 60 * 1000) {
+      if (!this.pruning && Date.now() - this.lastPrune > 10 * 60 * 1000) {
         this.lastPrune = Date.now();
-        void this.prune();
+        this.pruning = true;
+        void this.prune().finally(() => { this.pruning = false; });
       }
     } catch (error) {
       console.warn('[oracle-cache-put]', error?.message || error);
