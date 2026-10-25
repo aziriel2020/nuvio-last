@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
-const { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, periods, catalogId, parseCatalog } = require('./src/model.cjs');
+const { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, WESTERN_GENRE, periods, catalogId, parseCatalog } = require('./src/model.cjs');
 const { SeriesStore, defaultPath } = require('./src/store.cjs');
 const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
 const { decorateSeriesMetas } = require('./src/presentation.cjs');
@@ -107,18 +107,18 @@ function reader() {
 function releaseForOrigin(origin) {
   const fresh = new URL(origin).pathname.replace(/\/$/, '') === '/series-v2';
   return fresh
-    ? { id: V2_ADDON_ID, version: V2_VERSION, name: 'Nuvio Séries France V2 · 2.0.0', prefixes: ['fr'] }
+    ? { id: V2_ADDON_ID, version: V2_VERSION, name: `Nuvio Séries France V2 · ${V2_VERSION}`, prefixes: ['fr'] }
     : { id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Streaming France', prefixes: ['fr', 'world'] };
 }
 
 function buildManifest(origin, now = new Date()) {
-  const dates = periods(now);
+  const dates = periods(now), westernDates = periods(now, WESTERN_GENRE);
   const release = releaseForOrigin(origin);
   return {
     id: release.id, version: release.version, name: release.name,
-    description: 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates. Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
+    description: 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates depuis 2018 (Western : historique complet). Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     types: ['series'], language: 'fr', resources: [{ name: 'catalog', types: ['series'] }, { name: 'meta', types: ['series'], idPrefixes: ['tt', 'tmdb:tv:', 'tvmaze:'] }],
-    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => dates.flatMap((date) => release.prefixes.map((prefix) => ({
+    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).flatMap((date) => release.prefixes.map((prefix) => ({
       // Both deployed imports must resolve to a named manifest descriptor.
       // Changing the French-market filter did not invalidate old collections.
       id: catalogId(mode, genre.id, date.key).replace('series-fr-', `series-${prefix}-`), type: 'series',
@@ -133,10 +133,11 @@ function buildManifest(origin, now = new Date()) {
 }
 
 function buildCollections(origin, now = new Date(), mode = 'shield') {
+  const dates = periods(now).filter(({ key }) => key !== 'all');
+  const westernDates = periods(now, WESTERN_GENRE).filter(({ key }) => key !== 'all');
   const root = new URL('..', `${origin}/`).href.replace(/\/$/, '');
   // In collections, expose rolling periods first; keep 'all' in the manifest
   // as an internal/backwards-compatible catalog, never as a visible row.
-  const dates = periods(now).filter(({ key }) => key !== 'all');
   const release = releaseForOrigin(origin);
   const fresh = release.id === V2_ADDON_ID;
   // Switch the entire set atomically. A partially uploaded batch must never
@@ -155,7 +156,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
       const slug = genreSlugs[genre.id];
       const renderer = mode === 'desktop' ? 'desktop' : 'shield';
       const imageParams = new URLSearchParams({ genre: slug, type: 'series', title: genre.name, label: 'STREAMING FRANCE', v: 'series-france-v2' });
-      const sources = dates.map((date) => ({ provider: 'addon', addonId: release.id, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
+      const sources = (genre.id === WESTERN_GENRE ? westernDates : dates).map((date) => ({ provider: 'addon', addonId: release.id, type: 'series', catalogId: catalogId(view, genre.id, date.key) }));
       return {
         id: `series-world-${view}-${genre.id}`, title: genre.name,
         coverImageUrl: premiumCoversReady ? genreCoverRoute(origin, genre.id)

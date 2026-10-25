@@ -17,7 +17,7 @@ Deux collections natives, chacune avec 25 dossiers de genres et thèmes :
 - **🇫🇷 Séries en streaming · Tous services** : date de première diffusion de la série.
 - **🇫🇷 Streaming · Nouvelles saisons** : date de lancement des saisons normales numéro 2 et supérieur.
 
-Les périodes visibles commencent par **Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante**, puis les **mois décroissants depuis le mois actuel** jusqu’à 2015, les années plus anciennes et Date inconnue. **Aucun mois ni aucune année future n’est affiché** (par exemple, en octobre 2026, ni novembre/décembre 2026 ni 2027). Les archives du mois et de l’année en cours sont limitées à la date locale du jour, sans sortie programmée future. Seules les rangées explicites « Demain » et « La semaine suivante » permettent d’explorer l’avenir. « Toutes les dates » reste une route de compatibilité mais n’est plus une rangée visible. Lors d’un changement de mois, l’import Shield doit être actualisé pour ajouter le nouveau mois visible. Les dates concernent la diffusion originale de la série/saison, sans inventer une date d'arrivée sur une plateforme française. La présence au catalogue nécessite toujours une disponibilité actuelle FR, y compris pour une série ancienne.
+Les périodes visibles commencent par **Aujourd’hui, Demain, Hier, Semaine passée, La semaine suivante**, puis les **mois décroissants depuis le mois actuel** jusqu’à **janvier 2018 inclus**. Seul **Western** conserve les mois jusqu’à 2015, les années plus anciennes et Date inconnue. Le seuil concerne les dates de diffusion des épisodes/saisons : les séries lancées avant 2018 restent visibles lors d’une nouvelle diffusion depuis 2018. Les anciennes routes non-Western antérieures à 2018 renvoient une liste vide, même depuis un ancien import. Les données et liens de détail restent conservés. Réimporter les collections actualise les périodes visibles dans Shield et Desktop. **Aucun mois ni aucune année future n’est affiché** (par exemple, en octobre 2026, ni novembre/décembre 2026 ni 2027). Les archives du mois et de l’année en cours sont limitées à la date locale du jour, sans sortie programmée future. Seules les rangées explicites « Demain » et « La semaine suivante » permettent d’explorer l’avenir. « Toutes les dates » reste une route de compatibilité mais n’est plus une rangée visible. Lors d’un changement de mois, l’import Shield doit être actualisé pour ajouter le nouveau mois visible. Les dates concernent la diffusion originale de la série/saison, sans inventer une date d'arrivée sur une plateforme française. La présence au catalogue nécessite toujours une disponibilité actuelle FR, y compris pour une série ancienne.
 
 Pagination de 100 fiches sans plafond total, sans seuil de notes/popularité. Le genre 16, les mots-clés d'animation et les classifications complémentaires déjà connues servent à exclure l'animation. Les thèmes complémentaires dépendent des métadonnées ; les fiches sans médium déterminable restent en attente de classification.
 
@@ -33,10 +33,10 @@ Les points de reprise, erreurs et compteurs FR sont publics dans `/series/status
 
 ### Installation V2 sans conflit avec les anciennes versions
 
-La version **2.0.0**, nommée **Nuvio Séries France V2 · 2.0.0**, utilise un nouvel identifiant `com.nuvio.series.france.liveaction.v2` et une nouvelle base `/series-v2`. Le cache des versions 1.x, attaché à l'ancienne URL/identité dans Nuvio, ne peut pas être réutilisé pour cette installation.
+La version **2.0.1**, nommée **Nuvio Séries France V2 · 2.0.1**, utilise un nouvel identifiant `com.nuvio.series.france.liveaction.v2` et une nouvelle base `/series-v2`. Le cache des versions 1.x, attaché à l'ancienne URL/identité dans Nuvio, ne peut pas être réutilisé pour cette installation.
 
 1. Retirer uniquement l'ancienne extension Séries Monde / Séries Streaming France.
-2. Installer `/series-v2/manifest.json` et vérifier que le nom affiche V2 · 2.0.0.
+2. Installer `/series-v2/manifest.json` et vérifier que le nom affiche V2 · 2.0.1.
 3. Importer `/series-v2/nuvio-collections.json` pour Shield, ou `/series-v2/nuvio-collections-desktop.json` pour Desktop.
 4. Fermer et relancer Nuvio.
 

@@ -94,8 +94,8 @@ test('genres include Histoire, Téléfilms and Guerre and support multi-classifi
 
 test('undated films remain indexed; unknown media classification waits for enrichment', (t) => {
   const s = memory(t); s.upsert(record(1, { release_date: null })); s.upsert(record(2, { genres: [] }));
-  assert.equal(s.query({ period: 'undated', now: NOW }).length, 1);
-  assert.equal(s.query({ now: NOW }).length, 1); assert.equal(s.stats().awaitingClassification, 1);
+  assert.equal(s.query({ period: 'undated', now: NOW }).length, 0);
+  assert.equal(s.query({ now: NOW }).length, 0); assert(s.row('tmdb:1')); assert.equal(s.stats().awaitingClassification, 1);
 });
 
 test('provider withdrawals and expiration immediately gate streaming without deleting cinema history', (t) => {
@@ -154,7 +154,7 @@ test('oversized scans split by dates and retain an independent undated discovery
   assert(scan.complete); assert.equal(scan.overflow.length, 0);
   assert(calls.some((p) => p.sort_by === 'primary_release_date.asc'));
   assert(calls.some((p) => p['primary_release_date.gte']));
-  assert(s.query({ period: 'undated', now: NOW }).some((m) => m.name === 'Sans date'));
+  assert.equal(s.row('tmdb:3').title, 'Sans date', 'undated discovery remains indexed');
 });
 
 test('movie date shards preserve open ends without invalid ancient or distant bounds', () => {
@@ -210,6 +210,10 @@ test('every import source has a named manifest catalog, with stable standalone i
       assert.equal(folder.tileShape, 'LANDSCAPE');
       assert.deepEqual(folder.sources.slice(0, 5).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
       assert(!folder.sources.some((s) => /-all$|-2027-|-2026-11/.test(s.catalogId)));
+      const keys = folder.sources.map((s) => parseCatalog(s.catalogId).period);
+      const western = parseCatalog(folder.sources[0].catalogId).genre === '37';
+      assert(keys.includes('2018-01'));
+      for (const old of ['2017-12', '2015-01', '1950', 'before1900', 'undated']) assert.equal(keys.includes(old), western);
       for (const source of folder.sources) { assert.equal(source.addonId, manifest.id); assert(names.has(source.catalogId)); }
     }
   }
@@ -247,4 +251,24 @@ test('streaming and VOD cards display a provider for that offer type', (t) => {
     const card = decorateMovieMetas('https://example.test/movies', metas, { view, period: 'all' })[0];
     assert.equal(new URL(card.background).searchParams.get('provider'), expected);
   }
+});
+
+
+test('2018 cutoff covers all four movie views while Western retains every historical period', (t) => {
+  const s = memory(t);
+  for (const [id, date] of [[801, '2017-12-31'], [802, '2018-01-01'], [803, '1890-01-01']]) {
+    s.upsert(record(id, { release_date: date, genres: [{ id: 18 }, { id: 37 }],
+      release_dates: regional([3, date], [4, date]) }));
+    s.markDiscovered(id, 'vod');
+  }
+  for (const { id: view } of VIEWS) {
+    assert.deepEqual(s.query({ view, now: NOW }).map((m) => m.name), ['Film 802']);
+    assert.equal(s.query({ view, genre: '18', period: '2017-12', now: NOW }).length, 0);
+    assert.equal(s.query({ view, genre: '18', period: '2017', now: NOW }).length, 0);
+    assert.equal(s.query({ view, search: '801', now: NOW }).length, 0);
+    assert.equal(s.query({ view, genre: '37', period: '2017-12', now: NOW }).length, 1);
+    assert.equal(s.query({ view, genre: '37', period: 'before1900', now: NOW }).length, 1);
+    assert.equal(s.query({ view, genre: '37', now: NOW }).length, 3);
+  }
+  assert(s.row('tmdb:801'));
 });

@@ -1,6 +1,6 @@
 # Films Monde — streaming, VOD et cinéma en France
 
-Addon autonome : `com.nuvio.movies.france.world.v1`, version 1.0.0, base `/movies`.
+Addon autonome : `com.nuvio.movies.france.world.v1`, version 1.0.1, base `/movies`.
 Les films de tous pays de production sont admis sur la base d'offres ou de sorties
 référencées pour la France. L'animation et les anime sont exclus, comme pour Séries
 Monde. Les critères ne comportent aucun seuil de note, popularité ou langue.
@@ -37,8 +37,8 @@ celle des services et sorties recensés par ces sources ; ce n'est pas une prome
 d'accès à une vidéo via les addons de lecture installés dans Nuvio.
 
 Les périodes reproduisent celles de Séries Monde : Aujourd'hui, Demain, Hier, Semaine
-passée, La semaine suivante, mois décroissants jusqu'à 2015, puis années anciennes et
-Date inconnue. Les archives s'arrêtent au jour local Europe/Brussels. Aucun mois/année
+passée, La semaine suivante, mois décroissants jusqu'à janvier 2018 (Western conserve les mois jusqu'à 2015, les années anciennes et
+Date inconnue). Les archives s'arrêtent au jour local Europe/Brussels. Aucun mois/année
 futur n'est affiché ; seuls Demain et La semaine suivante ouvrent une fenêtre future.
 La route Toutes les dates est conservée pour recherche/pagination mais n'est pas une
 rangée visible de l'import.
@@ -99,3 +99,5 @@ Sources officielles :
 - https://developer.themoviedb.org/reference/discover-movie
 - https://developer.themoviedb.org/reference/movie-release-dates
 - https://developer.themoviedb.org/reference/watch-providers-movie-list
+
+Les catalogues et imports Shield/Desktop s’arrêtent à janvier 2018 inclus, sauf Western qui conserve exactement son historique (mois jusqu’à 2015, années plus anciennes, Avant 1900, Date inconnue). Le seuil porte sur les dates de sortie du catalogue : une ressortie cinéma ou numérique récente reste visible. Les anciennes routes hors Western renvoient une liste vide avant 2018. La base et les liens de détail restent conservés. Réimporter les collections pour retirer les anciennes périodes de l’interface.
