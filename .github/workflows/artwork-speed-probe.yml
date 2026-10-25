@@ -1,0 +1,66 @@
+name: Measure image loading on Oracle
+on:
+  push:
+    branches: [fix/artwork-speed]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PUBLIC_IP: 141.145.215.202
+    steps:
+      - name: Install Oracle SSH key
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ["ORACLE_SSH_PRIVATE_KEY"].strip()
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          p=Path(os.environ["RUNNER_TEMP"]+"/keys/oracle_ssh.pem")
+                          p.write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("ORACLE_SSH_PRIVATE_KEY is not a usable private key")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+
+      - name: Benchmark real image responses
+        run: |
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" 'cd /opt/nuvio/current && node' <<'NODE'
+          const origin='http://127.0.0.1:3000';
+          (async()=>{
+          const urls=[];
+          for(const p of ['/movies/catalog/movie/movies-fr-all-all-today.json','/series-v2/catalog/series/series-fr-premieres-all-2026-10.json']){
+            const t=performance.now();const d=await(await fetch(origin+p)).json();console.log(JSON.stringify({catalog:p,ms:Math.round(performance.now()-t),items:d.metas.length}));
+            for(const m of d.metas.slice(0,12))for(const field of ['background','banner']){if(!m[field])continue;const u=new URL(m[field]);urls.push({field,title:m.name,url:origin+u.pathname+u.search});}
+          }
+          for(const pass of ['first','repeat']){
+            let next=0;const out=[];
+            await Promise.all(Array.from({length:8},async()=>{for(;;){const i=next++;if(i>=urls.length)return;const a=urls[i],t=performance.now();try{const r=await fetch(a.url,{signal:AbortSignal.timeout(20000)}),b=await r.arrayBuffer();out.push({field:a.field,ms:Math.round(performance.now()-t),bytes:b.byteLength,status:r.status,cache:r.headers.get('x-nuvio-cache')});}catch(e){out.push({error:e.message,ms:Math.round(performance.now()-t)})}}}));
+            const times=out.map(x=>x.ms).sort((a,b)=>a-b); console.log(JSON.stringify({pass,count:out.length,failed:out.filter(x=>x.status!==200).length,median:times[Math.floor(times.length/2)],p95:times[Math.floor(times.length*.95)],max:times.at(-1),bytes:out.reduce((n,x)=>n+(x.bytes||0),0),hits:out.filter(x=>x.cache==='HIT').length,details:out}));
+          }
+          const {execFileSync}=require('node:child_process');try{console.log('FONTS '+execFileSync('fc-match',['-f','%{family}','sans-serif']).toString())}catch{}
+          })().catch(e=>{console.error(e.message);process.exitCode=1});
+          NODE
