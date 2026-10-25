@@ -6,6 +6,19 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import router from '../runtime/router.mjs';
+import { relayOriginalImages } from '../runtime/original-images.mjs';
+
+test('original image relay covers cached metadata and nested episode thumbnails after runtime recovery', async () => {
+  const raw = { meta: { id: 'tt42', poster: 'https://image.tmdb.org/t/p/w500/p42.jpg',
+    videos: [{ id: 'tt42:1:1', thumbnail: 'https://static.tvmaze.com/uploads/images/original_untouched/1/42.jpg' }] } };
+  const response = await relayOriginalImages(new Request('https://nuvio.example/series-v2/meta/series/tt42.json'),
+    new Response(JSON.stringify(raw), { headers: { 'content-type': 'application/json', 'x-nuvio-cache': 'HIT' } }));
+  const data = await response.json();
+  assert.equal(response.headers.get('x-nuvio-original-images'), 'original-images-v1');
+  assert.equal(response.headers.get('x-nuvio-cache'), 'HIT');
+  assert.equal(new URL(data.meta.poster).hostname, 'nuvio.example');
+  assert.equal(new URL(data.meta.videos[0].thumbnail).pathname, '/images/original.jpg');
+});
 
 test('temporary photo fallback is not cached by the runtime, and the same URL recovers', async (t) => {
   const bytes = await sharp({ create: { width: 80, height: 45, channels: 3, background: '#9a6330' } }).jpeg().toBuffer();

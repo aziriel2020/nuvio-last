@@ -1,5 +1,6 @@
 'use strict';
 const sharp = require('sharp');
+const { isImageSource } = require('./image-source-rules.cjs');
 
 // Share source photos between the Shield/desktop renders, and collapse bursts
 // requesting the same card. Only successful photos/renders enter either cache.
@@ -37,7 +38,8 @@ function createArtworkCache({ fetcher = (...args) => fetch(...args), disk = () =
     };
   }
   const raster = pool(concurrency), download = pool(12);
-  async function photo(src) {
+  async function photo(src, { timeoutMs = 2500 } = {}) {
+    if (!isImageSource(src)) throw new Error('Invalid photo source');
     const hit = photos.get(src); if (hit) return hit;
     if (downloading.has(src)) return downloading.get(src);
     const pending = download(async () => {
@@ -45,9 +47,20 @@ function createArtworkCache({ fetcher = (...args) => fetch(...args), disk = () =
       const cache = disk();
       let response = await cache?.match(key).catch(() => undefined);
       const cached = Boolean(response);
-      if (!response) response = await fetcher(src, { signal: AbortSignal.timeout(2500),
-        headers: { Accept: 'image/jpeg,image/png,image/webp', 'User-Agent': 'NuvioArtwork/2' } });
-      if (!response.ok) { await response.body?.cancel(); throw new Error('Photo unavailable'); }
+      if (!response) {
+        let target = src;
+        const signal = AbortSignal.timeout(timeoutMs);
+        for (let redirects = 0; ; redirects++) {
+          response = await fetcher(target, { signal, redirect: 'manual',
+            headers: { Accept: 'image/jpeg,image/png,image/webp', 'User-Agent': 'NuvioArtwork/2' } });
+          if (![301, 302, 303, 307, 308].includes(response.status)) break;
+          const next = new URL(response.headers.get('location') || '', target).href;
+          await response.body?.cancel();
+          if (redirects >= 2 || !isImageSource(next)) throw new Error('Invalid photo redirect');
+          target = next;
+        }
+      }
+      if (!response.ok) { await response.body?.cancel(); const error = new Error('Photo unavailable'); error.status = response.status; throw error; }
       const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
       const limit = 3.5 * 1024 * 1024;
       if (!/^image\/(jpeg|jpg|png|webp)$/.test(type) || Number(response.headers.get('content-length') || 0) > limit) {
@@ -57,7 +70,7 @@ function createArtworkCache({ fetcher = (...args) => fetch(...args), disk = () =
       if (!bytes.length || bytes.length > limit) throw new Error('Invalid photo size');
       const info = await sharp(bytes, { limitInputPixels: 40000000 }).metadata();
       if (!info.width || !info.height) throw new Error('Invalid photo bitmap');
-      const result = { bytes, type };
+      const result = { bytes, type, width: info.width, height: info.height, orientation: info.orientation };
       photos.put(src, result, bytes.length, 7 * 86400000);
       if (!cached && cache) await cache.put(key, new Response(bytes, { headers: {
         'content-type': type, 'cache-control': 'public, max-age=604800'

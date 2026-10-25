@@ -125,6 +125,12 @@ jobs:
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
             "cd /opt/nuvio/current && node scripts/benchmark-artwork.cjs"
 
+      - name: Verify original TMDB and TVmaze photos through Oracle
+        shell: bash
+        run: |
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
+            "cd /opt/nuvio/current && node scripts/benchmark-original-images.cjs"
+
       - name: Resume updater after successful deployment
         if: success()
         shell: bash

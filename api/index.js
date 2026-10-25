@@ -9,6 +9,7 @@ const globalHandler = require('../regions/global/api/index');
 const trHandler = require('../regions/tr/api/index');
 const seriesHandler = require('../regions/series/index.cjs');
 const moviesHandler = require('../regions/movies/index.cjs');
+const { handleOriginalImage } = require('../regions/fr/api/original-images.cjs');
 const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
 const VERSION = '1.4.0';
@@ -405,6 +406,8 @@ function landing(req) {
 module.exports = async function handler(req, res) {
   const url = new URL(req.url, originFromRequest(req));
   const path = url.pathname;
+
+  if (/^\/images\/original\.(?:jpg|png)$/.test(path)) return handleOriginalImage(req, res, url);
 
   if (path === '/' || path === '/index.html') return sendHtml(res, landing(req));
   if (path === '/health') {

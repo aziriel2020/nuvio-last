@@ -32,3 +32,23 @@ ou le réseau d'une Shield physique.
 
 Après publication, fermer complètement Nuvio puis le relancer recharge les nouvelles
 URL d'images. Les identifiants de collections et de catalogues restent identiques.
+
+## Images d'origine TMDB, TVmaze et AniList
+
+Les réponses HTTP de catalogues et de métadonnées passent les images externes
+connues par `/images/original.jpg` (photos) ou `/images/original.png` (logos).
+Cela couvre les posters, fonds, logos et miniatures d'épisodes, y compris les
+métadonnées récupérées par le mécanisme de secours Anime après lecture du cache.
+La photo reste entière, dans ses proportions ; les JPEG déjà adaptés sont transmis
+octet pour octet. Les logos conservent leur transparence. Les cartes personnalisées
+existantes utilisent leurs URL et leur design habituels.
+
+Nuvio ne contacte ainsi plus ces CDN directement pour les visuels renvoyés par les
+addons du projet. Oracle partage et conserve les photos, réessaie les erreurs
+temporaires et utilise l'autre photo du titre lorsqu'elle existe. Les erreurs
+restent `no-store`. Les téléchargements et redirections sont limités aux hôtes
+d'images autorisés, en HTTPS sans identifiants ni port arbitraire.
+
+`scripts/benchmark-original-images.cjs` vérifie les vrais posters, fonds et images
+d'épisodes des fiches, ainsi qu'une photo TVmaze indépendante. Ces vérifications
+portent sur le serveur ; elles ne mesurent pas le réseau propre de la télévision.
