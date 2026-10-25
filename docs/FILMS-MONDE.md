@@ -57,6 +57,9 @@ Le répertoire officiel des providers films FR est chargé et affiché publiquem
 Les dates régionales et offres exactes de chaque titre sont enrichies en arrière-plan.
 
 La limite amont de 500 pages est traitée par subdivision des intervalles de dates.
+Les extrémités restent ouvertes : les bornes artificielles 0001/9999, ignorées par
+TMDB en production, ne sont jamais envoyées. Chaque requête de subdivision consomme
+le budget du cycle ; les anciennes tâches invalides sont remplacées à la mise à jour.
 Les films sans date disposent d'une sonde séparée. Les pages sont préchargées par trois,
 mais validées et sauvegardées dans l'ordre. Une panne reprend la page non validée ; elle
 ne vide pas les collections. Les retraits d'offres ne sont appliqués qu'après un parcours
