@@ -1,0 +1,115 @@
+name: Import Nuvio World Artwork (Shield)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deployment/NUVIO_SHIELD_SERIES_FILMS_WORLD_FINAL_20261025.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-nuvio-world-artwork
+  cancel-in-progress: false
+
+jobs:
+  import-approved-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify exact package is present
+        id: package
+        shell: bash
+        run: |
+          if [[ -f deployment/NUVIO_SHIELD_SERIES_FILMS_WORLD_FINAL_20261025.zip ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No package to import; removal commit or manual invocation."
+          fi
+
+      - name: Verify package identity and integrity
+        if: steps.package.outputs.available == 'true'
+        run: |
+          set -Eeuo pipefail
+          echo "5a5413b5ad22888efd0c200d897d99ba7e360246aef04e2276759d223ec09825  deployment/NUVIO_SHIELD_SERIES_FILMS_WORLD_FINAL_20261025.zip" | sha256sum --check -
+          python3 - <<'PY'
+          import zipfile
+          path='deployment/NUVIO_SHIELD_SERIES_FILMS_WORLD_FINAL_20261025.zip'
+          with zipfile.ZipFile(path) as archive:
+              assert archive.testzip() is None, 'Package contains CRC errors'
+              assert set(['INSTALL.py','ARTWORK_MANIFEST.json','RAPPORT_CONTROLES.json']).issubset(archive.namelist()), 'Missing trusted pack files'
+              for entry in archive.infolist():
+                  from pathlib import PurePosixPath
+                  p = PurePosixPath(entry.filename)
+                  assert not p.is_absolute() and '..' not in p.parts, 'Unsafe ZIP path'
+          PY
+
+      - name: Set up Node.js
+        if: steps.package.outputs.available == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Extract and verify approved installation
+        if: steps.package.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/nuvio-world-pack"
+          python3 -m zipfile -e deployment/NUVIO_SHIELD_SERIES_FILMS_WORLD_FINAL_20261025.zip "$RUNNER_TEMP/nuvio-world-pack"
+          python3 "$RUNNER_TEMP/nuvio-world-pack/INSTALL.py" . --check
+          python3 "$RUNNER_TEMP/nuvio-world-pack/INSTALL.py" .
+
+      - name: Update precise revision expectations in series regression tests
+        if: steps.package.outputs.available == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('regions/series/test/series.test.cjs')
+          s=p.read_text()
+          old='v=france-v2'
+          assert s.count(old) == 3, f'Unexpected series test anchors: {s.count(old)}'
+          p.write_text(s.replace(old,'v=premium-20261025-v2'))
+          PY
+
+      - name: Install and test complete release
+        if: steps.package.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci --no-audit --no-fund
+          node --check regions/series/index.cjs
+          node --check regions/movies/index.cjs
+          node --check regions/movies/src/artwork.cjs
+          node scripts/verify-series-covers.mjs --require-complete
+          node scripts/verify-movie-covers.mjs
+          npm test
+          npm run test:runtime
+          node scripts/test-movies-runtime.mjs
+          node scripts/test-series-runtime.mjs
+          npm run build:runtime
+
+      - name: Publish validated images and source changes to main
+        if: steps.package.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "nuvio-artwork-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add regions/series/index.cjs regions/series/test/series.test.cjs regions/movies/index.cjs regions/movies/src/artwork.cjs
+          git add assets/series-covers assets/movie-covers assets/series-backdrops assets/movie-backdrops
+          git rm -- deployment/NUVIO_SHIELD_SERIES_FILMS_WORLD_FINAL_20261025.zip
+          git diff --cached --check
+          git commit -m "feat(shield): publish approved 25 series and 20 movie genre artworks and 47 backdrops"
+          git push origin HEAD:main
+          echo "Final main push triggers the existing Deploy Oracle Production workflow."
