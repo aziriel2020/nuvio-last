@@ -66,7 +66,7 @@ try {
   }
   const v2Data = await (await get('/series-v2/catalog/series/series-fr-premieres-all-all.json')).json();
   assert.equal(v2Data.metas.length, 100);
-  assert(v2Data.metas.every((m) => new URL(m.background).pathname === '/fr/calendar-card.svg'));
+  assert(v2Data.metas.every((m) => new URL(m.background).pathname === '/fr/calendar-card.jpg'));
   const v2Status = await (await get('/series-v2/status.json')).json();
   assert.equal(v2Status.version, '2.0.0'); assert.equal(v2Status.addonId, v2.id);
   assert.equal(v2Status.genreArtwork.total, 25);
@@ -94,7 +94,7 @@ try {
     const body = await response.json(); ids.push(...body.metas.map((m) => m.id));
     for (const meta of body.metas) {
       assert.equal(meta.posterShape, 'landscape');
-      assert.equal(new URL(meta.background).pathname, '/fr/calendar-card.svg');
+      assert.equal(new URL(meta.background).pathname, '/fr/calendar-card.jpg');
       assert.equal(new URL(meta.banner).pathname, '/fr/desktop-content-card.jpg');
       assert.equal(new URL(meta.background).searchParams.get('title'), meta.name);
     }
