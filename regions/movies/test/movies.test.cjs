@@ -7,7 +7,7 @@ const path = require('node:path');
 const sharp = require('sharp');
 const { MovieStore } = require('../src/store.cjs');
 const { fromTmdb, GENRES, VIEWS, periods, parseCatalog } = require('../src/model.cjs');
-const { discoverParams, scanLane, runDetailJobs } = require('../../../scripts/sync-movies-world.cjs');
+const { discoverParams, splitMovieDates, scanLane, runDetailJobs } = require('../../../scripts/sync-movies-world.cjs');
 const { decorateMovieMetas } = require('../src/presentation.cjs');
 const addon = require('../index.cjs');
 const { genreBytes, progress } = require('../src/artwork.cjs');
@@ -147,7 +147,7 @@ test('oversized scans split by dates and retain an independent undated discovery
   const api = async (_, params) => {
     calls.push(params);
     if (params.sort_by === 'primary_release_date.asc') return payload(3, 900, { results: [{ id: 3, title: 'Sans date', genre_ids: [18], release_date: '' }, { id: 4, title: 'Dated', genre_ids: [18], release_date: '1950-01-01' }] });
-    if (!params['primary_release_date.gte']) return payload(1, 900, { total_results: 18000 });
+    if (!params['primary_release_date.gte'] && !params['primary_release_date.lte']) return payload(1, 900, { total_results: 18000 });
     return payload(1, 1);
   };
   const scan = await scanLane(s, 'streaming', { api, delay: 0, maxPages: 8 });
@@ -155,6 +155,37 @@ test('oversized scans split by dates and retain an independent undated discovery
   assert(calls.some((p) => p.sort_by === 'primary_release_date.asc'));
   assert(calls.some((p) => p['primary_release_date.gte']));
   assert(s.query({ period: 'undated', now: NOW }).some((m) => m.name === 'Sans date'));
+});
+
+test('movie date shards preserve open ends without invalid ancient or distant bounds', () => {
+  const [past, future] = splitMovieDates({ lane: 'streaming', page: 1 });
+  assert.equal(past.from, undefined); assert.equal(future.to, undefined);
+  assert.equal(new Date(Date.parse(past.to) + 86400000).toISOString().slice(0, 10), future.from);
+  for (const task of [past, future]) {
+    const params = discoverParams('streaming', task, 1);
+    assert(!Object.values(params).some((v) => /^(0001|9999)-/.test(String(v))));
+  }
+  const regional = splitMovieDates({ lane: 'cinema', to: '2026-11-01', page: 1 });
+  assert.equal(regional[0].from, undefined); assert.equal(regional[1].to, '2026-11-01');
+});
+
+test('oversized responses consume the request budget and resume instead of looping', async (t) => {
+  const s = memory(t); let calls = 0;
+  const api = async () => { calls++; return payload(1, 1001, { total_results: 20001 }); };
+  const first = await scanLane(s, 'streaming', { api, maxPages: 6, delay: 0 });
+  assert.equal(calls, 6); assert.equal(first.requests, 6); assert.equal(first.complete, false);
+  assert(first.tasks.length > 0);
+  await scanLane(s, 'streaming', { api, maxPages: 4, delay: 0 });
+  assert.equal(calls, 10); assert.equal(s.state('scan:streaming').requests, 10);
+});
+
+test('upgrading the date scanner replaces invalid persisted shards without deleting films', async (t) => {
+  const s = memory(t); s.upsert(record(9));
+  s.state('scan:streaming', { id: 'old', complete: false, tasks: [{ lane: 'streaming', from: '0001-01-01', to: '0001-01-01', page: 1 }] });
+  const calls = [];
+  await scanLane(s, 'streaming', { maxPages: 1, delay: 0, api: async (_, params) => { calls.push(params); return payload(1, 2); } });
+  assert.equal(calls[0]['primary_release_date.gte'], undefined);
+  assert.equal(s.state('scan:streaming').revision, 2); assert(s.visible('tmdb:9'));
 });
 
 test('detail corrections remove animation and replace revoked regional releases', async (t) => {

@@ -7,6 +7,7 @@ const { providerDirectory } = require('../regions/series/src/france.cjs');
 const { tmdb, pause, mapLimit } = require('../regions/series/src/upstream.cjs');
 const { splitDateTask } = require('./sync-series-world.cjs');
 const REFRESH = 6 * 3600000;
+const SCAN_REVISION = 2;
 let stopping = false;
 if (require.main === module) for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopping = true; });
 
@@ -34,8 +35,19 @@ function freshScan(kind, now) {
   const tasks = kind === 'recent'
     ? ['cinema', 'digital'].map((lane) => ({ lane, from: shiftDay(today, -31), to: horizon, page: 1 }))
     : [{ lane: kind, page: 1, ...(['cinema', 'digital'].includes(kind) ? { to: horizon } : {}) }];
-  return { id: `${kind}-${now}`, startedAt: now, lastProgressAt: now, complete: false,
-    pages: 0, uniqueCandidates: 0, tasks, overflow: [] };
+  return { id: `${kind}-${now}`, revision: SCAN_REVISION, startedAt: now, lastProgressAt: now, complete: false,
+    requests: 0, pages: 0, uniqueCandidates: 0, tasks, overflow: [] };
+}
+
+function splitMovieDates(task) {
+  // TMDB silently ignores bounds such as 0001/9999. Use ordinary dates only
+  // to calculate a midpoint; preserve the outer open ends in the requests.
+  // This still covers every date, rather than imposing an 1800–2100 cutoff.
+  const shards = splitDateTask({ ...task, ids: [], from: task.from || '1800-01-01', to: task.to || '2100-12-31' });
+  if (!shards) return null;
+  if (!task.from) delete shards[0].from;
+  if (!task.to) delete shards[1].to;
+  return shards;
 }
 
 function ingest(store, scan, task, payload, today) {
@@ -67,7 +79,7 @@ async function scanLane(store, kind, { api = tmdb, maxPages = 90, concurrency = 
   let scan = store.state(`scan:${kind}`);
   const refresh = kind === 'recent' ? 3600000 : REFRESH;
   const stalled = scan && !scan.complete && now - scan.lastProgressAt > 12 * 3600000;
-  if (!scan || (scan.complete && now - scan.completedAt >= refresh) || stalled
+  if (!scan || scan.revision !== SCAN_REVISION || (scan.complete && now - scan.completedAt >= refresh) || stalled
     || (!scan.complete && !scan.tasks.length && scan.retryAt && now >= scan.retryAt)) {
     scan = freshScan(kind, now); store.state(`scan:${kind}`, scan);
   }
@@ -80,6 +92,9 @@ async function scanLane(store, kind, { api = tmdb, maxPages = 90, concurrency = 
     // the failed page even if later prefetched pages have already arrived.
     const responses = await Promise.allSettled(Array.from({ length: count }, (_, i) =>
       api('/discover/movie', discoverParams(task.lane, task, task.page + i))));
+    // Subdivision requests consume the same budget as successful pages. A
+    // malformed/ignored filter must never monopolize the worker indefinitely.
+    budget -= count; scan.requests += count;
     for (const result of responses) {
       if (result.status === 'rejected') throw result.reason;
       const payload = result.value;
@@ -87,7 +102,7 @@ async function scanLane(store, kind, { api = tmdb, maxPages = 90, concurrency = 
       const total = Math.max(1, Number(payload.total_pages));
       if (!task.probe && (total > 500 || Number(payload.total_results || 0) > 10000)) {
         scan.tasks.shift();
-        const shards = splitDateTask({ ...task, ids: [] });
+        const shards = splitMovieDates(task);
         if (shards) {
           const pieces = shards.map((piece) => ({ lane: task.lane, from: piece.from, to: piece.to, page: 1 }));
           // Null dates do not match date shards. Probe the undated tail
@@ -98,7 +113,7 @@ async function scanLane(store, kind, { api = tmdb, maxPages = 90, concurrency = 
         break;
       }
       const sawDated = ingest(store, scan, task, payload, localDay(new Date(now)));
-      scan.pages++; budget--;
+      scan.pages++;
       task.pages = Math.min(500, total);
       if (task.probe && task.page >= 500 && !sawDated && (total > 500 || Number(payload.total_results || 0) > 10000))
         scan.overflow.push({ lane: task.lane, reason: 'More than 10000 undated candidates' });
@@ -178,4 +193,4 @@ async function main() {
   } finally { store.close(); }
 }
 if (require.main === module) main().catch((e) => { console.error(e.message); process.exitCode = 1; });
-module.exports = { discoverParams, freshScan, scanLane, runDetailJobs, syncCycle };
+module.exports = { discoverParams, freshScan, splitMovieDates, scanLane, runDetailJobs, syncCycle };
