@@ -1,9 +1,9 @@
 'use strict';
 
 const ADDON_ID = 'com.nuvio.series.world.liveaction';
-const VERSION = '1.1.1';
+const VERSION = '1.1.2';
 const V2_ADDON_ID = 'com.nuvio.series.france.liveaction.v2';
-const V2_VERSION = '2.0.0';
+const V2_VERSION = '2.0.1';
 const { offersInFrance } = require('./france.cjs');
 const GENRES = Object.freeze([
   ['all', 'Toutes les séries'],
@@ -126,7 +126,18 @@ function windowFor(period, now = new Date(), timeZone = 'Europe/Brussels') {
   throw new Error('Invalid date period');
 }
 
-function periods(now = new Date()) {
+const CATALOG_START = '2018-01-01';
+const WESTERN_GENRE = '37';
+
+// Keep stored history and detail links intact; limit only catalog event dates.
+function catalogWindowFor(period, genre = 'all', now = new Date()) {
+  const window = windowFor(period, now);
+  if (genre === WESTERN_GENRE) return window;
+  if (window.undated || window.end < CATALOG_START) return null;
+  return { ...window, start: window.start && window.start > CATALOG_START ? window.start : CATALOG_START };
+}
+
+function periods(now = new Date(), genre = 'all') {
   const out = [
     ['all', 'Toutes les dates · Récent → Ancien'], ['today', 'Aujourd’hui'],
     ['tomorrow', 'Demain'], ['yesterday', 'Hier'], ['lastweek', 'Semaine passée'], ['nextweek', 'La semaine suivante']
@@ -136,15 +147,17 @@ function periods(now = new Date()) {
   const currentDay = localDay(now);
   const currentYear = Number(currentDay.slice(0, 4));
   const currentMonth = Number(currentDay.slice(5, 7));
-  for (let year = currentYear; year >= 2015; year--) {
+  for (let year = currentYear; year >= (genre === WESTERN_GENRE ? 2015 : 2018); year--) {
     for (let month = (year === currentYear ? currentMonth : 12); month >= 1; month--) {
       const key = `${year}-${String(month).padStart(2, '0')}`;
       const label = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${key}-01T12:00:00Z`));
       out.push([key, label.charAt(0).toUpperCase() + label.slice(1)]);
     }
   }
-  for (let year = Math.min(2014, currentYear); year >= 1900; year--) out.push([String(year), String(year)]);
-  out.push(['before1900', 'Avant 1900'], ['undated', 'Date inconnue']);
+  if (genre === WESTERN_GENRE) {
+    for (let year = Math.min(2014, currentYear); year >= 1900; year--) out.push([String(year), String(year)]);
+    out.push(['before1900', 'Avant 1900'], ['undated', 'Date inconnue']);
+  }
   return out.map(([key, name]) => ({ key, name }));
 }
 
@@ -154,4 +167,4 @@ function parseCatalog(id) {
   return match && GENRES.some((g) => g.id === match[2]) ? { mode: match[1], genre: match[2], period: match[3] } : null;
 }
 
-module.exports = { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, isoDate, unique, classify, fromTmdb, fromTvmaze, localDay, shiftDay, windowFor, periods, catalogId, parseCatalog };
+module.exports = { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, isoDate, unique, classify, fromTmdb, fromTvmaze, localDay, shiftDay, windowFor, catalogWindowFor, CATALOG_START, WESTERN_GENRE, periods, catalogId, parseCatalog };

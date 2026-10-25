@@ -1,9 +1,9 @@
 'use strict';
 
-const { isoDate, unique, classify, localDay, shiftDay, windowFor, periods } = require('../../series/src/model.cjs');
+const { isoDate, unique, classify, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods } = require('../../series/src/model.cjs');
 const { offersInFrance } = require('../../series/src/france.cjs');
 const ADDON_ID = 'com.nuvio.movies.france.world.v1';
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const GENRES = Object.freeze([
   ['all', 'Tous les films', 'all'], ['28', 'Action', 'action'], ['12', 'Aventure', 'adventure'],
   ['35', 'Comédie', 'comedy'], ['80', 'Crime / Policier', 'crime'], ['99', 'Documentaires', 'documentary'],
@@ -49,4 +49,4 @@ function parseCatalog(id) {
   const m = String(id).match(/^movies-fr-(all|streaming|vod|cinema)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|\d{4}(?:-\d{2})?)$/);
   return m && GENRES.some((g) => g.id === m[2]) ? { view: m[1], genre: m[2], period: m[3] } : null;
 }
-module.exports = { ADDON_ID, VERSION, GENRES, VIEWS, fromTmdb, candidateRecord, catalogId, parseCatalog, isoDate, localDay, shiftDay, windowFor, periods };
+module.exports = { ADDON_ID, VERSION, GENRES, VIEWS, fromTmdb, candidateRecord, catalogId, parseCatalog, isoDate, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods };

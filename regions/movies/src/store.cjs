@@ -2,7 +2,7 @@
 
 const { SeriesStore } = require('../../series/src/store.cjs');
 const { AVAILABILITY_TTL } = require('../../series/src/france.cjs');
-const { GENRES, VIEWS, windowFor } = require('./model.cjs');
+const { GENRES, VIEWS, catalogWindowFor } = require('./model.cjs');
 const defaultPath = () => process.env.NUVIO_MOVIES_DB || '/var/lib/nuvio-movies/index.sqlite';
 const parse = (value) => { try { return JSON.parse(value); } catch { return []; } };
 
@@ -76,7 +76,8 @@ class MovieStore extends SeriesStore {
   query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date() } = {}) {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
-    const window = windowFor(period, now);
+    const window = catalogWindowFor(period, genre, now);
+    if (!window) return [];
     const events = [];
     if (view === 'all' || view === 'cinema') events.push("SELECT show_id,date AS event_date,'cinema' AS event_kind,3 AS priority FROM movie_releases WHERE kind='cinema'");
     if (view === 'all' || view === 'vod') events.push("SELECT show_id,date AS event_date,'digital' AS event_kind,2 AS priority FROM movie_releases WHERE kind='digital'");

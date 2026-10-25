@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const { GENRES, unique, windowFor } = require('./model.cjs');
+const { GENRES, unique, catalogWindowFor } = require('./model.cjs');
 const { AVAILABILITY_TTL } = require('./france.cjs');
 
 const defaultPath = () => process.env.NUVIO_SERIES_DB || '/var/lib/nuvio-series/index.sqlite';
@@ -207,7 +207,8 @@ class SeriesStore {
   query({ mode = 'premieres', genre = 'all', period = 'all', skip = 0, search = '', now = new Date() } = {}) {
     if (!GENRES.some((g) => g.id === genre) || !['premieres', 'seasons'].includes(mode)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
-    const window = windowFor(period, now);
+    const window = catalogWindowFor(period, genre, now);
+    if (!window) return [];
     if (!this.hasFranceSchema()) return [];
     const clauses = ["s.classification='eligible'", this.franceClause()];
     const args = [];

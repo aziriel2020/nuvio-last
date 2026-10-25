@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const sharp = require('sharp');
-const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods } = require('./src/model.cjs');
+const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const art = require('./src/artwork.cjs');
 const { decorateMovieMetas } = require('./src/presentation.cjs');
@@ -21,11 +21,12 @@ function reader() {
   return cachedStore;
 }
 function buildManifest(origin, now = new Date()) {
+  const dates = periods(now), westernDates = periods(now, WESTERN_GENRE);
   return {
-    id: ADDON_ID, version: VERSION, name: 'Nuvio Films Monde · 1.0.0', language: 'fr', types: ['movie'],
-    description: 'Films de tous pays : services streaming, VOD achat/location et sorties cinéma sur le marché français. Par genres et dates, récent → ancien. Animation exclue. Disponibilités JustWatch via TMDB.',
+    id: ADDON_ID, version: VERSION, name: `Nuvio Films Monde · ${VERSION}`, language: 'fr', types: ['movie'],
+    description: 'Films de tous pays : services streaming, VOD achat/location et sorties cinéma sur le marché français. Par genres et dates depuis 2018, récent → ancien (Western : historique complet). Animation exclue. Disponibilités JustWatch via TMDB.',
     resources: [{ name: 'catalog', types: ['movie'] }, { name: 'meta', types: ['movie'], idPrefixes: ['tt', 'tmdb:movie:'] }],
-    catalogs: VIEWS.flatMap((view) => GENRES.flatMap((genre) => periods(now).map((period) => ({
+    catalogs: VIEWS.flatMap((view) => GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
       id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
       pageSize: 100, extraSupported: ['skip', 'search'], extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     })))),
@@ -34,13 +35,14 @@ function buildManifest(origin, now = new Date()) {
   };
 }
 function buildCollections(origin, now = new Date(), mode = 'shield') {
-  const dates = periods(now).filter((p) => p.key !== 'all');
+  const dates = periods(now).filter(({ key }) => key !== 'all');
+  const westernDates = periods(now, WESTERN_GENRE).filter(({ key }) => key !== 'all');
   return VIEWS.map((view) => ({
     id: `movies-world-${view.id}`, title: `🌍 ${view.name}`, pinToTop: true, focusGlowEnabled: true,
     backdropImageUrl: `${origin}/backdrop.jpg?v=${art.REVISION}`, viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
     folders: GENRES.map((genre) => {
       const image = `${origin}/artwork/genre/${genre.id}.webp?v=${art.REVISION}`;
-      const sources = dates.map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'movie', catalogId: catalogId(view.id, genre.id, date.key) }));
+      const sources = (genre.id === WESTERN_GENRE ? westernDates : dates).map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'movie', catalogId: catalogId(view.id, genre.id, date.key) }));
       return { id: `movies-world-${view.id}-${genre.id}`, title: genre.name,
         coverImageUrl: image, heroBackdropUrl: image, tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId })) };

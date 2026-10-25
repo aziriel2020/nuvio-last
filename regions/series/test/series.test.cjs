@@ -46,13 +46,14 @@ test('cross-source animation signals take precedence over live-action genre labe
   assert.equal(store.query({ now: NOW }).length, 1);
 });
 
-test('missing dates and missing genres do not drop classified live-action series', (t) => {
+test('undated series stay indexed but are outside dated catalogs', (t) => {
   const store = memory(t);
   store.upsert(maze(1, { genres: [], premiered: null, externals: { imdb: 'tt10' } }));
   store.upsert(tmdb(10, { genres: [], first_air_date: null, external_ids: { imdb_id: 'tt10' } }));
   store.upsert(tmdb(2, { genres: [], first_air_date: null }));
-  assert.equal(store.query({ genre: 'unclassified', period: 'undated', now: NOW }).length, 1);
-  assert.equal(store.query({ now: NOW }).length, 1);
+  assert.equal(store.query({ genre: 'unclassified', period: 'undated', now: NOW }).length, 0);
+  assert.equal(store.query({ now: NOW }).length, 0);
+  assert(store.row('tmdb:10'));
   assert.equal(store.stats().awaitingClassification, 1, 'unclassified medium stays in review until resolved');
 });
 
@@ -70,13 +71,13 @@ test('IMDb identity merges sources, preserves French metadata, and does not merg
   assert.equal(store.row('tvmaze:1').id, 'tmdb:9', 'previous source aliases keep working after a merge');
 });
 
-test('pagination includes every dated and undated show with deterministic ties', (t) => {
+test('western pagination retains dated and undated history with deterministic ties', (t) => {
   const store = memory(t);
-  for (let id = 1; id <= 237; id++) store.upsert(tmdb(id, { first_air_date: id > 230 ? null : id < 100 ? '1960-01-01' : '2026-10-15' }));
+  for (let id = 1; id <= 237; id++) store.upsert(tmdb(id, { genres: [{ id: 37 }], first_air_date: id > 230 ? null : id < 100 ? '1960-01-01' : '2026-10-15' }));
   store.upsert(tmdb(999, { first_air_date: '2026-10-19' }));
-  const first = store.query({ now: NOW });
-  const second = store.query({ skip: 100, now: NOW });
-  const third = store.query({ skip: 200, now: NOW });
+  const first = store.query({ genre: '37', now: NOW });
+  const second = store.query({ genre: '37', skip: 100, now: NOW });
+  const third = store.query({ genre: '37', skip: 200, now: NOW });
   const ids = [...first, ...second, ...third].map((m) => m.id);
   assert.equal(ids.length, 237); assert.equal(new Set(ids).size, 237);
   assert.equal(third.at(-1).released, undefined);
@@ -104,7 +105,7 @@ test('new season views use season dates, exclude first seasons and specials, and
   const rows = store.query({ mode: 'seasons', period: '2026-10', now: NOW });
   assert.equal(rows.length, 1); assert.equal(rows[0].released.slice(0, 10), '2026-10-16');
   assert.equal(store.query({ mode: 'seasons', now: NOW })[0].released.slice(0, 10), '2026-10-16');
-  assert.equal(store.query({ period: '2005', now: NOW }).length, 1);
+  assert.equal(store.query({ period: '2005', now: NOW }).length, 0);
   assert.equal(store.query({ period: '2026-10', now: NOW }).length, 0);
 });
 
@@ -204,7 +205,7 @@ test('series rolling periods never publish future month or year archives', () =>
   const keys = current.map(({ key }) => key);
   assert.deepEqual(keys.slice(0, 6), ['all','today','tomorrow','yesterday','lastweek','nextweek']);
   assert.deepEqual(keys.slice(6, 9), ['2026-10','2026-09','2026-08']);
-  assert(keys.includes('2025-12') && keys.includes('2015-01') && keys.includes('1900'));
+  assert(keys.includes('2025-12') && keys.includes('2018-01') && !keys.includes('2017-12') && !keys.includes('undated'));
   assert(!keys.includes('2026-11') && !keys.includes('2026-12'));
   assert(!keys.some((key) => /^202[7-9]/.test(key)));
   assert(!keys.includes('2030-12'));
@@ -265,8 +266,12 @@ test('archive imports reference real unique catalogs, cover old series, and pres
       assert(keys.has(source.catalogId)); assert.equal(source.addonId, manifest.id);
       assert.equal(labels.get(source.catalogId.replace('series-fr-', 'series-world-')), labels.get(source.catalogId));
     }
-    assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === '1950'));
-    assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'before1900'));
+    const western = parseCatalog(folder.sources[0].catalogId).genre === '37';
+    assert.equal(folder.sources.some((s) => parseCatalog(s.catalogId).period === '1950'), western);
+    assert.equal(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'before1900'), western);
+    assert.equal(folder.sources.some((s) => parseCatalog(s.catalogId).period === 'undated'), western);
+    assert(folder.sources.some((s) => parseCatalog(s.catalogId).period === '2018-01'));
+    assert.equal(folder.sources.some((s) => parseCatalog(s.catalogId).period === '2017-12'), western);
   }
   assert.equal(JSON.stringify(collections).includes('generated_images'), false);
   assert.equal(collections[0].folders[0].coverImageUrl,
@@ -313,7 +318,7 @@ test('V2 escapes the old addon cache and replaces collection sources without dup
   const fresh = addon._internals.buildManifest(origin, NOW);
   assert.notEqual(fresh.id, legacy.id);
   assert.equal(fresh.id, V2_ADDON_ID); assert.equal(fresh.version, V2_VERSION);
-  assert.match(fresh.name, /V2.*2\.0\.0/);
+  assert.match(fresh.name, /V2.*2\.0\.1/);
   assert.equal(fresh.catalogs.length * 2, legacy.catalogs.length);
   const names = new Map(fresh.catalogs.map((c) => [c.id, c.name]));
   assert.equal(names.get('series-fr-premieres-all-2026-10'), 'Octobre 2026');
@@ -461,7 +466,7 @@ test('full offer checks can reject a stale discovery result and enrich real Fren
   store.markFranceDiscovered(1);
   assert.equal(store.query({ now: NOW }).length, 0, 'recent explicit negative wins');
   store.enqueue('fr-detail', [1], 1, { refresh: true });
-  await runFranceJobs(store, { delay: 0, api: async () => ({ id: 1, name: 'Back', genres: [{ id: 18 }], 'watch/providers': { results: { FR: { free: [{ provider_id: 999999, provider_name: 'New French Service' }] } } } }) });
+  await runFranceJobs(store, { delay: 0, api: async () => ({ id: 1, name: 'Back', first_air_date: '2026-10-12', genres: [{ id: 18 }], 'watch/providers': { results: { FR: { free: [{ provider_id: 999999, provider_name: 'New French Service' }] } } } }) });
   assert.match(store.query({ now: NOW })[0].description, /New French Service/);
 });
 
@@ -555,4 +560,25 @@ test('HTTP addon exposes paged catalogs, rejects animation metadata, and reports
   store.close(); addon._internals.reader()?.close();
   process.env.NUVIO_SERIES_DB = previous || '';
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+
+test('2018 catalog cutoff applies to results, legacy requests and searches except Western', (t) => {
+  const store = memory(t);
+  for (const [id, date] of [[801, '2017-12-31'], [802, '2018-01-01']]) store.upsert(tmdb(id, {
+    first_air_date: date, genres: [{ id: 18 }, { id: 37 }],
+    seasons: [{ season_number: 2, air_date: date }]
+  }));
+  for (const mode of ['premieres', 'seasons']) {
+    assert.deepEqual(store.query({ mode, now: NOW }).map((m) => m.name), ['Série 802']);
+    assert.equal(store.query({ mode, genre: '18', period: '2017', now: NOW }).length, 0);
+    assert.equal(store.query({ mode, genre: '18', period: '2017-12', now: NOW }).length, 0);
+    assert.equal(store.query({ mode, search: '801', now: NOW }).length, 0);
+    assert.equal(store.query({ mode, genre: '37', now: NOW }).length, 2);
+    assert.equal(store.query({ mode, genre: '37', period: '2017-12', now: NOW }).length, 1);
+  }
+  store.upsert(tmdb(803, { first_air_date: '1890-01-01', genres: [{ id: 37 }] }));
+  assert.equal(store.query({ genre: '37', period: 'before1900', now: NOW }).length, 1);
+  assert.equal(store.query({ period: 'before1900', now: NOW }).length, 0);
+  assert(store.row('tmdb:801'), 'history remains stored for Western and detail links');
 });
