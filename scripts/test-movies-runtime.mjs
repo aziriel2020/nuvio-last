@@ -56,7 +56,8 @@ try {
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A998.json')).status, 404);
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A999.json')).status, 404);
   const detail = await (await get('/movies/meta/movie/tmdb%3Amovie%3A1.json')).json();
-  assert.equal(detail.meta.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
+  assert.equal(new URL(detail.meta.background).pathname, '/images/original.jpg');
+  assert.equal(new URL(detail.meta.background).searchParams.get('src'), 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
   store.upsert(fixture(1, { genres: [{ id: 16 }] }));
   const refreshed = await (await get('/movies/catalog/movie/movies-fr-all-all-all/search=Film%20HTTP%201.json')).json();
   assert(!refreshed.metas.some((m) => m.id === 'tmdb:movie:1'));

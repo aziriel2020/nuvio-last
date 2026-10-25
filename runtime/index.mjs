@@ -1,4 +1,5 @@
 import baseWorker from './router.mjs';
+import { relayOriginalImages } from './original-images.mjs';
 import {
   ANIME_RESILIENCE_REV,
   isGlobalAnimeResilienceRequest,
@@ -95,7 +96,7 @@ async function cachePut(cache, key, response, ctx) {
   else await task;
 }
 
-export default {
+const mainRuntime = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
@@ -123,5 +124,11 @@ export default {
       await cachePut(cache, key, response, ctx);
     }
     return response;
+  }
+};
+
+export default {
+  async fetch(request, env, ctx) {
+    return relayOriginalImages(request, await mainRuntime.fetch(request, env, ctx));
   }
 };
