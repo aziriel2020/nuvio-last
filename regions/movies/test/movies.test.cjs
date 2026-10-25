@@ -205,3 +205,15 @@ test('movie cards preserve custom Modern/desktop targeting and detail art, inclu
   const [fallback] = decorateMovieMetas('https://example.test/movies', [{ ...raw, poster: undefined, background: undefined }], { period: 'all' });
   assert.equal(new URL(fallback.background).pathname, '/movies/content-card.jpg');
 });
+
+test('streaming and VOD cards display a provider for that offer type', (t) => {
+  const s = memory(t);
+  s.upsert(record(1, { poster_path: '/poster.jpg', backdrop_path: '/backdrop.jpg', 'watch/providers': { results: { FR: {
+    flatrate: [{ provider_id: 8, provider_name: 'Netflix' }], rent: [{ provider_id: 10, provider_name: 'Amazon Video' }]
+  } } } }));
+  for (const [view, expected] of [['streaming', 'Netflix'], ['vod', 'Amazon Video']]) {
+    const metas = s.query({ view, now: NOW });
+    const card = decorateMovieMetas('https://example.test/movies', metas, { view, period: 'all' })[0];
+    assert.equal(new URL(card.background).searchParams.get('provider'), expected);
+  }
+});

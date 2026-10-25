@@ -5,8 +5,10 @@ function decorateMovieMetas(origin, metas, descriptor) {
   const franceOrigin = new URL('../fr', `${origin}/`).href;
   const period = /^\d{4}-\d{2}$/.test(descriptor.period) ? `archive-${descriptor.period}` : descriptor.period;
   return metas.map((meta) => {
-    const label = meta.movieReleaseKind === 'cinema' ? 'CINÉMA FRANCE'
-      : meta.streamingProviders?.[0] || (meta.movieReleaseKind === 'digital' ? 'VOD FRANCE' : 'FILMS FRANCE');
+    const specific = meta.providersByKind?.[descriptor.view]?.[0];
+    const label = descriptor.view === 'cinema' || meta.movieReleaseKind === 'cinema' ? 'CINÉMA FRANCE'
+      : specific || (descriptor.view === 'streaming' ? 'STREAMING FRANCE' : descriptor.view === 'vod' ? 'VOD FRANCE'
+        : meta.streamingProviders?.[0] || (meta.movieReleaseKind === 'digital' ? 'VOD FRANCE' : 'FILMS FRANCE'));
     const decorated = decorateCatalogMetas(franceOrigin, [meta], { type: 'movie', period, forceLandscapeCards: true, cardProvider: label }, 'Europe/Brussels')[0];
     if (!meta.poster && !meta.background) {
       const params = new URLSearchParams({ title: meta.name, label, v: 'movies-v1' });

@@ -110,12 +110,16 @@ class MovieStore extends SeriesStore {
     const offers = this.franceOffers(row.id).filter((o) => this.db.prepare(`SELECT 1 FROM movie_lanes WHERE tmdb_id=?
       AND kind=? AND available=1 AND checked_at>?`).get(o.tmdb_id, ['rent', 'buy'].includes(o.kind) ? 'vod' : 'streaming', Date.now() - AVAILABILITY_TTL));
     const providers = [...new Set(offers.map((o) => o.name))];
+    const providersByKind = {
+      streaming: [...new Set(offers.filter((o) => ['flatrate', 'free', 'ads'].includes(o.kind)).map((o) => o.name))],
+      vod: [...new Set(offers.filter((o) => ['rent', 'buy'].includes(o.kind)).map((o) => o.name))]
+    };
     const date = row.event_date || row.first_air_date;
     const releases = this.db.prepare('SELECT kind,date FROM movie_releases WHERE show_id=? ORDER BY date DESC').all(row.id);
     const dateLabel = row.event_kind === 'cinema' ? 'Sortie cinéma France' : row.event_kind === 'digital' ? 'Sortie numérique France' : 'Première sortie du film';
     return {
       id, type: 'movie', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
-      background: row.background || row.poster || undefined, streamingProviders: providers,
+      background: row.background || row.poster || undefined, streamingProviders: providers, providersByKind,
       movieReleaseKind: row.event_kind || 'original',
       description: [date ? `${dateLabel} : ${date}` : 'Date de sortie inconnue',
         providers.length ? `Offres France : ${providers.join(', ')}.` : 'Dates de sorties référencées ; disponibilité actuelle du film à vérifier.',
