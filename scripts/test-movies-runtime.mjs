@@ -50,7 +50,7 @@ try {
     const r = await get(`/movies/catalog/movie/movies-fr-all-all-all/skip=${skip}.json`);
     assert.equal(r.headers.get('cache-control'), 'no-store');
     const data = await r.json(); ids.push(...data.metas.map((m) => m.id));
-    assert(data.metas.every((m) => m.posterShape === 'landscape' && new URL(m.background).pathname === '/fr/calendar-card.svg'));
+    assert(data.metas.every((m) => m.posterShape === 'landscape' && new URL(m.background).pathname === '/fr/calendar-card.jpg'));
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A998.json')).status, 404);

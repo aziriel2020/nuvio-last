@@ -579,12 +579,13 @@ test('regional image routes are reachable through the wrapper', async () => {
 
 test('regional Modern calendar-card SVG routes are reachable and embed artwork', async () => {
   const oldFetch = global.fetch;
+  const validPng = await require('sharp')({ create: { width: 16, height: 9, channels: 3, background: '#486d8b' } }).png().toBuffer();
   global.fetch = async (url) => {
     const value = String(url);
     if (value.startsWith('https://image.tmdb.org/')) {
-      return new Response(Uint8Array.from([137,80,78,71,13,10,26,10]), {
+      return new Response(validPng, {
         status: 200,
-        headers: { 'content-type': 'image/png', 'content-length': '8' }
+        headers: { 'content-type': 'image/png', 'content-length': String(validPng.length) }
       });
     }
     throw new Error(`unexpected fetch ${value}`);

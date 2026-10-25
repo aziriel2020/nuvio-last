@@ -36,6 +36,7 @@ const fs = require('fs');
 const { createHash } = require('node:crypto');
 const path = require('path');
 const sharp = require('sharp');
+const { artworkCache } = require('./artwork-cache.cjs');
 const opentype = require('opentype.js');
 
 const VERSION = '1.3.6';
@@ -436,6 +437,7 @@ function desktopOverlaySvg(type = 'series', accent = '#38bdf8', options = {}) {
 
 async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
   const type = normalizedDesktopType(options.type);
+  const scale = options.fast ? 0.6 : 1;
   const accent = safeDesktopAccent(options.accent, '#38bdf8');
   const composites = [{
     input: desktopOverlaySvg(type, accent, {
@@ -472,11 +474,16 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
     }
   }
 
+  if (options.fast) for (const composite of composites) {
+    const info = await sharp(composite.input).metadata();
+    composite.input = await sharp(composite.input).resize(Math.round(info.width * scale), Math.round(info.height * scale)).png().toBuffer();
+    composite.left = Math.round(composite.left * scale); composite.top = Math.round(composite.top * scale);
+  }
   return sharp(sourceBuffer)
-    .resize(1600, 900, { fit: 'cover', position: 'attention' })
+    .resize(Math.round(1600 * scale), Math.round(900 * scale), { fit: 'cover', position: options.fast ? 'centre' : 'attention' })
     .modulate({ brightness: 0.96, saturation: 1.07 })
     .composite(composites)
-    .jpeg({ quality: 93, chromaSubsampling: '4:4:4' })
+    .jpeg({ quality: options.fast ? 84 : 93, chromaSubsampling: options.fast ? '4:2:0' : '4:4:4', progressive: Boolean(options.fast) })
     .toBuffer();
 }
 
@@ -485,7 +492,7 @@ function sendDesktopCinematicJpeg(res, data, format = '1600x900') {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  if (res.getHeader?.('Cache-Control') !== 'no-store') res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
   res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');
   res.setHeader('X-Nuvio-Desktop-Format', format);
   res.end(data);
@@ -543,41 +550,44 @@ async function handleDesktopGenreCard(res, url) {
   }
 }
 
+async function contentPhoto(src, fallback) {
+  for (const candidate of [...new Set([src, fallback].filter((v) => v && isAllowedPosterSource(v)))]) {
+    try { return await artworkCache.photo(candidate); } catch (_) {}
+  }
+  return null;
+}
+
+function artworkHeaders(res, result) {
+  res.setHeader('X-Nuvio-Artwork-Cache', result.cache || 'generated');
+  res.setHeader('X-Nuvio-Artwork-Photo', result.photo ? 'ready' : 'fallback');
+  if (result.cacheable === false) res.setHeader('Cache-Control', 'no-store');
+}
+
 async function handleDesktopContentCard(res, url) {
   const src = optimizedCardSource(url.searchParams.get('src') || '', 'landscape');
+  const fallback = optimizedCardSource(url.searchParams.get('fallback') || '', 'landscape');
   const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
   const type = normalizedDesktopType(url.searchParams.get('type'));
+  const fast = url.searchParams.get('fast') === '1';
   if (!src || !isAllowedPosterSource(src)) { res.statusCode = 400; return res.end('Invalid source'); }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6500);
+  const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
+  const title = url.searchParams.get('title') || '', subtitle = url.searchParams.get('append') || '';
+  const key = JSON.stringify(['desktop-v2', src, fallback, providerSlug, type, fast, providerLabel, title, subtitle, url.searchParams.get('color')]);
   try {
-    const response = await fetch(src, {
-      signal: controller.signal,
-      headers: { Accept: 'image/jpeg,image/png,image/webp,*/*;q=0.8', 'User-Agent': `NuvioCalendar/${VERSION}` }
+    const result = await artworkCache.render(key, async () => {
+      const photo = await contentPhoto(src, fallback);
+      const asset = providerSlug ? await platformLogoAsset(providerSlug, type) : null;
+      const source = photo?.bytes || await sharp({ create: { width: 960, height: 540, channels: 3, background: '#07111f' } }).jpeg().toBuffer();
+      const data = await artworkCache.raster(() => desktopCinematicCardBuffer(source, {
+        type, fast, accent: safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug)),
+        logoBuffer: asset?.buffer || null, title, subtitle, providerLabel, bottomTag: providerLabel
+      }));
+      return { data, photo: Boolean(photo), cacheable: Boolean(photo) };
     });
-    if (!response.ok) { res.statusCode = 502; return res.end('Image unavailable'); }
-    const source = Buffer.from(await response.arrayBuffer());
-    const asset = providerSlug ? await platformLogoAsset(providerSlug, type) : null;
-    const accent = safeDesktopAccent(url.searchParams.get('color'), providerAccentColor(providerSlug));
-    const providerLabel = String(url.searchParams.get('label') || platformCollectionTitle(providerSlug)).replace(/^[^\p{L}\p{N}]+/u, '');
-    const title = url.searchParams.get('title') || '';
-    const subtitle = url.searchParams.get('append') || '';
-    const data = await desktopCinematicCardBuffer(source, {
-      type,
-      accent,
-      logoBuffer: asset?.buffer || null,
-      title,
-      subtitle,
-      providerLabel,
-      bottomTag: providerLabel
-    });
-    return sendDesktopCinematicJpeg(res, data);
+    artworkHeaders(res, result);
+    sendDesktopCinematicJpeg(res, result.data, fast ? '960x540' : '1600x900');
   } catch (_) {
-    res.statusCode = 502;
-    return res.end('Image unavailable');
-  } finally {
-    clearTimeout(timeout);
+    res.statusCode = 502; res.setHeader('Cache-Control', 'no-store'); res.end('Image unavailable');
   }
 }
 
@@ -2547,52 +2557,36 @@ function calendarCardSvg({ imageDataUri = null, title = '', provider = '', appen
 }
 
 async function handleCalendarCard(res, url) {
-  const src = optimizedCardSource(url.searchParams.get('src') || '', url.searchParams.get('layout'));
-  const title = url.searchParams.get('title') || '';
-  const provider = url.searchParams.get('provider') || '';
+  const layout = normalizedCardLayout(url.searchParams.get('layout'));
+  const src = optimizedCardSource(url.searchParams.get('src') || '', layout);
+  const fallback = optimizedCardSource(url.searchParams.get('fallback') || '', layout);
+  const title = url.searchParams.get('title') || '', provider = url.searchParams.get('provider') || '';
   const append = url.searchParams.get('append') || url.searchParams.get('info') || '';
   const type = url.searchParams.get('type') || '';
-  const layout = normalizedCardLayout(url.searchParams.get('layout'));
-  if (!isAllowedPosterSource(src)) {
-    res.statusCode = 400;
-    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-    return res.end(calendarCardSvg({ title, provider, append, type, layout }));
-  }
-
-  let imageDataUri = null;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
-  try {
-    const response = await fetch(src, {
-      signal: controller.signal,
-      headers: { Accept: 'image/jpeg,image/png,image/webp,*/*;q=0.8', 'User-Agent': `NuvioCalendar/${VERSION}` }
-    });
-    if (response.ok) {
-      const contentType = String(response.headers?.get?.('content-type') || '').split(';')[0].trim().toLowerCase();
-      if (/^image\/(jpeg|jpg|png|webp)$/.test(contentType)) {
-        const declaredLength = Number(response.headers?.get?.('content-length') || 0);
-        if (!declaredLength || declaredLength <= 3.5 * 1024 * 1024) {
-          const bytes = Buffer.from(await response.arrayBuffer());
-          if (bytes.length <= 3.5 * 1024 * 1024) {
-            // SVG decoders do not all support an embedded WebP bitmap.
-            const embedded = contentType === 'image/webp'
-              ? await sharp(bytes).jpeg({ quality: 92 }).toBuffer() : bytes;
-            imageDataUri = `data:${contentType === 'image/webp' ? 'image/jpeg' : contentType};base64,${embedded.toString('base64')}`;
-          }
-        }
+  const jpeg = url.pathname.endsWith('.jpg');
+  if (src && !isAllowedPosterSource(src)) { res.statusCode = 400; return res.end('Invalid source'); }
+  const key = JSON.stringify(['calendar-v2', src, fallback, title, provider, append, type, layout, jpeg]);
+  const result = await artworkCache.render(key, async () => {
+    const photo = await contentPhoto(src, fallback);
+    return artworkCache.raster(async () => {
+      let imageDataUri = null;
+      if (photo) {
+        const bytes = photo.type === 'image/webp' ? await sharp(photo.bytes).jpeg({ quality: 88 }).toBuffer() : photo.bytes;
+        imageDataUri = `data:${photo.type === 'image/webp' ? 'image/jpeg' : photo.type};base64,${bytes.toString('base64')}`;
       }
-    }
-  } catch {
-    imageDataUri = null;
-  } finally {
-    clearTimeout(timeout);
-  }
-
+      const svg = calendarCardSvg({ imageDataUri, title, provider, append, type, layout });
+      const data = jpeg ? await sharp(Buffer.from(svg)).resize(layout === 'landscape' ? 960 : 500, layout === 'landscape' ? 540 : 750)
+        .jpeg({ quality: 84, progressive: true }).toBuffer() : Buffer.from(svg);
+      return { data, photo: Boolean(photo), cacheable: Boolean(photo) || (!src && !fallback) };
+    });
+  });
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.setHeader('Content-Type', jpeg ? 'image/jpeg' : 'image/svg+xml; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
-  return res.end(calendarCardSvg({ imageDataUri, title, provider, append, type, layout }));
+  artworkHeaders(res, result);
+  return res.end(jpeg ? result.data : result.data.toString('utf8'));
 }
 
 function requestTimeZone(req) {
@@ -5907,7 +5901,7 @@ module.exports = async function handler(req, res) {
     if (path === '/binge-watch-backdrop.jpg') return serveBingeWatchArtJpeg(res, 'backdrop');
     if (path === '/editorial-cover.jpg') return serveEditorialCoverJpeg(res, url);
     if (path === '/editorial-backdrop.jpg') return serveEditorialBackdropJpeg(res, url);
-    if (path === '/calendar-card.svg') return await handleCalendarCard(res, url);
+    if (path === '/calendar-card.svg' || path === '/calendar-card.jpg') return await handleCalendarCard(res, url);
     if (path === '/health') return await handleHealth(req, res);
     if (path === '/nuvio-collections.json' || path === '/collections.json') return json(res, 200, buildNuvioCollectionsImport(runtimeNow(), requestTimeZone(req), origin), LARGE_JSON_CACHE);
     if (path === '/archive-blueprint.json') return json(res, 200, buildArchiveBlueprint(runtimeNow(), requestTimeZone(req), origin), LARGE_JSON_CACHE);

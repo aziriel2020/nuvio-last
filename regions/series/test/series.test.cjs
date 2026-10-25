@@ -288,12 +288,13 @@ test('every series period uses existing custom Shield and Desktop covers while d
     const [meta] = decorateSeriesMetas('https://example.test/series', [raw], { mode, period });
     const wide = new URL(meta.background), poster = new URL(meta.poster), desktop = new URL(meta.banner);
     assert.equal(meta.posterShape, 'landscape');
-    assert.equal(wide.pathname, '/fr/calendar-card.svg');
+    assert.equal(wide.pathname, '/fr/calendar-card.jpg');
     assert.equal(wide.searchParams.get('layout'), 'landscape');
     assert.equal(wide.searchParams.get('src'), 'https://image.tmdb.org/t/p/w780/backdrop.jpg');
     assert.equal(wide.searchParams.get('title'), raw.name);
     assert.equal(wide.searchParams.get('provider'), 'Netflix');
-    assert.equal(poster.searchParams.get('layout'), 'portrait');
+    assert.equal(poster.href, wide.href);
+    assert.equal(desktop.searchParams.get('fast'), '1');
     assert.equal(meta.landscapePoster, meta.background);
     assert.equal(desktop.pathname, '/fr/desktop-content-card.jpg');
     assert.equal(desktop.searchParams.get('design'), 'shield3');
@@ -543,7 +544,7 @@ test('HTTP addon exposes paged catalogs, rejects animation metadata, and reports
   }
   const response = await call('/catalog/series/series-world-premieres-all-all/skip=0.json');
   assert.equal(response.status, 200); assert.equal(response.body.metas.length, 1);
-  assert.match(response.body.metas[0].background, /\/fr\/calendar-card\.svg\?/);
+  assert.match(response.body.metas[0].background, /\/fr\/calendar-card\.jpg\?/);
   assert.match(response.body.metas[0].banner, /\/fr\/desktop-content-card\.jpg\?/);
   assert.equal(response.headers['Cache-Control'], 'no-store');
   const current = await call('/catalog/series/series-fr-premieres-all-all.json');

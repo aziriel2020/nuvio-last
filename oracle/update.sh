@@ -48,6 +48,12 @@ run_nuvio() {
 }
 
 echo "Preparing Nuvio Oracle release $SHORT"
+# Rasterized card titles need real font fallback, including Asian/Arabic names.
+if [[ ! -f /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc ]] || ! command -v fc-cache >/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core fonts-noto-core fonts-noto-cjk
+fi
 run_nuvio "if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi"
 run_nuvio "npm test"
 run_nuvio "npm run test:runtime"
