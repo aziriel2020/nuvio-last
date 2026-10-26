@@ -191,6 +191,11 @@ try {
     stdio: 'inherit'
   });
 
+  execFileSync(process.execPath, ['scripts/verify-fr-service-production.mjs'], {
+    env: { ...process.env, PUBLIC_ORIGIN: origin, ARTWORK_EXPECTED_SHA: '' },
+    stdio: 'inherit'
+  });
+
   console.log(JSON.stringify({
     ok: true,
     standardCollections: collectionBody.length,

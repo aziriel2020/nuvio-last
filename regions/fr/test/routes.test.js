@@ -26,7 +26,7 @@ test('collections route exposes French platform parents and hosted Modern images
     assert.deepEqual(p.map(x=>x.title),['🇫🇷 Tendances & Cinéma','🇫🇷 Netflix','🇫🇷 Prime Video','🇫🇷 Disney+','🇫🇷 HBO Max','🇫🇷 Apple TV+','🇫🇷 CANAL+','🇫🇷 Paramount+','🇫🇷 france.tv','🇫🇷 TF1+','🇫🇷 M6+','🇫🇷 ARTE','🇫🇷 Crunchyroll + AniList','🇫🇷 ADN','🇫🇷 VOD France','🇫🇷 Genres · Films','🇫🇷 Genres · Séries']);
     const canal=p.find(x=>x.title==='🇫🇷 CANAL+');
     assert.deepEqual(canal.folders.map(f=>f.title),['Séries','Films']);
-    assert.match(canal.folders[0].coverImageUrl,/platform-category-card\.svg\?provider=canal-plus&category=series&v=coex-fr132-cinema&asset=2$/);
+    assert.match(canal.folders[0].coverImageUrl,/service-cover\.jpg\?key=canal-plus&category=series&v=fr-services-iconic-b-20261026-v1$/);
     assert.match(canal.folders[0].titleLogoUrl,/platform-logo\?provider=canal-plus&type=series&v=coex-fr132-cinema&asset=2$/);
   }finally{delete process.env.NUVIO_NOW_OVERRIDE}
 });
