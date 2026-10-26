@@ -1,0 +1,66 @@
+name: Diagnose movie index retry
+
+on:
+  push:
+    branches: [diagnose/movie-index-retry-20261026]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PUBLIC_IP: 141.145.215.202
+    steps:
+      - name: Install Oracle SSH key
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ["ORACLE_SSH_PRIVATE_KEY"].strip()
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          p=Path(os.environ["RUNNER_TEMP"]+"/keys/oracle_ssh.pem")
+                          p.write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("ORACLE_SSH_PRIVATE_KEY is not a usable private key")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+
+      - name: Inspect failed movie jobs without modifying the database
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@"$PUBLIC_IP" \
+            "sudo -u nuvio /usr/bin/node" <<'NODE'
+          const { DatabaseSync } = require('node:sqlite');
+          const db = new DatabaseSync('/var/lib/nuvio-movies/index.sqlite', { readOnly: true });
+          db.exec('PRAGMA busy_timeout=5000');
+          const rows = db.prepare('SELECT source,source_id,due,attempts,last_error FROM jobs WHERE attempts>0 ORDER BY attempts DESC LIMIT 20').all();
+          const redact = text => String(text || '').replace(/(api_key|access_token|token|password|authorization)=([^&\s]+)/gi,'$1=[REDACTED]').replace(/Bearer\s+[^\s]+/gi,'Bearer [REDACTED]');
+          const jobs = rows.map(row => ({ ...row, dueAt: new Date(row.due).toISOString(), last_error: redact(row.last_error) }));
+          console.log('NUVIO_RETRY_DIAGNOSTIC ' + JSON.stringify({ at:new Date().toISOString(), jobs }));
+          db.close();
+          NODE
