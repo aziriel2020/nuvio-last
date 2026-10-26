@@ -49,18 +49,37 @@ jobs:
           ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle_ssh.pem" >/dev/null
           echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
 
-      - name: Inspect failed movie jobs without modifying the database
+      - name: Retry the identified movie with the existing production indexer
         shell: bash
         run: |
           set -Eeuo pipefail
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@"$PUBLIC_IP" \
-            "sudo -u nuvio /usr/bin/node" <<'NODE'
-          const { DatabaseSync } = require('node:sqlite');
-          const db = new DatabaseSync('/var/lib/nuvio-movies/index.sqlite', { readOnly: true });
-          db.exec('PRAGMA busy_timeout=5000');
-          const rows = db.prepare('SELECT source,source_id,due,attempts,last_error FROM jobs WHERE attempts>0 ORDER BY attempts DESC LIMIT 20').all();
-          const redact = text => String(text || '').replace(/(api_key|access_token|token|password|authorization)=([^&\s]+)/gi,'$1=[REDACTED]').replace(/Bearer\s+[^\s]+/gi,'Bearer [REDACTED]');
-          const jobs = rows.map(row => ({ ...row, dueAt: new Date(row.due).toISOString(), last_error: redact(row.last_error) }));
-          console.log('NUVIO_RETRY_DIAGNOSTIC ' + JSON.stringify({ at:new Date().toISOString(), jobs }));
-          db.close();
+            "sudo bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          set -a
+          source /etc/nuvio/nuvio.env
+          set +a
+          cd /opt/nuvio/current
+          export NUVIO_MOVIES_DB=/var/lib/nuvio-movies/index.sqlite
+          sudo --preserve-env=TMDB_READ_TOKEN,TMDB_API_KEY,NUVIO_MOVIES_DB -u nuvio /usr/bin/node <<'NODE'
+          const { MovieStore, defaultPath } = require('./regions/movies/src/store.cjs');
+          const { runDetailJobs } = require('./scripts/sync-movies-world.cjs');
+          const id = 1439321;
+          const store = new MovieStore(defaultPath());
+          store.db.exec('PRAGMA busy_timeout=10000');
+          const summarize = row => row && ({ source:row.source, source_id:row.source_id, attempts:row.attempts, dueAt:new Date(row.due).toISOString(), last_error:row.last_error });
+          (async () => {
+            try {
+              const before = store.db.prepare('SELECT * FROM jobs WHERE source=? AND source_id=?').get('movie-detail',id);
+              if (!before || before.attempts !== 1 || before.last_error !== 'Incomplete movie availability/release response')
+                throw new Error('Target job changed; inspect before retrying');
+              store.jobs = source => source === 'movie-detail' ? [before] : [];
+              await runDetailJobs(store, {limit:1,concurrency:1,delay:0});
+              const after = store.db.prepare('SELECT * FROM jobs WHERE source=? AND source_id=?').get('movie-detail',id);
+              const totals = store.db.prepare('SELECT COUNT(*) AS total,SUM(CASE WHEN attempts>0 THEN 1 ELSE 0 END) AS failed FROM jobs').get();
+              console.log('NUVIO_RETRY_RESULT '+JSON.stringify({at:new Date().toISOString(),before:summarize(before),after:summarize(after),totals}));
+              if (after.attempts !== 0 || after.last_error !== null) throw new Error('Targeted metadata retry did not succeed');
+            } finally { store.close(); }
+          })().catch(error => {console.error(error.message);process.exitCode=1;});
           NODE
+          REMOTE
