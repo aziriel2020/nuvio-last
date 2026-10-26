@@ -85,7 +85,7 @@ met ensuite à jour en place. L'addon et les collections Séries Monde gardent l
 
 ## Design et validation
 
-Les 20 covers WebP 1600×900 sont dans `assets/movie-covers/`, avec manifeste et SHA-256.
+Les 21 covers WebP 1600×900 sont dans `assets/movie-covers/`, avec manifeste et SHA-256.
 La nouvelle illustration principale reprend le cadre doré, les photos cinéma, le
 panneau sombre et la typographie des covers Séries Monde approuvées. Les photos de
 genres approuvées sont réutilisées dans ce même cadre avec les titres des films,
@@ -100,4 +100,10 @@ Sources officielles :
 - https://developer.themoviedb.org/reference/movie-release-dates
 - https://developer.themoviedb.org/reference/watch-providers-movie-list
 
-Les catalogues et imports Shield/Desktop s’arrêtent à janvier 2018 inclus, sauf Western qui conserve exactement son historique (mois jusqu’à 2015, années plus anciennes, Avant 1900, Date inconnue). Le seuil porte sur les dates de sortie du catalogue : une ressortie cinéma ou numérique récente reste visible. Les anciennes routes hors Western renvoient une liste vide avant 2018. La base et les liens de détail restent conservés. Réimporter les collections pour retirer les anciennes périodes de l’interface.
+Les catalogues et imports Shield/Desktop s’arrêtent à janvier 2018 inclus, sauf Western qui conserve exactement son historique (mois jusqu’à 2015, années plus anciennes, Avant 1900, Date inconnue). Le seuil porte sur la première sortie mondiale du film : une ressortie cinéma ou numérique ne déplace jamais un ancien film dans une année récente. Les anciennes routes hors Western renvoient une liste vide avant 2018. La base et les liens de détail restent conservés. Réimporter les collections pour retirer les anciennes périodes de l’interface.
+
+## Films de fiction et formats spécialisés (1.0.3)
+
+Les listes générales et les genres de films ne publient que des fictions. Les documentaires restent exclusivement dans Documentaires. La rubrique Stand-up est réservée aux captations de stand-up ; elle est indépendante de Comédie et exclut les biographies/documentaires sur les humoristes, concerts, talk-shows et spectacles de théâtre. Les concerts, émissions, vidéos et autres spectacles ne sont pas admis dans les listes de films.
+
+Les mots-clés et rôles du casting servent à distinguer le format d’une simple thématique : une fiction sur un humoriste reste un film. Une étiquette Comédie ou Musique seule, sans preuve du format, attend l’enrichissement. Le worker reprend les anciennes entrées concernées dans sa file bornée de détails, sans supprimer leur historique. Les quatre vues conservent la première date mondiale. Réinstaller le manifest 1.0.3 et réimporter les collections ajoute la nouvelle rubrique et ses visuels.

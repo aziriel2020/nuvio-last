@@ -142,6 +142,13 @@
       "file": "unclassified.webp",
       "bytes": 186342,
       "sha256": "9ba092104f2194f347025834921e4210e4ceb22f4df541802674454bad529e8d"
+    },
+    {
+      "id": "standup",
+      "title": "Humoriste au micro sur scène",
+      "file": "standup.webp",
+      "bytes": 147518,
+      "sha256": "e1abdd465ecd2c91f287538cc48a0ac65e618c0882de1a220f7c36b6067d9189"
     }
   ]
 }

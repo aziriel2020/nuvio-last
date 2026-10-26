@@ -146,7 +146,7 @@ async function runDetailJobs(store, { api = tmdb, limit = 60, concurrency = 3, d
   for (let i = 0; i < jobs.length && !stopping; i += concurrency) {
     await mapLimit(jobs.slice(i, i + concurrency), concurrency, async (job) => {
       try {
-        const data = await api(`/movie/${job.source_id}`, { language: 'fr-FR', append_to_response: 'external_ids,keywords,watch/providers,release_dates' });
+        const data = await api(`/movie/${job.source_id}`, { language: 'fr-FR', append_to_response: 'external_ids,keywords,credits,watch/providers,release_dates' });
         if (!Object.hasOwn(data, 'watch/providers') || !Object.hasOwn(data, 'release_dates')) throw new Error('Incomplete movie availability/release response');
         store.upsert(fromTmdb(data)); store.done('movie-detail', job.source_id, REFRESH);
       } catch (error) {
@@ -171,12 +171,13 @@ async function syncCycle(store, options = {}) {
       store.state('providersAt', Date.now());
     } catch (error) { errors.push(`providers: ${error.message}`); }
   }
+  // Give existing ambiguous formats a bounded refresh before discovery work.
+  await runDetailJobs(store, { ...options, api });
   // Recent cinema/digital events land first; deep archives resume afterwards.
   for (const lane of ['recent', 'streaming', 'vod', 'cinema', 'digital']) {
     try { await scanLane(store, lane, { ...options, api, maxPages: lane === 'recent' ? 24 : 90 }); }
     catch (error) { errors.push(`${lane}: ${error.message}`); }
   }
-  await runDetailJobs(store, { ...options, api });
   store.state('lastSync', { at: new Date().toISOString(), market: 'FR', errors });
   store.db.exec('PRAGMA wal_checkpoint(PASSIVE)');
   const stats = store.stats();

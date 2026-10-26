@@ -2,6 +2,7 @@
 const test=require('node:test');const assert=require('node:assert/strict');
 const {MovieStore}=require('../src/store.cjs');const {fromTmdb}=require('../src/model.cjs');
 const NOW=new Date('2026-10-26T12:00:00Z');
+const {contentKind}=require('../src/content-policy.cjs');
 function record(id,genres=[18],providers=[8],extra={}) {
   return fromTmdb({id,title:`Movie policy ${id}`,release_date:'2026-10-20',genres:genres.map(id=>({id})),
     'watch/providers':{results:{FR:{flatrate:providers.map(provider_id=>({provider_id,provider_name:provider_id===8?'Netflix':'Molotov TV'}))}}},
@@ -58,4 +59,74 @@ test('original-year ordering applies to every era and every movie view',t=>{
   }
   const undated=record(999,[18],[8],{release_date:'',release_dates:{results:[{iso_3166_1:'FR',release_dates:[{type:4,release_date:'2026-10-25'}]}]}});
   assert.equal(undated.firstAirDate,null,'a lone regional reissue cannot invent an unknown original release date');
+});
+
+test('stand-up has an exclusive category across every view, genre, search and detail gate',t=>{
+  const s=new MovieStore(':memory:');t.after(()=>s.close());
+  const offers={results:{FR:{flatrate:[{provider_id:8,provider_name:'Netflix'}],rent:[{provider_id:2,provider_name:'Apple TV Store'}]}}};
+  const evidence={results:[{iso_3166_1:'FR',release_dates:[{type:3,release_date:'2026-10-20'}]}]};
+  const extra={title:'Format sample',release_dates:evidence,'watch/providers':offers};
+  s.upsert(record(701,[35],[8],{...extra,keywords:{keywords:[{name:'stand-up comedy'}]}}));
+  s.upsert(record(702,[35],[8],{...extra,credits:{cast:[{character:'Fictional hero'},{character:'Fictional friend'}]}}));
+  s.upsert(record(703,[35,99],[8],{...extra,overview:'A documentary about the history of stand-up comedy.',keywords:{keywords:[{name:'stand-up comedy'}]}}));
+  s.upsert(record(704,[10402,99],[8],{...extra,keywords:{keywords:[{name:'concert film'}]}}));
+  s.upsert(record(705,[35],[8],{...extra,keywords:{keywords:[{name:'talk show'}]}}));
+  s.upsert(record(706,[35],[8],extra));
+  for(const view of ['all','streaming','vod','cinema']) {
+    const query=genre=>s.query({view,genre,search:'Format sample',period:'2026-10',curated:true,now:NOW});
+    for(const genre of ['all','35'])assert.deepEqual(query(genre).map(m=>m.id),['tmdb:movie:702']);
+    assert.deepEqual(query('standup').map(m=>m.id),['tmdb:movie:701']);
+    assert.deepEqual(query('standup')[0].genres,['Stand-up']);
+    assert.equal(query('standup')[0].movieContentKind,'standup');
+    assert.deepEqual(query('99').map(m=>m.id),['tmdb:movie:703']);
+    assert.equal(query('10402').length,0);
+  }
+  for(const id of [701,702,703])assert(s.visible(`tmdb:${id}`,{curated:true}));
+  for(const id of [704,705,706])assert(!s.visible(`tmdb:${id}`,{curated:true}));
+  assert.equal(s.stats({curated:true}).eligible,1);
+});
+
+test('format evidence preserves fictional comedian/music stories and rejects filmed events',()=>{
+  const fiction={genres:[35,18],title:'The comedian',description:'A comedian dreams of appearing on television.',keywords:['stand-up comedy','talk show']};
+  assert.equal(contentKind(fiction),'fiction');
+  assert.equal(contentKind({genres:[35],cast:[{character:'Robert'},{character:'Self'}]}),'fiction');
+  assert.equal(contentKind({genres:[35],cast:[{character:'Self - Host'},{character:'Himself'}]}),'performance');
+  assert.equal(contentKind({genres:[10402,18],keywords:['music','concert']}),'fiction');
+  assert.equal(contentKind({genres:[35,99],description:'Spectacle de stand-up enregistré à Paris.'}),'standup');
+  assert.equal(contentKind({genres:[99],keywords:['stand-up comedy'],description:'Portrait de la vie d’un humoriste.'}),'documentary');
+  assert.equal(contentKind({genres:[35],description:'Une captation théâtrale avec trois comédiens.'}),'performance');
+  assert.equal(contentKind({genres:[35],video:true}),'video');
+  for(const genre of [10763,10764,10767])assert.equal(contentKind({genres:[genre,99]}),'television');
+  assert.equal(contentKind({genres:[18],keywords:['television special']}),'television');
+  assert.equal(contentKind({genres:[28],keywords:['sports event']}),'performance');
+});
+
+test('legacy ambiguous comedy is withheld until enriched, and metadata corrections apply immediately',t=>{
+  const s=new MovieStore(':memory:');t.after(()=>s.close());
+  s.upsert(record(801,[35],[8],{title:'Legacy special'}));
+  const payload=JSON.parse(s.db.prepare("SELECT payload FROM sources WHERE show_id='tmdb:801'").get().payload);delete payload.movieContentKind;
+  s.db.prepare("UPDATE sources SET payload=? WHERE show_id='tmdb:801'").run(JSON.stringify(payload));
+  assert.equal(s.query({curated:true,now:NOW}).length,0);
+  assert.equal(s.query({genre:'standup',curated:true,now:NOW}).length,0);
+  s.upsert(record(801,[35],[8],{title:'Legacy special',keywords:{keywords:[{name:'stand-up comedy'}]}}));
+  assert.equal(s.query({genre:'standup',curated:true,now:NOW}).length,1);
+  assert.equal(s.query({genre:'35',curated:true,now:NOW}).length,0);
+  s.upsert(record(801,[35],[8],{title:'Legacy fiction',credits:{cast:[{character:'A fictional character'}]}}));
+  assert.equal(s.query({genre:'standup',curated:true,now:NOW}).length,0);
+  assert.equal(s.query({genre:'35',curated:true,now:NOW}).length,1);
+});
+
+test('existing database upgrade queues format checks once without deleting history or writing from a reader',t=>{
+  const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'movie-format-upgrade-')),file=path.join(dir,'movies.sqlite');
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  let s=new MovieStore(file);
+  s.upsert(record(901,[35],[8]));s.upsert(record(902,[18],[8]));
+  s.db.prepare("UPDATE sources SET payload=json_remove(payload,'$.movieContentKind')").run();
+  s.db.prepare("DELETE FROM state WHERE key='movieContentRevision'").run();s.close();
+  s=new MovieStore(file,{readonly:true});assert.equal(s.jobs('movie-detail').length,0);s.close();
+  s=new MovieStore(file);assert.equal(s.db.prepare('SELECT COUNT(*) AS n FROM shows').get().n,2);
+  assert.deepEqual(s.jobs('movie-detail').map(j=>j.source_id),[901]);
+  s.done('movie-detail',901,3600000);s.close();
+  s=new MovieStore(file);assert.equal(s.jobs('movie-detail').length,0);s.close();
 });

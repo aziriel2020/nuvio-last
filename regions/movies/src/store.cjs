@@ -3,6 +3,7 @@
 const { SeriesStore } = require('../../series/src/store.cjs');
 const { AVAILABILITY_TTL } = require('../../series/src/france.cjs');
 const { GENRES, VIEWS, catalogWindowFor } = require('./model.cjs');
+const content = require('./content-policy.cjs');
 const policy = require('../../series/src/catalog-policy.cjs');
 const defaultPath = () => process.env.NUVIO_MOVIES_DB || '/var/lib/nuvio-movies/index.sqlite';
 const parse = (value) => { try { return JSON.parse(value); } catch { return []; } };
@@ -12,6 +13,8 @@ const parse = (value) => { try { return JSON.parse(value); } catch { return []; 
 class MovieStore extends SeriesStore {
   constructor(filename = defaultPath(), options = {}) {
     super(filename, options);
+    this.db.function('nuvio_movie_content_kind', { deterministic: true }, (genres,title,originalTitle,description) =>
+      content.contentKind({ genres: parse(genres), title, originalTitle, description }));
     if (!options.readonly) this.db.exec(`
       CREATE TABLE IF NOT EXISTS movie_releases (
         show_id TEXT NOT NULL REFERENCES shows(id) ON DELETE CASCADE,
@@ -28,6 +31,11 @@ class MovieStore extends SeriesStore {
         PRIMARY KEY(scan_id,lane,tmdb_id)
       );
     `);
+    if (!options.readonly && this.state('movieContentRevision') !== content.REVISION) {
+      const ids=this.db.prepare("SELECT src.source_id FROM sources src JOIN shows s ON s.id=src.show_id WHERE src.source='tmdb' AND json_extract(src.payload,'$.movieContentKind') IS NULL AND (nuvio_movie_content_kind(s.genres,s.title,s.original_title,s.description)!='fiction')").all().map(r=>Number(r.source_id));
+      this.enqueue('movie-detail',ids,1,{refresh:true});
+      this.state('movieContentRevision',content.REVISION);
+    }
   }
   upsert(record) {
     return this.transaction(() => {
@@ -66,7 +74,7 @@ class MovieStore extends SeriesStore {
       ${curated ? `AND ${policy.offerClause(kind === 'vod' ? 'vod' : 'streaming',alias)}` : ''}`;
   }
   admissionClause(view = 'all', genre = 'all', curated = false, alias = 's') {
-    const specialist = genre === '99';
+    const specialist = ['99','standup'].includes(genre);
     const streaming = `(${this.laneClause('streaming',alias,curated && !specialist)})`;
     const vod = `(${this.laneClause('vod',alias,curated)})`;
     const cinema = `EXISTS (SELECT 1 FROM movie_releases r WHERE r.show_id=${alias}.id AND r.kind='cinema')`;
@@ -78,7 +86,7 @@ class MovieStore extends SeriesStore {
   }
   visible(id, { curated = false } = {}) {
     return Boolean(this.db.prepare(`SELECT s.id FROM shows s WHERE s.id=? AND s.classification='eligible'
-      AND ${curated ? `(${this.admissionClause('all','all',true)} OR (${policy.genreClause('99')} AND ${this.admissionClause('all','99',true)}))`
+      AND ${curated ? `((${content.clause()} AND NOT ${policy.broadcastClause()} AND ${this.admissionClause('all','all',true)}) OR (${policy.genreClause('99')} AND ${content.clause('99')} AND ${this.admissionClause('all','99',true)}) OR (${content.clause('standup')} AND ${this.admissionClause('all','standup',true)}))`
         : this.admissionClause()}`).get(id));
   }
   finishMarket(scanId, kind) {
@@ -93,10 +101,11 @@ class MovieStore extends SeriesStore {
     if (!window) return [];
     if (curated && genre === 'unclassified') return [];
     const where = ["s.classification='eligible'", this.admissionClause(view,genre,curated)];
-    if (curated && genre !== '99') where.push(`NOT ${policy.broadcastClause()}`);
+    if (curated || genre === 'standup') where.push(content.clause(genre));
+    if (curated && !['99','standup'].includes(genre)) where.push(`NOT ${policy.broadcastClause()}`);
     const args = [];
     if (genre === 'unclassified') where.push("s.genres='[]'");
-    else if (genre !== 'all') { where.push('EXISTS (SELECT 1 FROM json_each(s.genres) WHERE value=?)'); args.push(genre); }
+    else if (!['all','standup'].includes(genre)) { where.push('EXISTS (SELECT 1 FROM json_each(s.genres) WHERE value=?)'); args.push(genre); }
     if (search) {
       where.push("(s.title LIKE ? ESCAPE '\\' OR s.original_title LIKE ? ESCAPE '\\')");
       const value = `%${search.replace(/[\\%_]/g, '\\$&')}%`; args.push(value, value);
@@ -106,15 +115,18 @@ class MovieStore extends SeriesStore {
     if (window.undated) where.push('s.first_air_date IS NULL');
     else if (window.start) { where.push('s.first_air_date BETWEEN ? AND ?'); args.push(window.start, window.end); }
     else { where.push('(s.first_air_date<=? OR s.first_air_date IS NULL)'); args.push(window.end); }
-    const rows = this.db.prepare(`SELECT s.*,s.first_air_date AS event_date,'original' AS event_kind
+    const rows = this.db.prepare(`SELECT s.*,${content.sqlKind()} AS content_kind,s.first_air_date AS event_date,'original' AS event_kind
       FROM shows s WHERE ${where.join(' AND ')} ORDER BY s.first_air_date DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
     return rows.map((row) => this.meta(row, { curated, genre, view }));
+  }
+  contentKind(row) {
+    return this.db.prepare(`SELECT ${content.sqlKind()} AS kind FROM shows s WHERE s.id=?`).get(row.id)?.kind || 'review';
   }
   meta(row, { curated = false, genre = 'all', view = 'all' } = {}) {
     const source = this.sources(row.id).find((s) => s.source === 'tmdb');
     const imdb = source?.imdb_id;
     const id = imdb || `tmdb:movie:${source?.source_id || row.id.split(':')[1]}`;
-    const offers = this.franceOffers(row.id).filter((o) => (!curated || genre === '99'
+    const offers = this.franceOffers(row.id).filter((o) => (!curated || ['99','standup'].includes(genre)
       || (view !== 'vod' && policy.allowedOffer(o)) || (view !== 'streaming' && policy.allowedOffer(o,'vod')))
       && this.db.prepare(`SELECT 1 FROM movie_lanes WHERE tmdb_id=?
       AND kind=? AND available=1 AND checked_at>?`).get(o.tmdb_id, ['rent', 'buy'].includes(o.kind) ? 'vod' : 'streaming', Date.now() - AVAILABILITY_TTL));
@@ -129,12 +141,13 @@ class MovieStore extends SeriesStore {
     return {
       id, type: 'movie', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
       background: row.background || row.poster || undefined, streamingProviders: providers, providersByKind,
+      movieContentKind: row.content_kind || this.contentKind(row),
       movieReleaseKind: 'original', originalReleaseDate: row.first_air_date || null,
       description: [date ? `${dateLabel} : ${date}` : 'Date de sortie inconnue',
         providers.length ? `Offres France : ${providers.join(', ')}.` : 'Dates de sorties référencées ; disponibilité actuelle du film à vérifier.',
         'Dates : TMDB · Disponibilités : JustWatch via TMDB. La date de sortie ne constitue pas une date d’arrivée sur chaque plateforme.',
         ...releases.slice(0, 8).map((r) => `${r.kind === 'cinema' ? 'Cinéma France' : 'Numérique France'} : ${r.date}`), row.description].filter(Boolean).join('\n\n'),
-      genres: GENRES.filter((g) => parse(row.genres).includes(g.id)).map((g) => g.name),
+      genres: genre === 'standup' ? ['Stand-up'] : GENRES.filter((g) => parse(row.genres).includes(g.id)).map((g) => g.name),
       releaseInfo: row.first_air_date?.slice(0, 4) || 'Date inconnue', released: date ? `${date}T00:00:00.000Z` : undefined,
       imdb_id: imdb || undefined, links: [
         { name: 'TMDB', category: 'Sources', url: `https://www.themoviedb.org/movie/${source?.source_id}` },
@@ -145,11 +158,11 @@ class MovieStore extends SeriesStore {
   stats({ curated = false } = {}) {
     return {
       market: 'FR', eligible: this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE classification='eligible'
-        AND ${this.admissionClause('all','all',curated)} ${curated ? `AND NOT ${policy.broadcastClause()}` : ''}`).get().count,
+        AND ${this.admissionClause('all','all',curated)} ${curated ? `AND NOT ${policy.broadcastClause()} AND ${content.clause()}` : ''}`).get().count,
       streaming: this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE classification='eligible' AND (${this.laneClause('streaming','s',curated)})
-        ${curated ? `AND NOT ${policy.broadcastClause()}` : ''}`).get().count,
+        ${curated ? `AND NOT ${policy.broadcastClause()} AND ${content.clause()}` : ''}`).get().count,
       vodAvailable: this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE classification='eligible' AND (${this.laneClause('vod','s',curated)})
-        ${curated ? `AND NOT ${policy.broadcastClause()}` : ''}`).get().count,
+        ${curated ? `AND NOT ${policy.broadcastClause()} AND ${content.clause()}` : ''}`).get().count,
       cinemaReleases: this.db.prepare('SELECT COUNT(*) AS count FROM movie_releases WHERE kind=\'cinema\'').get().count,
       digitalReleases: this.db.prepare('SELECT COUNT(*) AS count FROM movie_releases WHERE kind=\'digital\'').get().count,
       animationExcluded: this.db.prepare("SELECT COUNT(*) AS count FROM shows WHERE classification='animation'").get().count,
@@ -158,6 +171,8 @@ class MovieStore extends SeriesStore {
       scans: Object.fromEntries(['streaming', 'vod', 'cinema', 'digital', 'recent'].map((kind) => [kind, this.state(`scan:${kind}`)])),
       jobs: this.db.prepare('SELECT COUNT(*) AS total,SUM(CASE WHEN due<=? THEN 1 ELSE 0 END) AS pending,SUM(CASE WHEN attempts>0 THEN 1 ELSE 0 END) AS failed FROM jobs').get(Date.now()),
       datePolicy: 'first-release-worldwide',
+      filmContentPolicy: content.metadata(),
+      awaitingFormat: this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND ${content.sqlKind()}='review'`).get().count,
       ...(curated ? { catalogPolicy: policy.policy() } : {}),
       coverage: 'Films de tous pays, classés par première sortie mondiale. Les ressorties cinéma/VOD ne changent pas la date du film. Animation exclue.'
     };

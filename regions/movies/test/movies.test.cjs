@@ -203,7 +203,7 @@ test('every import source has a named manifest catalog, with stable standalone i
   const names = new Map(manifest.catalogs.map((c) => [c.id, c.name]));
   assert(!manifest.catalogs.some(c => c.id.includes('-unclassified-')));
   assert.equal(names.size, manifest.catalogs.length); assert.equal(manifest.types[0], 'movie');
-  assert.equal(VIEWS.length, 4); assert.equal(GENRES.length, 20);
+  assert.equal(VIEWS.length, 4); assert.equal(GENRES.length, 21);
   assert.notEqual(manifest.id, 'com.nuvio.series.france.liveaction.v2');
   for (const mode of ['shield', 'desktop']) {
     const imported = addon._internals.buildCollections(origin, NOW, mode);
@@ -222,7 +222,7 @@ test('every import source has a named manifest catalog, with stable standalone i
   }
 });
 
-test('all twenty genre covers use the approved 16:9 design and include three previously missing film themes', async () => {
+test('all genre covers use the approved 16:9 design and include three previously missing film themes', async () => {
   assert(progress().ready);
   for (const genre of GENRES) {
     const info = await sharp(genreBytes(genre.id)).metadata();

@@ -45,6 +45,8 @@ try {
     assert.equal(imported.length, 4);
     for (const c of imported) for (const f of c.folders) for (const s of f.sources) { assert.equal(s.addonId, manifest.id); assert(names.has(s.catalogId)); }
   }
+  assert.equal(manifest.version,'1.0.3');
+  assert(manifest.catalogs.some(c=>c.id==='movies-fr-streaming-standup-today'));
   const ids = [];
   for (const skip of [0, 100, 200]) {
     const r = await get(`/movies/catalog/movie/movies-fr-all-all-all/skip=${skip}.json`);
@@ -61,7 +63,7 @@ try {
   store.upsert(fixture(1, { genres: [{ id: 16 }] }));
   const refreshed = await (await get('/movies/catalog/movie/movies-fr-all-all-all/search=Film%20HTTP%201.json')).json();
   assert(!refreshed.metas.some((m) => m.id === 'tmdb:movie:1'));
-  for (const id of ['all', '36', '10770', '10752']) {
+  for (const id of ['all', '36', '10770', '10752', 'standup']) {
     const image = await get(`/movies/artwork/genre/${id}.webp`); assert.equal(image.status, 200);
     const meta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
     assert.equal(meta.width, 1600); assert.equal(meta.height, 900);
@@ -85,11 +87,32 @@ try {
     const original=await (await get(`/movies/catalog/movie/movies-fr-${view}-37-1980/search=Original.json`)).json();
     assert.equal(original.metas.length,1);assert.equal(original.metas[0].released.slice(0,10),'1980-05-01');
   }
+  store.upsert(fixture(3001,{title:'Isolated format special',genres:[{id:35}],keywords:{keywords:[{name:'stand-up comedy'}]}}));
+  store.upsert(fixture(3002,{title:'Isolated format film',genres:[{id:35}],credits:{cast:[{character:'A fictional person'}]}}));
+  store.upsert(fixture(3003,{title:'Isolated format concert',genres:[{id:10402}],keywords:{keywords:[{name:'concert film'}]}}));
+  store.upsert(fixture(3004,{title:'Isolated format talk show',genres:[{id:35}],keywords:{keywords:[{name:'talk show'}]}}));
+  for(const view of ['all','streaming','cinema']) {
+    for(const genre of ['all','35']) {
+      const rows=await (await get(`/movies/catalog/movie/movies-fr-${view}-${genre}-2026-10/search=Isolated.json`)).json();
+      assert.deepEqual(rows.metas.map(m=>m.name),['Isolated format film']);
+    }
+    const standup=await (await get(`/movies/catalog/movie/movies-fr-${view}-standup-2026-10/search=Isolated.json`)).json();
+    assert.deepEqual(standup.metas.map(m=>m.name),['Isolated format special']);
+    assert.equal(standup.metas[0].movieContentKind,'standup');
+  }
+  assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A3003.json')).status,404);
+  const standupDetail=await (await get('/movies/meta/movie/tmdb%3Amovie%3A3001.json')).json();
+  assert.deepEqual(standupDetail.meta.genres,['Stand-up']);
   for(const mode of ['', '-desktop']) {
     const imported=await (await get(`/movies/nuvio-collections${mode}.json`)).json();
     assert(imported.every(c=>c.folders.every(f=>!f.id.endsWith('-unclassified'))));
+    for(const c of imported) { const folder=c.folders.find(f=>f.id.endsWith('-standup'));assert(folder);assert.equal(folder.title,'Stand-up');assert(folder.coverImageUrl.includes('/genre/standup.webp'));assert(folder.heroBackdropUrl.includes('/backdrop/standup.jpg')); }
+
   }
   assert.equal(status.datePolicy,'first-release-worldwide');
+  assert.equal(status.filmContentPolicy.standup,'standup-category-only');
+  const standupBg=await get('/movies/artwork/backdrop/standup.jpg');assert.equal(standupBg.status,200);
+  const bgInfo=await sharp(Buffer.from(await standupBg.arrayBuffer())).metadata();assert.equal(bgInfo.width,1920);assert.equal(bgInfo.height,1080);
   console.log('Films Monde Oracle HTTP passed: 4 collections, named sources, 205 paginated movies, FR gates, live animation correction, raw detail art and custom 16:9 covers.');
 } finally {
   child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r));
