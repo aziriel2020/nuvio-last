@@ -33,16 +33,16 @@ jobs:
           node scripts/verify-movie-covers.mjs
           node scripts/test-movies-runtime.mjs
 
-      - name: Render and audit all six Tendances & Cinéma covers
+      - name: Render and audit all seven Tendances & Cinéma covers
         run: npm run audit:editorial-covers
 
-      - name: Render and audit all six Tendances & Cinéma backgrounds
+      - name: Render and audit all seven Tendances & Cinéma backgrounds
         run: npm run audit:editorial-backdrops
 
-      - name: Upload six editorial cover previews
+      - name: Upload seven editorial cover previews
         uses: actions/upload-artifact@v4
         with:
-          name: nuvio-tendances-cinema-six-covers
+          name: nuvio-tendances-cinema-seven-covers
           path: |
             editorial-cover-audit/*.jpg
             editorial-cover-audit/manifest.json

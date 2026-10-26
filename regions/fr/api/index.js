@@ -64,32 +64,8 @@ const REGION_ART_KEY = 'fr';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/fr');
 const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-art/shared');
 const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
-const EDITORIAL_APPROVED_COVER_DIR = path.resolve(COLLECTION_CINEMATIC_ART_DIR, 'editorial-approved');
-// Subject-aware source-only crops: only the photography ABOVE the baked-in
-// typography is used. No text, border or title badge can leak into a hero.
-const EDITORIAL_BACKDROP_CROP = Object.freeze({
-  'series-top-rated': 390,
-  'series-trendy': 340,
-  'series-new': 405,
-  'series-returning': 350,
-  'movies-new': 340,
-  'cinema-now': 400
-});
-const EDITORIAL_TV_LABELS = Object.freeze({
-  'series-top-rated': { title: 'LES MIEUX NOTÉES', accent: '#e8bc62' },
-  'series-trendy': { title: 'SÉRIES TENDANCE', accent: '#ff6656' },
-  'series-new': { title: 'NOUVELLES SÉRIES', accent: '#5bd9e7' },
-  'series-returning': { title: 'SÉRIES RENOUVELÉES', accent: '#b87eff' },
-  'movies-new': { title: 'NOUVEAUX FILMS', accent: '#ffc15a' },
-  'cinema-now': { title: 'À L’AFFICHE', accent: '#fc6877' }
-});
-const EDITORIAL_TV_COVER_REVISION = 'tv-readable-v4';
-const EDITORIAL_BACKDROP_RENDER_CACHE = new Map();
-// Exactly six immutable cover variants; share one render per variant and process lifetime.
-// Cache the in-flight Promise too, so concurrent Shield/Desktop requests do not
-// re-render the same 1600x900 cover on a small Oracle Always Free VM.
-const EDITORIAL_COVER_RENDER_CACHE = new Map();
-const BINGE_ART_RENDER_CACHE = new Map();
+const EDITORIAL_ART = require('./editorial-art.cjs');
+const EDITORIAL_ART_REVISION = EDITORIAL_ART.manifest.revision;
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   const key = `${mime}:${absolutePath}`;
@@ -125,210 +101,40 @@ function serveLocalJpeg(res, absolutePath, cache = 'public, max-age=86400, s-max
   catch (_) { res.statusCode=404; res.end('Not found'); }
 }
 
-/**
- * Render a TV-safe title from the original approved photography. Original JPEGs
- * are never modified. Their embedded display type lies below y=440, so only
- * the clean 747x420 photographic crop is used, in the same position as the
- * corresponding hero backdrop. This avoids oversized baked-in serif copy,
- * overprint, and unreadable miniature metadata on Shield/Desktop tiles.
- */
-async function editorialTvReadableCoverJpeg(source, key) {
-  const style = EDITORIAL_TV_LABELS[key];
-  if (!style) throw new Error('Unknown editorial TV cover');
-  const width = 1600, height = 900;
-  const photo = await sharp(source)
-    .extract({ left: EDITORIAL_BACKDROP_CROP[key], top: 20, width: 747, height: 420 })
-    .resize(width, height, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
-    .sharpen({ sigma: .48 })
-    .toBuffer();
-
-  // Explicit glyph paths use the bundled DejaVu font, independent of the
-  // host OS fonts. The title is a single short line, limited to 1380px.
-  const titlePath = desktopPathText(style.title, 130, 780, 1380, 80, {
-    minSize: 52, fill: '#ffffff'
-  });
-  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-    <defs>
-      <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="30%" stop-color="#000000" stop-opacity="0"/>
-        <stop offset="70%" stop-color="#050508" stop-opacity=".35"/>
-        <stop offset="100%" stop-color="#050508" stop-opacity=".86"/>
-      </linearGradient>
-    </defs>
-    <rect width="${width}" height="${height}" fill="url(#shade)"/>
-    <rect x="91" y="697" width="10" height="111" rx="5" fill="${style.accent}"/>
-    ${titlePath}
-    <!-- These four cutouts match the black corners of approved cards. -->
-    <path fill="#050609" d="M0 0 H70 A70 70 0 0 0 0 70 Z"/>
-    <path fill="#050609" d="M1530 0 H1600 V70 A70 70 0 0 0 1530 0 Z"/>
-    <path fill="#050609" d="M0 830 A70 70 0 0 0 70 900 H0 Z"/>
-    <path fill="#050609" d="M1530 900 A70 70 0 0 0 1600 830 V900 Z"/>
-  </svg>`);
-  return sharp(photo)
-    .composite([{ input: overlay, left: 0, top: 0 }])
-    .jpeg({ quality: 93, chromaSubsampling: '4:4:4' })
-    .toBuffer();
-}
-
-
-async function serveBingeWatchArtJpeg(res, variant) {
-  const cacheKey = variant === 'backdrop' ? 'backdrop' : 'cover';
-  let render = BINGE_ART_RENDER_CACHE.get(cacheKey);
-  const cacheHit = Boolean(render);
-  if (!render) {
-    render = Promise.resolve().then(async () => {
-      // Approved photographic assets are committed with the application.
-      // Never fall back to the old placeholder SVG if an asset is missing.
-      const source = fs.readFileSync(path.join(EDITORIAL_APPROVED_COVER_DIR,
-        'binge-watch-' + cacheKey + '-v2.webp'));
-      const sourceSha256 = createHash('sha256').update(source).digest('hex');
-      const jpeg = await sharp(source)
-        .jpeg({ quality: 93, chromaSubsampling: '4:4:4' }).toBuffer();
-      return { jpeg, sourceSha256 };
-    });
-    BINGE_ART_RENDER_CACHE.set(cacheKey, render);
-  }
+// Serve the exact user-approved night-blue/gold cover and its separate clean
+// backdrop. Native JPEG assets need no crop, typography overlay or recoloring.
+function serveApprovedEditorialJpeg(res, key, variant, binge = false) {
   try {
-    const { jpeg, sourceSha256 } = await render;
-    res.setHeader('X-Nuvio-Binge-Watch-Art', cacheKey);
-    res.setHeader('X-Nuvio-Binge-Watch-Source-SHA256', sourceSha256);
-    res.setHeader('X-Nuvio-Binge-Watch-Render', cacheHit ? 'memory' : 'generated');
-    return sendDesktopCinematicJpeg(res, jpeg, cacheKey === 'backdrop' ? '1920x1080' : '1600x900');
-  } catch (error) {
-    if (BINGE_ART_RENDER_CACHE.get(cacheKey) === render) BINGE_ART_RENDER_CACHE.delete(cacheKey);
-    throw error;
-  }
-}
-
-async function serveEditorialCoverJpeg(res, url) {
-  const key = String(url.searchParams.get('key') || '').trim();
-  const recipes = {
-    'series-top-rated': {
-      type: 'series',
-      accent: '#f4c542',
-      title: 'Séries les mieux notées',
-      subtitle: 'Hier · Semaine passée · Mois dernier',
-      providerLabel: 'TENDANCES',
-      bottomTag: 'TOP NOTES'
-    },
-    'series-trendy': {
-      type: 'series',
-      accent: '#ff5a36',
-      title: 'Séries les plus trendy',
-      subtitle: 'Hier · Semaine passée · Mois dernier',
-      providerLabel: 'TENDANCES',
-      bottomTag: 'TRENDY'
-    },
-    'series-new': {
-      type: 'series',
-      accent: '#06b6d4',
-      title: 'Nouvelles séries',
-      subtitle: 'Cette semaine · Ce mois',
-      providerLabel: 'NOUVEAUTÉS',
-      bottomTag: 'NOUVELLES SÉRIES'
-    },
-    'series-returning': {
-      type: 'series',
-      accent: '#a855f7',
-      title: 'Séries renouvelées',
-      subtitle: 'Nouvelles saisons · Cette semaine · Ce mois',
-      providerLabel: 'RETOURS',
-      bottomTag: 'NOUVELLES SAISONS'
-    },
-    'movies-new': {
-      type: 'movie',
-      accent: '#f59e0b',
-      title: 'Nouveaux films',
-      subtitle: 'Sorties Belgique · Cette semaine · Ce mois',
-      providerLabel: 'NOUVEAUTÉS',
-      bottomTag: 'NOUVEAUX FILMS'
-    },
-    'cinema-now': {
-      type: 'movie',
-      accent: '#e11d48',
-      title: 'Films au cinéma actuellement',
-      subtitle: 'Sorties Belgique · disponibilité vérifiée',
-      providerLabel: 'CINÉMA',
-      bottomTag: 'À L’AFFICHE'
+    const art = EDITORIAL_ART.artwork(key, variant);
+    if (binge) {
+      res.setHeader('X-Nuvio-Binge-Watch-Art', variant);
+      res.setHeader('X-Nuvio-Binge-Watch-Source-SHA256', art.sourceSha256);
+      res.setHeader('X-Nuvio-Binge-Watch-Render', art.cacheHit ? 'memory' : 'generated');
+    } else {
+      res.setHeader(variant === 'cover' ? 'X-Nuvio-Editorial-Cover' : 'X-Nuvio-Editorial-Backdrop', key);
+      res.setHeader('X-Nuvio-Editorial-Source-SHA256', art.sourceSha256);
+      res.setHeader('X-Nuvio-Editorial-Render', art.cacheHit ? 'memory' : 'generated');
+      res.setHeader('X-Nuvio-Editorial-Style', EDITORIAL_ART_REVISION);
     }
-  };
-  const recipe = recipes[key];
-  if (!recipe) { res.statusCode = 404; return res.end('Not found'); }
-
-  const cacheHit = EDITORIAL_COVER_RENDER_CACHE.has(key);
-  let render = EDITORIAL_COVER_RENDER_CACHE.get(key);
-  if (!render) {
-    render = Promise.resolve().then(async () => {
-      // Cover and hero MUST resolve from the same key (no series/movies cross-wire).
-      const source = fs.readFileSync(path.join(EDITORIAL_APPROVED_COVER_DIR, `${key}.jpg`));
-      // Fingerprint the actual artwork, not the finished titled card: two
-      // different labels over the same photo must fail the visual uniqueness audit.
-      const sourceSha256 = createHash('sha256').update(source).digest('hex');
-      // Keep the approved source intact and compose readable TV titles at request time.
-      const data = await editorialTvReadableCoverJpeg(source, key);
-      return { data, sourceSha256 };
-    });
-    EDITORIAL_COVER_RENDER_CACHE.set(key, render);
-  }
-  try {
-    const { data, sourceSha256 } = await render;
-    res.setHeader('X-Nuvio-Editorial-Cover', key);
-    res.setHeader('X-Nuvio-Editorial-Style', EDITORIAL_TV_COVER_REVISION);
-    res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
-    res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
-    return sendDesktopCinematicJpeg(res, data);
+    return sendDesktopCinematicJpeg(res, art.data, art.width + 'x' + art.height);
   } catch (_) {
-    // A missing/corrupt source must never poison this worker's cache permanently.
-    if (EDITORIAL_COVER_RENDER_CACHE.get(key) === render) {
-      EDITORIAL_COVER_RENDER_CACHE.delete(key);
-    }
     res.statusCode = 404;
     return res.end('Not found');
   }
 }
 
-
-async function serveEditorialBackdropJpeg(res, url) {
-  const key = String(url.searchParams.get('key') || '').trim();
-  if (!Object.prototype.hasOwnProperty.call(EDITORIAL_BACKDROP_CROP, key)) {
-    res.statusCode = 404;
-    return res.end('Not found');
-  }
-
-  let render = EDITORIAL_BACKDROP_RENDER_CACHE.get(key);
-  const cacheHit = Boolean(render);
-  if (!render) {
-    render = Promise.resolve().then(async () => {
-      const jpeg = fs.readFileSync(path.join(EDITORIAL_APPROVED_COVER_DIR, key + '.jpg'));
-      const sourceSha256 = createHash('sha256').update(jpeg).digest('hex');
-      const left = EDITORIAL_BACKDROP_CROP[key];
-      // 747:420 is 16:9. The approved-cover titles start well below the
-      // 20..440 photo crop; the upper-right category pills are outside x<=1152.
-      const data = await sharp(jpeg)
-        .extract({ left, top: 20, width: 747, height: 420 })
-        .resize(1920, 1080, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
-        .modulate({ brightness: 0.82, saturation: 1.03 })
-        .blur(2)
-        .jpeg({ quality: 90, chromaSubsampling: '4:4:4' })
-        .toBuffer();
-      return { data, sourceSha256 };
-    });
-    EDITORIAL_BACKDROP_RENDER_CACHE.set(key, render);
-  }
-  try {
-    const { data, sourceSha256 } = await render;
-    res.setHeader('X-Nuvio-Editorial-Backdrop', key);
-    res.setHeader('X-Nuvio-Editorial-Source-SHA256', sourceSha256);
-    res.setHeader('X-Nuvio-Editorial-Render', cacheHit ? 'memory' : 'generated');
-    return sendDesktopCinematicJpeg(res, data, '1920x1080');
-  } catch (_) {
-    if (EDITORIAL_BACKDROP_RENDER_CACHE.get(key) === render) {
-      EDITORIAL_BACKDROP_RENDER_CACHE.delete(key);
-    }
-    res.statusCode = 404;
-    return res.end('Not found');
-  }
+function serveBingeWatchArtJpeg(res, variant) {
+  return serveApprovedEditorialJpeg(res, 'binge-watch', variant, true);
 }
+
+function serveEditorialCoverJpeg(res, url) {
+  return serveApprovedEditorialJpeg(res, String(url.searchParams.get('key') || '').trim(), 'cover');
+}
+
+function serveEditorialBackdropJpeg(res, url) {
+  return serveApprovedEditorialJpeg(res, String(url.searchParams.get('key') || '').trim(), 'backdrop');
+}
+
 
 function normalizedDesktopType(value) {
   return String(value || '').toLowerCase() === 'movie' ? 'movie' : 'series';
@@ -1576,63 +1382,63 @@ function buildEditorialCollection(origin = null) {
       title: '⭐ Séries les mieux notées',
       emoji: '⭐',
       ids: ratedIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=tv-readable-v4`,
-      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-top-rated&v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-top-rated&v=${EDITORIAL_ART_REVISION}`,
     }),
     folder({
       id: 'editorial-series-trendy',
       title: '🔥 Séries les plus trendy',
       emoji: '🔥',
       ids: trendyIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=tv-readable-v4`,
-      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-trendy&v=approved-hero-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-trendy&v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-trendy&v=${EDITORIAL_ART_REVISION}`,
     }),
     folder({
       id: 'editorial-series-new',
       title: '🆕 Nouvelles séries',
       emoji: '🆕',
       ids: newSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=tv-readable-v4`,
-      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-new&v=approved-hero-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-new&v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-new&v=${EDITORIAL_ART_REVISION}`,
     }),
     folder({
       id: 'editorial-series-returning',
       title: '🔁 Séries renouvelées',
       emoji: '🔁',
       ids: returningSeriesIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=tv-readable-v4`,
-      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-returning&v=approved-hero-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=series-returning&v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=series-returning&v=${EDITORIAL_ART_REVISION}`,
     }),
     folder({
       id: 'editorial-movies-new',
       title: '🎬 Nouveaux films',
       emoji: '🎬',
       ids: newMovieIds,
-      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=tv-readable-v4`,
-      hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=approved-hero-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=movies-new&v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=movies-new&v=${EDITORIAL_ART_REVISION}`,
     }),
     folder({
       id: 'editorial-binge-watch-series',
       title: '🍿 Binge Watch · Séries',
       emoji: '🍿',
       ids: bingeIds,
-      art: (base) => `${base}/binge-watch-cover.jpg?v=premium-cinema-v2`,
-      hero: (base) => `${base}/binge-watch-backdrop.jpg?v=premium-cinema-v2`,
+      art: (base) => `${base}/binge-watch-cover.jpg?v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/binge-watch-backdrop.jpg?v=${EDITORIAL_ART_REVISION}`,
     }),
     folder({
       id: 'editorial-cinema-now',
       title: '🎬 Films au cinéma actuellement',
       emoji: '🎬',
       ids: ['editorial-movies-cinema-now'],
-      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=tv-readable-v4`,
-      hero: (base) => `${base}/editorial-backdrop.jpg?key=cinema-now&v=approved-hero-v1`,
+      art: (base) => `${base}/editorial-cover.jpg?key=cinema-now&v=${EDITORIAL_ART_REVISION}`,
+      hero: (base) => `${base}/editorial-backdrop.jpg?key=cinema-now&v=${EDITORIAL_ART_REVISION}`,
     })
   ];
 
   return {
     id: 'calendar-archives-fr-editorial-now',
     title: '🇫🇷 Tendances & Cinéma',
-    backdropImageUrl: origin ? `${origin}/editorial-backdrop.jpg?key=series-top-rated&v=approved-hero-v1` : null,
+    backdropImageUrl: origin ? `${origin}/editorial-backdrop.jpg?key=series-top-rated&v=${EDITORIAL_ART_REVISION}` : null,
     pinToTop: true,
     focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT',
