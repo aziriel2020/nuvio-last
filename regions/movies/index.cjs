@@ -5,11 +5,13 @@ const path = require('node:path');
 const sharp = require('sharp');
 const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
+const catalogPolicy = require('../series/src/catalog-policy.cjs');
 const art = require('./src/artwork.cjs');
 const { decorateMovieMetas } = require('./src/presentation.cjs');
 let cachedStore, cachedPath;
 const imageCache = new Map();
 const GENRE_BACKDROP_DIR = path.resolve(__dirname, '../../assets/movie-backdrops');
+const VISIBLE_GENRES = GENRES.filter(g => g.id !== 'unclassified');
 function reader() {
   const filename = defaultPath();
   if (!fs.existsSync(filename)) return null;
@@ -26,9 +28,9 @@ function buildManifest(origin, now = new Date()) {
   const dates = periods(now), westernDates = periods(now, WESTERN_GENRE);
   return {
     id: ADDON_ID, version: VERSION, name: `Nuvio Films Monde · ${VERSION}`, language: 'fr', types: ['movie'],
-    description: 'Films de tous pays : services streaming, VOD achat/location et sorties cinéma sur le marché français. Par genres et dates depuis 2018, récent → ancien (Western : historique complet). Animation exclue. Disponibilités JustWatch via TMDB.',
+    description: 'Films de tous pays : grandes plateformes streaming, grandes boutiques VOD et cinéma France. Classés par première sortie mondiale ; les rééditions et ressorties ne changent pas leur date. Depuis 2018 (Western : historique complet). Replay uniquement dans Documentaires. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     resources: [{ name: 'catalog', types: ['movie'] }, { name: 'meta', types: ['movie'], idPrefixes: ['tt', 'tmdb:movie:'] }],
-    catalogs: VIEWS.flatMap((view) => GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
+    catalogs: VIEWS.flatMap((view) => VISIBLE_GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
       id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
       pageSize: 100, extraSupported: ['skip', 'search'], extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     })))),
@@ -42,7 +44,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
   return VIEWS.map((view) => ({
     id: `movies-world-${view.id}`, title: `🌍 ${view.name}`, pinToTop: true, focusGlowEnabled: true,
     backdropImageUrl: `${origin}/backdrop.jpg?v=${art.REVISION}`, viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
-    folders: GENRES.map((genre) => {
+    folders: VISIBLE_GENRES.map((genre) => {
       const image = `${origin}/artwork/genre/${genre.id}.webp?v=${art.REVISION}`;
       const backdrop = `${origin}/artwork/backdrop/${genre.id}.jpg?v=${art.REVISION}`;
       const sources = (genre.id === WESTERN_GENRE ? westernDates : dates).map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'movie', catalogId: catalogId(view.id, genre.id, date.key) }));
@@ -91,8 +93,10 @@ async function handler(req, res) {
   if (url.pathname === '/content-card.jpg') return image(res, await art.fallbackCard((url.searchParams.get('title') || 'Film').slice(0, 110), (url.searchParams.get('label') || 'FILMS FRANCE').slice(0, 60)), 'image/jpeg');
   const store = reader();
   if (url.pathname === '/status.json') return send(res, 200, { addonId: ADDON_ID, version: VERSION, genreArtwork: art.progress(),
-    ...(store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', eligible: 0, state: 'index-not-created' }) });
-  if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB', providers: store?.franceProviders() || [] });
+    ...(store ? { ok: true, ...store.stats({ curated: true }) } : { ok: false, market: 'FR', eligible: 0, state: 'index-not-created' }) });
+  if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB',
+    providers: (store?.franceProviders() || []).filter(p => catalogPolicy.isMajorProvider(p.id) || catalogPolicy.isVodProvider(p.id)),
+    catalogPolicy: catalogPolicy.policy(), datePolicy: 'first-release-worldwide' });
   const catalog = url.pathname.match(/^\/catalog\/movie\/([^/]+)(?:\/([^/]+))?\.json$/);
   if (catalog) {
     const descriptor = parseCatalog(decodeURIComponent(catalog[1]));
@@ -101,7 +105,7 @@ async function handler(req, res) {
     const extra = new URLSearchParams(catalog[2] || '');
     try { return send(res, 200, { metas: decorateMovieMetas(origin, store.query({ ...descriptor,
       skip: Number(extra.get('skip') || url.searchParams.get('skip') || 0),
-      search: String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200), now }), descriptor) }); }
+      search: String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200), now, curated: true }), descriptor) }); }
     catch (e) { if (/Invalid/.test(e.message)) return send(res, 400, { metas: [], error: e.message }); throw e; }
   }
   const match = url.pathname.match(/^\/meta\/movie\/([^/]+)\.json$/);
@@ -109,7 +113,7 @@ async function handler(req, res) {
     if (!store) return send(res, 503, { meta: null });
     const requested = decodeURIComponent(match[1]);
     const row = store.row(requested.replace(/^tmdb:movie:/, 'tmdb:'));
-    if (!row || !store.visible(row.id)) return send(res, 404, { meta: null });
+    if (!row || !store.visible(row.id, { curated: true })) return send(res, 404, { meta: null });
     return send(res, 200, { meta: { ...store.meta(row), id: requested } });
   }
   return send(res, 404, { error: 'Route inconnue' });

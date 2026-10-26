@@ -7,6 +7,7 @@ const { ADDON_ID, VERSION, V2_ADDON_ID, V2_VERSION, GENRES, WESTERN_GENRE, perio
 const { SeriesStore, defaultPath } = require('./src/store.cjs');
 const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
 const { decorateSeriesMetas } = require('./src/presentation.cjs');
+const catalogPolicy = require('./src/catalog-policy.cjs');
 
 let cachedStore;
 let cachedPath;
@@ -127,15 +128,21 @@ function releaseForOrigin(origin) {
     ? { id: V2_ADDON_ID, version: V2_VERSION, name: `Nuvio Séries France V2 · ${V2_VERSION}`, prefixes: ['fr'] }
     : { id: ADDON_ID, version: VERSION, name: 'Nuvio Séries Streaming France', prefixes: ['fr', 'world'] };
 }
+function visibleGenres(origin) {
+  return releaseForOrigin(origin).id === V2_ADDON_ID
+    ? GENRES.filter(g => !['unclassified','10763'].includes(g.id)) : GENRES;
+}
 
 function buildManifest(origin, now = new Date()) {
   const dates = periods(now), westernDates = periods(now, WESTERN_GENRE);
   const release = releaseForOrigin(origin);
   return {
     id: release.id, version: release.version, name: release.name,
-    description: 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates depuis 2018 (Western : historique complet). Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
+    description: release.id === V2_ADDON_ID
+      ? 'Grandes plateformes de streaming France, par genres et dates depuis 2018 (Western : historique complet). Émissions et replay uniquement dans Talk-shows, Documentaires et Téléréalité. Animation et anime exclus. Disponibilités JustWatch via TMDB.'
+      : 'Toutes les séries disponibles sur les services de streaming du marché français, par genres et dates depuis 2018 (Western : historique complet). Abonnements, gratuit, publicité, achat/location. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     types: ['series'], language: 'fr', resources: [{ name: 'catalog', types: ['series'] }, { name: 'meta', types: ['series'], idPrefixes: ['tt', 'tmdb:tv:', 'tvmaze:'] }],
-    catalogs: ['premieres', 'seasons'].flatMap((mode) => GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).flatMap((date) => release.prefixes.map((prefix) => ({
+    catalogs: ['premieres', 'seasons'].flatMap((mode) => visibleGenres(origin).flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).flatMap((date) => release.prefixes.map((prefix) => ({
       // Both deployed imports must resolve to a named manifest descriptor.
       // Changing the French-market filter did not invalidate old collections.
       id: catalogId(mode, genre.id, date.key).replace('series-fr-', `series-${prefix}-`), type: 'series',
@@ -164,11 +171,11 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
   const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=${GENRE_COVER_VERSION}`;
   return ['premieres', 'seasons'].map((view) => ({
     id: `series-world-${view}`, title: view === 'premieres'
-      ? (fresh ? '🇫🇷 Séries France V2 · Tous services' : '🇫🇷 Séries en streaming · Tous services')
+      ? (fresh ? '🇫🇷 Séries France V2 · Grandes plateformes' : '🇫🇷 Séries en streaming · Tous services')
       : (fresh ? '🇫🇷 Séries France V2 · Nouvelles saisons' : '🇫🇷 Streaming · Nouvelles saisons'),
     backdropImageUrl: parentArt, pinToTop: true, focusGlowEnabled: true,
     viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
-    folders: GENRES.map((genre) => {
+    folders: visibleGenres(origin).map((genre) => {
       const genreSlugs = { '10759': 'action-adventure', '35': 'comedy', '80': 'crime', '18': 'drama', '9648': 'mystery', '10765': 'scifi-fantasy', '10768': 'war-politics', '37': 'western', '10766': 'soap', '10751': 'family', '10762': 'kids', '99': 'documentary', '10764': 'reality', '10767': 'talk', '10763': 'news', thriller: 'crime', horror: 'mystery', romance: 'drama', history: 'drama', medical: 'drama', legal: 'crime', espionage: 'action-adventure', miniseries: 'drama', unclassified: 'drama', all: 'drama' };
       const slug = genreSlugs[genre.id];
       const renderer = mode === 'desktop' ? 'desktop' : 'shield';
@@ -250,9 +257,11 @@ async function handler(req, res) {
     const release = releaseForOrigin(origin);
     return send(res, 200, { addonId: release.id, version: release.version,
       genreArtwork: { ...genreCoverProgress(), version: GENRE_COVER_VERSION },
-      ...(store ? { ok: true, ...store.stats() } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 }) });
+      ...(store ? { ok: true, ...store.stats({ curated: release.id === V2_ADDON_ID }) } : { ok: false, market: 'FR', state: 'index-not-created', eligible: 0 }) });
   }
-  if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB', providers: store?.franceProviders() || [] });
+  if (url.pathname === '/providers.json') return send(res, 200, { market: 'FR', source: 'JustWatch via TMDB',
+    providers: (store?.franceProviders() || []).filter(p => routeBase !== '/series-v2' || catalogPolicy.isMajorProvider(p.id)),
+    ...(routeBase === '/series-v2' ? { catalogPolicy: catalogPolicy.policy() } : {}) });
   if (url.pathname.startsWith('/catalog/series/')) {
     const match = url.pathname.match(/^\/catalog\/series\/([^/]+)(?:\/([^/]+))?\.json$/);
     if (!match) return send(res, 404, { error: 'Catalogue inconnu' });
@@ -262,7 +271,7 @@ async function handler(req, res) {
     const skip = Number(extra.get('skip') || url.searchParams.get('skip') || 0);
     const search = String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200);
     if (!store) return send(res, 503, { metas: [], error: 'Index en préparation. Consulter /series/status.json.' });
-    try { return send(res, 200, { metas: decorateSeriesMetas(origin, store.query({ ...descriptor, skip, search, now }), descriptor) }); }
+    try { return send(res, 200, { metas: decorateSeriesMetas(origin, store.query({ ...descriptor, skip, search, now, curated: routeBase === '/series-v2' }), descriptor) }); }
     catch (error) { if (/Invalid/.test(error.message)) return send(res, 400, { metas: [], error: error.message }); throw error; }
   }
   const metaMatch = url.pathname.match(/^\/meta\/series\/([^/]+)\.json$/);
@@ -271,7 +280,7 @@ async function handler(req, res) {
     const id = decodeURIComponent(metaMatch[1]);
     const internal = id.replace(/^tmdb:tv:/, 'tmdb:');
     const row = store.row(internal);
-    if (!row || row.classification !== 'eligible' || !store.hasFranceAvailability(row.id)) return send(res, 404, { meta: null });
+    if (!row || row.classification !== 'eligible' || !(routeBase === '/series-v2' ? store.hasCuratedAvailability(row.id) : store.hasFranceAvailability(row.id))) return send(res, 404, { meta: null });
     try { return send(res, 200, { meta: await metaFor(store, row, id) }, 'public, max-age=300'); }
     catch { return send(res, 503, { meta: store.meta(row), error: 'Épisodes temporairement indisponibles' }); }
   }
@@ -279,4 +288,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, reader, metaFor, genreCoverProgress, genreCoverRoute, genreCoverBuffer, approvedCoverPack };
+module.exports._internals = { buildManifest, buildCollections, releaseForOrigin, visibleGenres, reader, metaFor, genreCoverProgress, genreCoverRoute, genreCoverBuffer, approvedCoverPack };

@@ -3,7 +3,7 @@
 const ADDON_ID = 'com.nuvio.series.world.liveaction';
 const VERSION = '1.1.2';
 const V2_ADDON_ID = 'com.nuvio.series.france.liveaction.v2';
-const V2_VERSION = '2.0.1';
+const V2_VERSION = '2.0.2';
 const { offersInFrance } = require('./france.cjs');
 const GENRES = Object.freeze([
   ['all', 'Toutes les séries'],
@@ -54,6 +54,9 @@ function classify({ genres = [], keywords = [], sourceType = '' }) {
 function fromTmdb(data) {
   if (!Number.isSafeInteger(data?.id) || data.id < 1) throw new Error('Invalid TMDB TV ID');
   const genres = (data.genres || []).map((g) => String(g.id));
+  const sourceType = data.type == null ? null : String(data.type);
+  const typeGenre = { Documentary:'99', Reality:'10764', 'Talk Show':'10767', News:'10763' }[sourceType];
+  if (typeGenre) genres.push(typeGenre);
   const keywords = (data.keywords?.results || data.keywords?.keywords || []).map((k) => k.name);
   for (const [id, names] of Object.entries(TOPICS)) if (keywords.some((k) => names.includes(topic(k)))) genres.push(id);
   if (Number(data.type) === 2 || data.type === 'Miniseries') genres.push('miniseries');
@@ -65,7 +68,7 @@ function fromTmdb(data) {
     description: data.overview || null, firstAirDate: isoDate(data.first_air_date),
     poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
     background: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : null,
-    genres: unique(genres), classification: classify({ genres, keywords }),
+    genres: unique(genres), sourceType, classification: classify({ genres, keywords, sourceType: sourceType || '' }),
     franceOffers: data['watch/providers'] !== undefined ? offersInFrance(data) : undefined,
     countries: data.origin_country || [], languages: unique([data.original_language]), status: data.status || null,
     // Series launch dates alone cannot surface returning shows' new episodes.
@@ -89,7 +92,7 @@ function fromTvmaze(data) {
     title: data.name || `Série ${data.id}`, originalTitle: data.name || null,
     description: String(data.summary || '').replace(/<[^>]*>/g, '').trim() || null,
     firstAirDate: isoDate(data.premiered), poster: data.image?.original || data.image?.medium || null,
-    background: null, genres,
+    background: null, genres, sourceType: data.type || null,
     classification: classify({ genres, sourceType: data.type }),
     countries: unique([data.network?.country?.code, data.webChannel?.country?.code]),
     languages: unique([data.language]), status: data.status || null, seasons: []

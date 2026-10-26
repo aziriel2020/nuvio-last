@@ -69,6 +69,27 @@ try {
   const fallback = await get('/movies/content-card.jpg?title=Film%20sans%20photo&label=VOD');
   assert.equal((await sharp(Buffer.from(await fallback.arrayBuffer())).metadata()).width, 1600);
   const status = await (await get('/movies/status.json')).json(); assert.equal(status.eligible, 204); assert(status.genreArtwork.ready);
+  const replay = { results: { FR: { free: [{provider_id:1967,provider_name:'Molotov TV'}] } } };
+  store.upsert(fixture(2001,{title:'Cleanup replay fiction',release_dates:{results:[]},'watch/providers':replay}));
+  store.upsert(fixture(2002,{title:'Cleanup replay documentary',genres:[{id:99}],release_dates:{results:[]},'watch/providers':replay}));
+  const clean = await (await get('/movies/catalog/movie/movies-fr-streaming-all-2026-10/search=Cleanup.json')).json();
+  assert.equal(clean.metas.length,0);
+  const docs = await (await get('/movies/catalog/movie/movies-fr-streaming-99-2026-10/search=Cleanup.json')).json();
+  assert.equal(docs.metas.length,1);assert.equal(docs.metas[0].name,'Cleanup replay documentary');
+  store.upsert(fixture(1980,{title:'Original 1980 reissue 2026',genres:[{id:37}],release_date:'1980-05-01',
+    'watch/providers':{results:{FR:{flatrate:[{provider_id:8,provider_name:'Netflix'}],rent:[{provider_id:10,provider_name:'Amazon Video'}]}}},
+    release_dates:{results:[{iso_3166_1:'FR',release_dates:[{type:3,release_date:'2026-10-24'},{type:4,release_date:'2026-10-24'}]}]}}));
+  for(const view of ['all','streaming','vod','cinema']) {
+    const reissued=await (await get(`/movies/catalog/movie/movies-fr-${view}-37-2026-10/search=Original.json`)).json();
+    assert.equal(reissued.metas.length,0,view+' excludes a 2026 reissue from the 2026 calendar');
+    const original=await (await get(`/movies/catalog/movie/movies-fr-${view}-37-1980/search=Original.json`)).json();
+    assert.equal(original.metas.length,1);assert.equal(original.metas[0].released.slice(0,10),'1980-05-01');
+  }
+  for(const mode of ['', '-desktop']) {
+    const imported=await (await get(`/movies/nuvio-collections${mode}.json`)).json();
+    assert(imported.every(c=>c.folders.every(f=>!f.id.endsWith('-unclassified'))));
+  }
+  assert.equal(status.datePolicy,'first-release-worldwide');
   console.log('Films Monde Oracle HTTP passed: 4 collections, named sources, 205 paginated movies, FR gates, live animation correction, raw detail art and custom 16:9 covers.');
 } finally {
   child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r));

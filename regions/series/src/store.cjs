@@ -5,6 +5,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { GENRES, unique, catalogWindowFor } = require('./model.cjs');
 const { AVAILABILITY_TTL } = require('./france.cjs');
+const policy = require('./catalog-policy.cjs');
 
 const defaultPath = () => process.env.NUVIO_SERIES_DB || '/var/lib/nuvio-series/index.sqlite';
 const json = (value) => JSON.stringify(value);
@@ -175,6 +176,11 @@ class SeriesStore {
     if (!this.hasFranceSchema()) return false;
     return Boolean(this.db.prepare(`SELECT s.id FROM shows s WHERE s.id=? AND ${this.franceClause()}`).get(id));
   }
+  hasCuratedAvailability(id) {
+    if (!this.hasFranceSchema()) return false;
+    return Boolean(this.db.prepare(`SELECT s.id FROM shows s WHERE s.id=? AND s.classification='eligible'
+      AND ${this.franceClause()} AND ${policy.seriesClause()}`).get(id));
+  }
   setFranceOffers(tmdbId, offers) {
     this.transaction(() => {
       this.db.prepare('DELETE FROM fr_offers WHERE tmdb_id=?').run(tmdbId);
@@ -204,13 +210,17 @@ class SeriesStore {
   }
   franceProviders() { return this.hasFranceSchema() ? this.db.prepare('SELECT * FROM fr_providers ORDER BY name').all() : []; }
 
-  query({ mode = 'premieres', genre = 'all', period = 'all', skip = 0, search = '', now = new Date() } = {}) {
+  query({ mode = 'premieres', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false } = {}) {
     if (!GENRES.some((g) => g.id === genre) || !['premieres', 'seasons'].includes(mode)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
     const window = catalogWindowFor(period, genre, now);
     if (!window) return [];
     if (!this.hasFranceSchema()) return [];
+    if (curated && ['unclassified','10763'].includes(genre)) return [];
     const clauses = ["s.classification='eligible'", this.franceClause()];
+    if (curated && !policy.isSpecialistGenre(genre)) {
+      clauses.push(policy.offerClause('streaming'), `NOT ${policy.broadcastClause()}`);
+    }
     const args = [];
     if (genre === 'unclassified') clauses.push("s.genres='[]'");
     else if (genre !== 'all') { clauses.push('EXISTS (SELECT 1 FROM json_each(s.genres) WHERE value=?)'); args.push(genre); }
@@ -238,7 +248,7 @@ class SeriesStore {
       WHERE event_date IS NOT NULL OR (${window.undated ? noDate : window.start ? '0' : 'first_air_date IS NULL'})
       ORDER BY event_date DESC,id ASC LIMIT 100 OFFSET ?`;
       const rows = this.db.prepare(sql).all(...eventArgs, ...premiereArgs, ...args, skip);
-      return rows.map((row) => this.meta(row));
+      return rows.map((row) => this.meta(row, { curated, genre }));
     }
     const date = mode === 'seasons' ? 'v.air_date' : 's.first_air_date';
     if (window.undated) clauses.push(`${date} IS NULL`);
@@ -249,10 +259,10 @@ class SeriesStore {
     const selection = mode === 'seasons' ? 's.*,MAX(v.air_date) AS event_date' : 's.*,s.first_air_date AS event_date';
     const rows = this.db.prepare(`SELECT ${selection} FROM shows s ${joins} WHERE ${clauses.join(' AND ')}
       ${mode === 'seasons' ? 'GROUP BY s.id' : ''} ORDER BY event_date DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
-    return rows.map((row) => this.meta(row));
+    return rows.map((row) => this.meta(row, { curated, genre }));
   }
 
-  meta(row) {
+  meta(row, { curated = false, genre = 'all' } = {}) {
     const sources = this.sources(row.id);
     const imdb = sources.find((s) => s.imdb_id)?.imdb_id;
     const id = imdb || (row.id.startsWith('tmdb:') ? `tmdb:tv:${row.id.split(':')[1]}` : `tvmaze:${row.id.split(':')[1]}`);
@@ -260,7 +270,7 @@ class SeriesStore {
     const recentEpisode = date ? this.db.prepare('SELECT season,episode,name FROM show_airings WHERE show_id=? AND air_date=? ORDER BY season DESC,episode DESC LIMIT 1').get(row.id, date) : null;
     const genreIds = parse(row.genres);
     const tvmaze = sources.find((s) => s.source === 'tvmaze');
-    const offers = this.franceOffers(row.id);
+    const offers = this.franceOffers(row.id).filter(o => !curated || policy.isSpecialistGenre(genre) || policy.allowedOffer(o));
     const providers = [...new Set(offers.map((o) => o.name))];
     return {
       id, type: 'series', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
@@ -296,12 +306,14 @@ class SeriesStore {
     const delay = Math.min(86400000, 60000 * 2 ** Math.min(attempts, 10));
     this.db.prepare('UPDATE jobs SET due=?,attempts=attempts+1,last_error=? WHERE source=? AND source_id=?').run(Date.now() + delay, String(error?.message || error).slice(0, 160), source, id);
   }
-  stats() {
+  stats({ curated = false } = {}) {
     const counts = Object.fromEntries(this.db.prepare('SELECT classification,COUNT(*) AS count FROM shows GROUP BY classification').all().map((r) => [r.classification, r.count]));
     return {
-      market: 'FR', eligible: this.hasFranceSchema() ? this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND ${this.franceClause()}`).get().count : 0,
+      market: 'FR', eligible: this.hasFranceSchema() ? this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND ${this.franceClause()}
+        ${curated ? `AND ${policy.seriesClause()}` : ''}`).get().count : 0,
       animationExcluded: counts.animation || 0, awaitingClassification: counts.review || 0,
-      withoutDate: this.hasFranceSchema() ? this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND s.first_air_date IS NULL AND ${this.franceClause()}`).get().count : 0,
+      withoutDate: this.hasFranceSchema() ? this.db.prepare(`SELECT COUNT(*) AS count FROM shows s WHERE s.classification='eligible' AND s.first_air_date IS NULL AND ${this.franceClause()}
+        ${curated ? `AND ${policy.seriesClause()}` : ''}`).get().count : 0,
       sources: this.db.prepare('SELECT source,COUNT(*) AS count FROM sources GROUP BY source').all(),
       jobs: this.db.prepare('SELECT source,COUNT(*) AS total,SUM(CASE WHEN due<=? THEN 1 ELSE 0 END) AS pending,SUM(CASE WHEN attempts>0 THEN 1 ELSE 0 END) AS failed FROM jobs GROUP BY source').all(Date.now()),
       lastSync: this.state('lastSync'),
@@ -311,7 +323,9 @@ class SeriesStore {
       indexedAirings: this.db.prepare('SELECT COUNT(*) AS total FROM show_airings').get().total,
       franceProviders: this.franceProviders().length,
       franceScan: this.state('frScanProgress'),
-      coverage: 'Séries disponibles sur le marché français, toutes plateformes et offres recensées par JustWatch/TMDB. Animation exclue ; pays de production non filtré.'
+      coverage: curated ? 'Grandes plateformes de streaming France. Émissions et replay uniquement dans Documentaires, Téléréalité et Talk-shows. Animation et anime exclus.'
+        : 'Séries disponibles sur le marché français, toutes plateformes et offres recensées par JustWatch/TMDB. Animation exclue ; pays de production non filtré.',
+      ...(curated ? { catalogPolicy: policy.policy() } : {})
     };
   }
 }
