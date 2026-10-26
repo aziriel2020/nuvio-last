@@ -1,0 +1,219 @@
+{
+  "revision": "editorial-night-b-20261026-v1",
+  "direction": "B — Nuit cinématique",
+  "approved": true,
+  "renderer": "precomposed-jpeg-direct",
+  "exportPolicy": "Extract approved panels, preserve complete composition with contain, no relettering or color changes",
+  "images": {
+    "series-top-rated": {
+      "proposalFile": "exec-dc437f93-cc22-4d80-a9b6-57600d75e434.png",
+      "proposalSha256": "ef4c98cf9ca434e245d7aed420587d7c6c7aba189d33596d0f0045c5c5f5c530",
+      "cover": {
+        "file": "series-top-rated-cover.jpg",
+        "sha256": "221ba58263fa812f05e9d2d972ba7a7825824c3bc386c97f94c231e393527f4d",
+        "bytes": 232555,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "series-top-rated-backdrop.jpg",
+        "sha256": "f7503394f3fa0b9b58192e3acf680d58a428bf9a4efcdd8f8cf227ca91083a10",
+        "bytes": 288113,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    },
+    "series-trendy": {
+      "proposalFile": "exec-d29fcf9d-bb33-470d-ae74-3b0b739753d0.png",
+      "proposalSha256": "6445bdd0511c1b50c887fc8479f25bdade888afc43e1b1e984f6cb7d236fb5ac",
+      "cover": {
+        "file": "series-trendy-cover.jpg",
+        "sha256": "0bf735c5a1e4d1a8c093e32fa734a6adb46b02ca81842dd46504d0b787ed1c9c",
+        "bytes": 261935,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "series-trendy-backdrop.jpg",
+        "sha256": "89f5ef1f63063497c0062f476f09e0293b6ca16dc1146945efe3c66fcd9000b9",
+        "bytes": 366984,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    },
+    "series-new": {
+      "proposalFile": "exec-b22cf20b-febe-4a80-9f02-54f4efc3826f.png",
+      "proposalSha256": "bc97249a3e62608c3975ca09e4eab2f1db1d8b44ff359078004e9da98c11afae",
+      "cover": {
+        "file": "series-new-cover.jpg",
+        "sha256": "d4c4c14a201b0e8dbe24292ec304fe6b9988138365e60ab19aee316a07c08bff",
+        "bytes": 280126,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "series-new-backdrop.jpg",
+        "sha256": "ef8844a12f616fcb11d4315f3620bfe77949ed89bd87faba7beae01e85717b54",
+        "bytes": 374790,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    },
+    "series-returning": {
+      "proposalFile": "exec-32115dc0-5b0d-46f8-94e0-480804f75a0c.png",
+      "proposalSha256": "6797851fe993cba034e6c97a457d5c95742bafa7532c55a143066d84b2c33df1",
+      "cover": {
+        "file": "series-returning-cover.jpg",
+        "sha256": "cd1606e3b574dc089cef734e8fd15294d40b9c184b355e77c5662dd07cb6800e",
+        "bytes": 281100,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "series-returning-backdrop.jpg",
+        "sha256": "dd3191d2eef647d841db774d14e670751636e4ed9bd9ececb090bfc469eaa721",
+        "bytes": 388108,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    },
+    "movies-new": {
+      "proposalFile": "exec-ed571d54-fc37-4fb7-8b83-6f03f8a45a34.png",
+      "proposalSha256": "af05db46ec0aea531c0d97f2f521c6b2d7ff7e2550c5540257cfb8e9c25702d1",
+      "cover": {
+        "file": "movies-new-cover.jpg",
+        "sha256": "0e6d1dcc1f966c1c5cb6edcb7508fc3976e12cda3b8e2d2f2e5b59f69e1abfde",
+        "bytes": 252874,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "movies-new-backdrop.jpg",
+        "sha256": "d7b8c032759425bd7344b5b9b3f78de19aae98f7edc32bb0830baa2800f3af55",
+        "bytes": 330810,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    },
+    "binge-watch": {
+      "proposalFile": "exec-38f5b87a-191f-49ca-a411-9e00b90d2925.png",
+      "proposalSha256": "5a9a667be0400ebf3702d198a580faf245ff3156a349352721053c5c4ff5a527",
+      "cover": {
+        "file": "binge-watch-cover.jpg",
+        "sha256": "828e5270a717b9cc00c8ba3bec6f0da35eaba59aba085befc9723edc159b033a",
+        "bytes": 236525,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "binge-watch-backdrop.jpg",
+        "sha256": "7b311c114d0fb138691c6b89d852b217f1858bf2ab1b6b70db9e5c20ea07b007",
+        "bytes": 295498,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    },
+    "cinema-now": {
+      "proposalFile": "exec-e7baa950-3527-4246-ac5f-8e2b501e5903.png",
+      "proposalSha256": "fa3cfc2e11824e284e5345fab38d45d9d68230e6d0b8eda95cbbc011965bebc0",
+      "cover": {
+        "file": "cinema-now-cover.jpg",
+        "sha256": "d2a13dee8b290dd2740684933380ed083856b713aac7ba25cc5595ceae44f898",
+        "bytes": 281937,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 90,
+          "width": 1128,
+          "height": 580
+        }
+      },
+      "backdrop": {
+        "file": "cinema-now-backdrop.jpg",
+        "sha256": "3ebbd13dbc0eaa04816948b66210e32db12f79c602526bcb1d368fbfd90750e1",
+        "bytes": 393060,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 727,
+          "width": 1128,
+          "height": 578
+        }
+      }
+    }
+  }
+}

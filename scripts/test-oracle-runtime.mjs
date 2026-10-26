@@ -186,6 +186,11 @@ try {
   const visualBytes = new Uint8Array(await visualResponse.arrayBuffer());
   if (visualBytes.byteLength < 1000) throw new Error('Generated collection visual is unexpectedly small');
 
+  execFileSync(process.execPath, ['scripts/verify-editorial-production.mjs'], {
+    env: { ...process.env, PUBLIC_ORIGIN: origin, ARTWORK_EXPECTED_SHA: '' },
+    stdio: 'inherit'
+  });
+
   console.log(JSON.stringify({
     ok: true,
     standardCollections: collectionBody.length,

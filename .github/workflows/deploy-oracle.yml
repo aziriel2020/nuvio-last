@@ -119,6 +119,11 @@ jobs:
           set -Eeuo pipefail
           node scripts/verify-oracle-production.mjs | tee "$RUNNER_TEMP/oracle-production-audit.json.log"
 
+      - name: Verify the seven approved Tendances and Cinema artwork pairs
+        env:
+          ARTWORK_EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/verify-editorial-production.mjs
+
       - name: Verify movie and series JPEG thumbnails on Oracle
         shell: bash
         run: |
