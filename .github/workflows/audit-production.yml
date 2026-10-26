@@ -32,3 +32,5 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Verify Oracle production
         run: node scripts/verify-oracle-production.mjs
+      - name: Verify approved France streaming-service artwork
+        run: node scripts/verify-fr-service-production.mjs

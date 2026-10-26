@@ -694,13 +694,20 @@ test('Shield import uses dedicated cinematic raster covers while preserving TV t
     assert(collection);
     const generatedBackdrop = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/;
     assert(/\/platform-backdrop\.jpg\?provider=/.test(collection.backdropImageUrl)
+      || /\/fr\/service-backdrop\.jpg\?key=/.test(collection.backdropImageUrl)
       || generatedBackdrop.test(collection.backdropImageUrl), 'approved collection hero missing');
     for (const folder of collection.folders) {
       assert.equal(folder.hideTitle, true);
       assert.equal(folder.focusGifEnabled, false);
       assert.equal(folder.focusGifUrl, null);
       const generatedCard = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-shield\.jpg\?v=/;
-      if (generatedCard.test(folder.coverImageUrl)) {
+      if (new URL(folder.coverImageUrl).pathname === '/fr/service-cover.jpg') {
+        const card = new URL(folder.coverImageUrl);
+        assert.equal(card.searchParams.get('key'), 'netflix');
+        assert(['series','films'].includes(card.searchParams.get('category')));
+        assert.equal(card.searchParams.get('v'), 'fr-services-iconic-b-20261026-v1');
+        assert.match(folder.heroBackdropUrl, /\/fr\/service-backdrop\.jpg\?key=netflix&v=fr-services-iconic-b-20261026-v1$/);
+      } else if (generatedCard.test(folder.coverImageUrl)) {
         assert.match(folder.heroBackdropUrl, /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-hero\.jpg\?v=|\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/);
       } else {
         assert.match(folder.coverImageUrl, /\/shield-folder-card\.jpg\?provider=/);
@@ -761,6 +768,10 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
       const coverUrl = new URL(folder.coverImageUrl);
       if (coverUrl.pathname.endsWith('/desktop-folder-card.jpg')) {
         assert(coverUrl.searchParams.get('provider'));
+      } else if (coverUrl.pathname === '/fr/service-cover.jpg') {
+        assert.equal(coverUrl.searchParams.get('key'), 'netflix');
+        assert(['series','films'].includes(coverUrl.searchParams.get('category')));
+        assert.equal(coverUrl.searchParams.get('v'), 'fr-services-iconic-b-20261026-v1');
       } else {
         assert.match(coverUrl.pathname, /^\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/);
         assert.match(coverUrl.searchParams.get('v') || '', /^generated-/);
@@ -772,7 +783,7 @@ test('desktop import uses dedicated cinematic raster covers with native folder t
   const frCover = new URL(frNetflix.folders[0].coverImageUrl);
   const globalCover = new URL(globalVod.folders[0].coverImageUrl);
   const usCover = new URL(usNetflix.folders[0].coverImageUrl);
-  assert(['/fr/desktop-folder-card.jpg', '/static/assets/generated-covers/fr/netflix/series-desktop.jpg'].includes(frCover.pathname));
+  assert(['/fr/service-cover.jpg', '/fr/desktop-folder-card.jpg', '/static/assets/generated-covers/fr/netflix/series-desktop.jpg'].includes(frCover.pathname));
   assert(['/global/desktop-folder-card.jpg', '/static/assets/generated-covers/global/vod-global/movie-desktop.jpg'].includes(globalCover.pathname));
   assert(['/us/desktop-folder-card.jpg', '/static/assets/generated-covers/us/netflix/series-desktop.jpg'].includes(usCover.pathname));
   if (frCover.pathname === '/fr/desktop-folder-card.jpg') assert.equal(frCover.searchParams.get('provider'), 'netflix');
@@ -840,9 +851,11 @@ test('desktop import also replaces folder and collection backdrops with clean JP
   for (const collection of targets) {
     assert(collection);
     assert(/\/platform-backdrop\.jpg\?provider=/.test(collection.backdropImageUrl)
+      || /\/fr\/service-backdrop\.jpg\?key=/.test(collection.backdropImageUrl)
       || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/.test(collection.backdropImageUrl));
     for (const folder of collection.folders) {
       assert(/\/platform-backdrop\.jpg\?provider=/.test(folder.heroBackdropUrl)
+        || /\/fr\/service-backdrop\.jpg\?key=/.test(folder.heroBackdropUrl)
         || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-hero\.jpg\?v=/.test(folder.heroBackdropUrl)
         || /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/hero\.jpg\?v=/.test(folder.heroBackdropUrl));
       assert.equal(folder.titleLogoUrl, null);
@@ -863,8 +876,9 @@ test('desktop cinematic import points platform and genre folders to dedicated 16
     assert(collection);
     for (const folder of collection.folders) {
       const generated = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg\?v=/;
-      assert(/\/desktop-folder-card\.jpg\?provider=/.test(folder.coverImageUrl) || generated.test(folder.coverImageUrl));
-      if (!generated.test(folder.coverImageUrl)) assert.match(folder.coverImageUrl, /[?&]type=(movie|series)/);
+      const approved = /\/fr\/service-cover\.jpg\?key=netflix&category=(series|films)&v=fr-services-iconic-b-20261026-v1$/.test(folder.coverImageUrl);
+      assert(approved || /\/desktop-folder-card\.jpg\?provider=/.test(folder.coverImageUrl) || generated.test(folder.coverImageUrl));
+      if (!approved && !generated.test(folder.coverImageUrl)) assert.match(folder.coverImageUrl, /[?&]type=(movie|series)/);
       assert.equal(folder.hideTitle, false);
     }
   }
@@ -924,7 +938,11 @@ test('desktop cinematic URLs carry visible title, subtitle and provider labels',
   for (const folder of [frFolder, globalFolder]) {
     const url = new URL(folder.coverImageUrl);
     const generated = /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/;
-    if (generated.test(url.pathname)) {
+    if (url.pathname === '/fr/service-cover.jpg') {
+      assert.equal(url.searchParams.get('key'), 'netflix');
+      assert.equal(url.searchParams.get('category'), 'series');
+      assert.equal(url.searchParams.get('v'), 'fr-services-iconic-b-20261026-v1');
+    } else if (generated.test(url.pathname)) {
       assert.match(url.searchParams.get('v') || '', /^generated-/);
     } else {
       assert.equal(url.pathname.endsWith('/desktop-folder-card.jpg'), true);
@@ -1044,6 +1062,10 @@ test('desktop12 Shield JPEG import uses adaptive cinematic routes with labels', 
     assert.equal(url.searchParams.get('v'), 'desktop14-safe-badges');
     assert.equal(url.searchParams.get('title'), 'Séries');
     assert.match(url.searchParams.get('label') || '', /Netflix/);
+  } else if (url.pathname === '/fr/service-cover.jpg') {
+    assert.equal(url.searchParams.get('key'), 'netflix');
+    assert.equal(url.searchParams.get('category'), 'series');
+    assert.equal(url.searchParams.get('v'), 'fr-services-iconic-b-20261026-v1');
   } else {
     assert.equal(url.pathname, '/static/assets/generated-covers/fr/netflix/series-desktop.jpg');
     assert.match(url.searchParams.get('v') || '', /^generated-/);

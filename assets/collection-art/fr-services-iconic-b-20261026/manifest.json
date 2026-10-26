@@ -1,0 +1,572 @@
+{
+  "revision": "fr-services-iconic-b-20261026-v1",
+  "direction": "B — Nuit cinématique",
+  "approved": true,
+  "approval": "Excellent go",
+  "renderer": "precomposed-jpeg-direct",
+  "exportPolicy": "Extract approved panels; contain complete composition; no regeneration, relettering, recoloring or artwork crop",
+  "pendingProviders": [
+    "disney-plus"
+  ],
+  "images": {
+    "netflix": {
+      "title": "NETFLIX",
+      "proposalFile": "exec-06a42427-efa9-42c6-9323-ddcfb2b45836.png",
+      "proposalSha256": "4ae0c7cb7586f7d449d61240445aace984359f216c10f4b8493aae7a30518978",
+      "series": {
+        "file": "netflix-series.jpg",
+        "sha256": "d35d2c4741b8a7a5642c29395f5da97f8bc78dc3f986f5624e6504edbc9846fe",
+        "bytes": 236437,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 74,
+          "width": 979,
+          "height": 461
+        }
+      },
+      "films": {
+        "file": "netflix-films.jpg",
+        "sha256": "428d56a75c7a86200fec30f856f41b2610bbd777bfefbafebf5ce8c5a5295e8d",
+        "bytes": 227718,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 578,
+          "width": 979,
+          "height": 462
+        }
+      },
+      "backdrop": {
+        "file": "netflix-backdrop.jpg",
+        "sha256": "18df9ea715fe0f45bc41d7cd65520aa9458decbbb4bebbd9cd0c84dbd35829fd",
+        "bytes": 306622,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 24,
+          "top": 1077,
+          "width": 979,
+          "height": 440
+        }
+      }
+    },
+    "prime-video": {
+      "title": "PRIME VIDEO",
+      "proposalFile": "exec-2ab82796-4c4a-4ad5-b207-39cac595096e.png",
+      "proposalSha256": "881ef85fc468478156c211cd41a96123081259acece2022b1b1f93b17b12acce",
+      "series": {
+        "file": "prime-video-series.jpg",
+        "sha256": "ff4be91c4bf6c15befda5c41d37c19f9a86fdbff9a9363f4596fad889d16766a",
+        "bytes": 294973,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 61,
+          "width": 980,
+          "height": 502
+        }
+      },
+      "films": {
+        "file": "prime-video-films.jpg",
+        "sha256": "6a58765544fd3911ace1e8c056c7a83cad2f3047f3092514fc544fa3cc454f58",
+        "bytes": 293128,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 593,
+          "width": 980,
+          "height": 496
+        }
+      },
+      "backdrop": {
+        "file": "prime-video-backdrop.jpg",
+        "sha256": "0e8e4e57c458a8680785258f6cd0727644c316ad83166da23c2fc6b3f8db567f",
+        "bytes": 336543,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 23,
+          "top": 1123,
+          "width": 980,
+          "height": 399
+        }
+      }
+    },
+    "hbo-max": {
+      "title": "HBO MAX",
+      "proposalFile": "exec-50da3c19-b5d4-41a0-ad3c-196e240b6360.png",
+      "proposalSha256": "e1520ccade55dbc0469d284ba5ffdee3f6e5e82343255108560c52915c5e9933",
+      "series": {
+        "file": "hbo-max-series.jpg",
+        "sha256": "52d1d2e417a8da547933e385ed052ab8c5df127a6a4644921f0a200edeaa6d46",
+        "bytes": 259031,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 74,
+          "width": 978,
+          "height": 478
+        }
+      },
+      "films": {
+        "file": "hbo-max-films.jpg",
+        "sha256": "bd668e5058d36f99b6418088a44ea502b5c8e3ce501e929957e1e4e35a64ebbe",
+        "bytes": 252760,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 592,
+          "width": 978,
+          "height": 477
+        }
+      },
+      "backdrop": {
+        "file": "hbo-max-backdrop.jpg",
+        "sha256": "02d2cc6975e117980c29b73e483770f74d710809a869b8b3c1e02c2827e97561",
+        "bytes": 290576,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 24,
+          "top": 1109,
+          "width": 978,
+          "height": 408
+        }
+      }
+    },
+    "apple-tv-plus": {
+      "title": "APPLE TV+",
+      "proposalFile": "exec-2f43564c-8437-454c-9bc6-910421d65be8.png",
+      "proposalSha256": "ebc0f1b0ac53d559371029b9b5efa1e6bd0ca0a731429b6719cd0190ad218523",
+      "series": {
+        "file": "apple-tv-plus-series.jpg",
+        "sha256": "cc1900abbdfcf15339c4f3aaf3b78c1156eafcc858b5c35fabf74164bd849a28",
+        "bytes": 247185,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 22,
+          "top": 66,
+          "width": 982,
+          "height": 460
+        }
+      },
+      "films": {
+        "file": "apple-tv-plus-films.jpg",
+        "sha256": "6d9b45bbd0722c380a285ed801cb6edde6051bc24bd7ccefa66bd99eac046885",
+        "bytes": 246365,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 22,
+          "top": 561,
+          "width": 982,
+          "height": 460
+        }
+      },
+      "backdrop": {
+        "file": "apple-tv-plus-backdrop.jpg",
+        "sha256": "7e9d42db7760e7baa7defc942e2e0cc8228ccf4fbf302aab6b4d39a1df789811",
+        "bytes": 324651,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 22,
+          "top": 1055,
+          "width": 982,
+          "height": 460
+        }
+      }
+    },
+    "canal-plus": {
+      "title": "CANAL+",
+      "proposalFile": "exec-31d7054b-d0ec-4309-bf5a-53e0100937eb.png",
+      "proposalSha256": "9b02d827ce4272391eb616ad33b56a6f46bcf9732f90445a94c85d65438d3cc8",
+      "series": {
+        "file": "canal-plus-series.jpg",
+        "sha256": "1a514bda3467a20ad1f1dcd8eaf44886cd07a5f11114625fd9e381a42616a2db",
+        "bytes": 259544,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 22,
+          "top": 70,
+          "width": 925,
+          "height": 496
+        }
+      },
+      "films": {
+        "file": "canal-plus-films.jpg",
+        "sha256": "4a159281d4da28480427b5b7bdf5d4736fedaf647d724bced8ed550c6e71b4fb",
+        "bytes": 254017,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 22,
+          "top": 604,
+          "width": 925,
+          "height": 497
+        }
+      },
+      "backdrop": {
+        "file": "canal-plus-backdrop.jpg",
+        "sha256": "facb316214f2569116507ba6daeb17fcbdfdeec6d12739038d4289eaeaec9e6d",
+        "bytes": 336510,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 22,
+          "top": 1138,
+          "width": 925,
+          "height": 474
+        }
+      }
+    },
+    "paramount-plus": {
+      "title": "PARAMOUNT+",
+      "proposalFile": "exec-ba6b40ed-1780-424e-8df1-e914b5b72a6a.png",
+      "proposalSha256": "0060f2a0780d01b2afa35f6db8b4ef6d7b444f6a1d8088c9f5176c726caf22c0",
+      "series": {
+        "file": "paramount-plus-series.jpg",
+        "sha256": "4eaa88a6e10d86c89c01a04caf96f09e994c54cae3438d04168f1239395dc758",
+        "bytes": 246412,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 25,
+          "top": 69,
+          "width": 975,
+          "height": 460
+        }
+      },
+      "films": {
+        "file": "paramount-plus-films.jpg",
+        "sha256": "87c2893751fbab8c6e04fd6677bbd22ceffef9f53b324279cebd0264258fcfd5",
+        "bytes": 243734,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 25,
+          "top": 567,
+          "width": 975,
+          "height": 460
+        }
+      },
+      "backdrop": {
+        "file": "paramount-plus-backdrop.jpg",
+        "sha256": "fc89cdbb525a41a86b2dc1baec92d125e88b2ecb853addd51da53f591e8ad438",
+        "bytes": 326215,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 25,
+          "top": 1068,
+          "width": 975,
+          "height": 460
+        }
+      }
+    },
+    "france-tv": {
+      "title": "FRANCE.TV",
+      "proposalFile": "exec-826687eb-119b-4916-bcff-dedc2878c03c.png",
+      "proposalSha256": "8f911593944b2a86bfeddd9c03add6e3d2e2ad109314d3cf6648c10916802015",
+      "series": {
+        "file": "france-tv-series.jpg",
+        "sha256": "3d0b1ae53ba9e35694b38816157dff158c99419281b274f04d874005bbd5dc9d",
+        "bytes": 258276,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 72,
+          "width": 982,
+          "height": 463
+        }
+      },
+      "films": {
+        "file": "france-tv-films.jpg",
+        "sha256": "08725fbc86f427e98a7bcfdc3cdf6d6287958ef234f44435805f49446ba4e4d7",
+        "bytes": 256000,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 573,
+          "width": 982,
+          "height": 464
+        }
+      },
+      "backdrop": {
+        "file": "france-tv-backdrop.jpg",
+        "sha256": "c2c7fcf08be0383131b2f7f5e3089aded356e22034c29c67ea207723a689e314",
+        "bytes": 333712,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 23,
+          "top": 1074,
+          "width": 982,
+          "height": 444
+        }
+      }
+    },
+    "tf1-plus": {
+      "title": "TF1+",
+      "proposalFile": "exec-59f9c2ae-ebab-481d-9b65-5324ed4442b5.png",
+      "proposalSha256": "e782434820258c392937627ee318684bd5cf27950ac32886bb311c26d92fb7e5",
+      "series": {
+        "file": "tf1-plus-series.jpg",
+        "sha256": "afc82e1a3dfb62c868f339f9e3f35db78d7dec6acf2d3ec2f3af7cea3556a2ec",
+        "bytes": 295450,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 68,
+          "width": 979,
+          "height": 486
+        }
+      },
+      "films": {
+        "file": "tf1-plus-films.jpg",
+        "sha256": "edfc779da16f3f0847d27ca25ce048bdad4418004be63fdaeeee5841ada6046d",
+        "bytes": 292199,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 588,
+          "width": 979,
+          "height": 484
+        }
+      },
+      "backdrop": {
+        "file": "tf1-plus-backdrop.jpg",
+        "sha256": "58ac87678bf1235b8c9be56d0aa274de702ae2c29f4d77d2547b604916488867",
+        "bytes": 342089,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 23,
+          "top": 1103,
+          "width": 979,
+          "height": 418
+        }
+      }
+    },
+    "m6-plus": {
+      "title": "M6+",
+      "proposalFile": "exec-1fae6561-0490-47af-8eca-aac462544431.png",
+      "proposalSha256": "080aa7074c93b565320af62bdb0e72eca5977a71ab429a7c1912f699b0d9314b",
+      "series": {
+        "file": "m6-plus-series.jpg",
+        "sha256": "ec9782c050e11ec01c8d5947d57a85bc6e69670ff22601b663cf25d45898af9e",
+        "bytes": 265325,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 67,
+          "width": 979,
+          "height": 466
+        }
+      },
+      "films": {
+        "file": "m6-plus-films.jpg",
+        "sha256": "5f4e5c1e837539b477789794051a154ce699b5a5f857f138329a0da6f1782084",
+        "bytes": 264703,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 575,
+          "width": 979,
+          "height": 467
+        }
+      },
+      "backdrop": {
+        "file": "m6-plus-backdrop.jpg",
+        "sha256": "be170e8379b963f18225c50621db6ba19efa0a256c91496b4080fb891c9cd752",
+        "bytes": 343439,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 23,
+          "top": 1076,
+          "width": 979,
+          "height": 439
+        }
+      }
+    },
+    "arte": {
+      "title": "ARTE",
+      "proposalFile": "exec-6e282dce-305a-403c-a11f-dabd59204492.png",
+      "proposalSha256": "31d1850d3e63ab244da1a247ae08d6e8d5f207ed5a17a61ecf6a37841aee9e47",
+      "series": {
+        "file": "arte-series.jpg",
+        "sha256": "2f4b375f9f363f7054792ea6a9b852f7a4caf6fe0b219a873603a06813e1e563",
+        "bytes": 221879,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 71,
+          "width": 979,
+          "height": 467
+        }
+      },
+      "films": {
+        "file": "arte-films.jpg",
+        "sha256": "5e006dae4470a34475d4fe941580a6f42122fc96fd12a57fde6e6642efa2f7cd",
+        "bytes": 220940,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 581,
+          "width": 979,
+          "height": 469
+        }
+      },
+      "backdrop": {
+        "file": "arte-backdrop.jpg",
+        "sha256": "1620dad99e63baa5f7546f803635d9fb1215373e5fc7fd4812b56b93ef03885c",
+        "bytes": 264439,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 24,
+          "top": 1093,
+          "width": 979,
+          "height": 417
+        }
+      }
+    },
+    "crunchyroll": {
+      "title": "CRUNCHYROLL",
+      "proposalFile": "exec-f107178f-7a37-45e5-bc00-3e177238f3b8.png",
+      "proposalSha256": "ee7b04999613d102e2ea00d9e4b4f14a99a2a8f618951ec3ef49d03008b2d7d5",
+      "series": {
+        "file": "crunchyroll-series.jpg",
+        "sha256": "1e08470838f975f4289827c0fb76a5b50bc396f2a1376e4e9b4aa309152a2994",
+        "bytes": 319007,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 69,
+          "width": 980,
+          "height": 462
+        }
+      },
+      "films": {
+        "file": "crunchyroll-films.jpg",
+        "sha256": "ccbeaf2be1d66b7ee5de04ce955417de9cc191c18099e4998fae77adcaee79ee",
+        "bytes": 308875,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 23,
+          "top": 576,
+          "width": 980,
+          "height": 463
+        }
+      },
+      "backdrop": {
+        "file": "crunchyroll-backdrop.jpg",
+        "sha256": "5dd7e2b859a49d2319d6cf7fa37aab6af3816e849dc93a3c04979b478bc712b3",
+        "bytes": 420223,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 23,
+          "top": 1082,
+          "width": 980,
+          "height": 436
+        }
+      }
+    },
+    "adn": {
+      "title": "ADN",
+      "proposalFile": "exec-1f4b9508-0752-4c20-bd84-a2350cf33c34.png",
+      "proposalSha256": "ed5a2b58efc5c70beac263180c6b1538eec89b704e8f473279c66f653fd0d95e",
+      "series": {
+        "file": "adn-series.jpg",
+        "sha256": "37b6127ec72b7fd0b8417bb9caf9e2ced87b0ce41843299c93022476815edb90",
+        "bytes": 287163,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 69,
+          "width": 978,
+          "height": 468
+        }
+      },
+      "films": {
+        "file": "adn-films.jpg",
+        "sha256": "2b35d5687bff471bf475a04f9ef944fad6f4c7972dc97488e09f6f7dfb31f053",
+        "bytes": 282569,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 24,
+          "top": 579,
+          "width": 978,
+          "height": 470
+        }
+      },
+      "backdrop": {
+        "file": "adn-backdrop.jpg",
+        "sha256": "7996f7c0d8c607b505cc1c16de17ff69582867778f1fe69a3dab29223a9d1ec9",
+        "bytes": 360554,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 24,
+          "top": 1093,
+          "width": 978,
+          "height": 428
+        }
+      }
+    },
+    "vod-fr": {
+      "title": "VOD FRANCE",
+      "proposalFile": "exec-938e714c-e533-4782-b157-21a6b110eeeb.png",
+      "proposalSha256": "1bbb2d7f368e6132d04cdb3138394e8b0777639132c628d9acc87bf8426d4b0c",
+      "films": {
+        "file": "vod-fr-films.jpg",
+        "sha256": "e01caaece1678fad1ca7ee3884ae38e0c20aa34d430b6a168ff2d2c39fb181ab",
+        "bytes": 277941,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 28,
+          "top": 85,
+          "width": 1129,
+          "height": 589
+        }
+      },
+      "backdrop": {
+        "file": "vod-fr-backdrop.jpg",
+        "sha256": "4025d9deabaa019cc3885eda975c7096fe9f0aad40cce9e53a27aac96ab89833",
+        "bytes": 383558,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 28,
+          "top": 723,
+          "width": 1129,
+          "height": 587
+        }
+      }
+    }
+  }
+}

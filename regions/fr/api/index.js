@@ -66,6 +66,8 @@ const GENRE_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/genre-a
 const COLLECTION_CINEMATIC_ART_DIR = path.resolve(__dirname, '../../../assets/collection-art');
 const EDITORIAL_ART = require('./editorial-art.cjs');
 const EDITORIAL_ART_REVISION = EDITORIAL_ART.manifest.revision;
+const SERVICE_ART = require('./service-art.cjs');
+const SERVICE_ART_REVISION = SERVICE_ART.manifest.revision;
 const LOCAL_VISUAL_DATA_CACHE = new Map();
 function localVisualDataUri(absolutePath, mime = 'image/jpeg') {
   const key = `${mime}:${absolutePath}`;
@@ -133,6 +135,22 @@ function serveEditorialCoverJpeg(res, url) {
 
 function serveEditorialBackdropJpeg(res, url) {
   return serveApprovedEditorialJpeg(res, String(url.searchParams.get('key') || '').trim(), 'backdrop');
+}
+
+function serveApprovedServiceJpeg(res, url, backdrop = false) {
+  const key = String(url.searchParams.get('key') || '').trim();
+  const variant = backdrop ? 'backdrop' : String(url.searchParams.get('category') || '');
+  try {
+    const art = SERVICE_ART.artwork(key, variant);
+    res.setHeader('X-Nuvio-Service-Art', key + ':' + variant);
+    res.setHeader('X-Nuvio-Service-Style', SERVICE_ART_REVISION);
+    res.setHeader('X-Nuvio-Service-Source-SHA256', art.sourceSha256);
+    res.setHeader('X-Nuvio-Service-Render', art.cacheHit ? 'memory' : 'file');
+    return sendDesktopCinematicJpeg(res, art.data, art.width + 'x' + art.height);
+  } catch (_) {
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
 }
 
 
@@ -1277,7 +1295,9 @@ function platformImageUrls(origin, providerSlug, categoryType = 'movie') {
   if (!origin) return { backdrop: null, logo: null };
   const type = categoryType === 'series' ? 'series' : 'movie';
   return {
-    backdrop: `${origin}/platform-backdrop.svg?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`,
+    backdrop: SERVICE_ART.has(providerSlug)
+      ? `${origin}/service-backdrop.jpg?key=${encodeURIComponent(providerSlug)}&v=${SERVICE_ART_REVISION}`
+      : `${origin}/platform-backdrop.svg?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`,
     logo: `${origin}/platform-logo?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`
   };
 }
@@ -1302,7 +1322,9 @@ function buildPlatformCollection(definition, entries, origin = null) {
     return {
       id: `archives-fr-${provider.slug}-${category.key}`,
       title: category.title,
-      coverImageUrl: origin ? `${origin}/platform-category-card.svg?provider=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${VISUAL_REV}&asset=2` : null,
+      coverImageUrl: origin ? (SERVICE_ART.has(provider.slug)
+        ? `${origin}/service-cover.jpg?key=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${SERVICE_ART_REVISION}`
+        : `${origin}/platform-category-card.svg?provider=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${VISUAL_REV}&asset=2`) : null,
       focusGifEnabled: false,
       coverEmoji: category.type === 'movie' ? '🎬' : '📺',
       tileShape: 'LANDSCAPE',
@@ -5691,6 +5713,8 @@ module.exports = async function handler(req, res) {
     if (path === '/calendar-transparent-logo.svg') return svg(res, '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="16" viewBox="0 0 64 16"><rect width="64" height="16" fill="none"/></svg>', 'public, max-age=31536000, immutable');
     if (path === '/archive-year-card.svg') return svg(res, archiveYearCardSvg(url.searchParams.get('year'), url.searchParams.get('category')), 'public, max-age=86400, s-maxage=86400');
     if (path === '/platform-logo') return await handlePlatformLogo(res, url);
+    if (path === '/service-cover.jpg') return serveApprovedServiceJpeg(res, url);
+    if (path === '/service-backdrop.jpg') return serveApprovedServiceJpeg(res, url, true);
     if (path === '/platform-backdrop.svg') return await handlePlatformBackdrop(res, url);
     if (path === '/desktop-folder-card.jpg') return await handleDesktopFolderCard(res, url);
     if (path === '/desktop-content-card.jpg') return await handleDesktopContentCard(res, url);
