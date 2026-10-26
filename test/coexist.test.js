@@ -302,7 +302,7 @@ test('static editorial Shield covers are real JPEG assets and stay untouched by 
 
 
 
-test('the seven editorial hero titles are plain text, never a poster or logo', async () => {
+test('the seven editorial hero titles remain visible with hidden Shield tile captions', async () => {
   const endpoints = [
     '/nuvio-collections-shield.json',
     '/nuvio-collections-desktop.json',
@@ -322,7 +322,11 @@ test('the seven editorial hero titles are plain text, never a poster or logo', a
     for (const id of ids) {
       const folder = editorial.folders.find(f => f.id === id);
       assert(folder, endpoint + ': missing ' + id);
-      assert.equal(folder.titleLogoUrl, null, endpoint + ': image replacing left text title');
+      if (folder.hideTitle) {
+        const titleUrl=new URL(folder.titleLogoUrl);
+        assert.equal(titleUrl.pathname,'/collection-title.svg');
+        assert.equal(titleUrl.searchParams.get('title'),folder.title.replace(/^[^\p{L}\p{N}]+/u,''));
+      } else assert.equal(folder.titleLogoUrl,null);
       assert.equal(typeof folder.title, 'string', endpoint + ': native text title missing');
       assert(folder.title.trim().length > 3, endpoint + ': empty native title');
       if (id === 'editorial-binge-watch-series') {
@@ -336,6 +340,29 @@ test('the seven editorial hero titles are plain text, never a poster or logo', a
       }
     }
   }
+});
+
+test('every collection import supplies a visible hero without changing the Netflix wordmark',async()=>{
+  for(const route of ['/nuvio-collections-shield.json','/nuvio-collections-desktop.json',
+    '/fr/nuvio-collections.json','/global/nuvio-collections.json','/tr/nuvio-collections.json','/us/nuvio-collections.json',
+    '/series/nuvio-collections.json','/series-v2/nuvio-collections.json','/movies/nuvio-collections.json']) {
+    const response=await call(route);assert.equal(response.statusCode,200,route);
+    const collections=JSON.parse(response.text);
+    for(const collection of collections)for(const folder of collection.folders) {
+      // This is Nuvio TV's actual hero predicate: hideTitle also blanks the
+      // native hero title, so a hidden caption requires a separate wordmark.
+      assert((!folder.hideTitle && folder.title.trim()) || folder.titleLogoUrl?.trim(),`${route}: ${collection.title} / ${folder.title}`);
+    }
+    const netflix=collections.find(c=>c.id==='calendar-archives-fr-netflix');
+    if(netflix && !route.includes('desktop'))for(const folder of netflix.folders)assert.match(folder.titleLogoUrl,/\/fr\/platform-logo\?provider=netflix/);
+  }
+  const response=await call('/collection-title.svg?title=Stand-up&label=Films%20Monde');
+  assert.equal(response.statusCode,200);assert.match(response.headers['content-type'],/^image\/svg\+xml/);
+  assert.match(response.text,/<title>Stand-up<\/title>/);assert(!response.text.includes('<image'));
+  const info=await sharp(response.body).metadata();assert.equal(info.width,1000);assert.equal(info.height,240);assert(info.hasAlpha);
+  const escaped=await call('/collection-title.svg?title=%3Cscript%3E%26%22%27');
+  assert(!escaped.text.includes('<script>'));assert.match(escaped.text,/&lt;script&gt;&amp;&quot;&apos;/);
+  assert.equal((await call('/collection-title.svg')).statusCode,400);
 });
 
 test('Nouvelles séries and Nouveaux films always use their own source, cover and hero in Shield/Desktop', async () => {
@@ -519,7 +546,8 @@ test('all hosted visual URLs stay inside the correct regional/global route prefi
     for (const folder of collection.folders) {
       assert(isOwnAsset(folder.coverImageUrl), 'wrong-region folder cover');
       assert(isOwnAsset(folder.heroBackdropUrl), 'wrong-region folder backdrop');
-      if (folder.titleLogoUrl != null) assert(isOwnAsset(folder.titleLogoUrl));
+      if (folder.titleLogoUrl != null) assert(isOwnAsset(folder.titleLogoUrl)
+        || new URL(folder.titleLogoUrl).origin==='https://coexist.example' && new URL(folder.titleLogoUrl).pathname==='/collection-title.svg');
     }
   }
 });

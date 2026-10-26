@@ -1,5 +1,7 @@
 'use strict';
 
+const { withHeroTitles } = require('../../../runtime/collection-titles.cjs');
+
 const {
   DEFAULT_TIMEZONE,
   DEFAULT_COUNTRY,
@@ -1383,8 +1385,8 @@ function buildEditorialCollection(origin = null) {
       hideTitle: true,
       heroBackdropUrl: origin ? hero(origin) : null,
       heroVideoUrl: null,
-      // Let Nuvio render folder.title as native text on the left of the hero.
-      // The six approved cover JPEGs and title visibility on tiles stay untouched.
+      // The import supplies a transparent hero wordmark when tile captions are hidden.
+      // Keep the approved cover and background independent of that title.
       titleLogoUrl: null,
       sources: sourceEntries.map(editorialAddonSource),
       catalogSources: sourceEntries.map(editorialLegacySource)
@@ -1471,7 +1473,7 @@ function buildEditorialCollection(origin = null) {
 
 function buildNuvioCollectionsImport(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
   const entries = [...buildArchiveCatalogEntries(now, timeZone), ...buildGenreCatalogEntries(now, timeZone)];
-  return [buildEditorialCollection(origin), ...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), ...buildGenreCollections(entries, origin)];
+  return withHeroTitles([buildEditorialCollection(origin), ...PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), ...buildGenreCollections(entries, origin)], origin);
 }
 
 function buildArchiveBlueprint(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
