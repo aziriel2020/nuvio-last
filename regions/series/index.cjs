@@ -1,5 +1,7 @@
 'use strict';
 
+const { withHeroTitles } = require('../../runtime/collection-titles.cjs');
+
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
@@ -169,7 +171,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
   const premiumCoversReady = genreCoverProgress().ready;
   const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=${GENRE_COVER_VERSION}`;
   const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=${GENRE_COVER_VERSION}`;
-  return ['premieres', 'seasons'].map((view) => ({
+  return withHeroTitles(['premieres', 'seasons'].map((view) => ({
     id: `series-world-${view}`, title: view === 'premieres'
       ? (fresh ? '🇫🇷 Séries France V2 · Grandes plateformes' : '🇫🇷 Séries en streaming · Tous services')
       : (fresh ? '🇫🇷 Séries France V2 · Nouvelles saisons' : '🇫🇷 Streaming · Nouvelles saisons'),
@@ -191,7 +193,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
       };
     })
-  }));
+  })), origin);
 }
 
 function send(res, status, body, cache = 'no-store') {

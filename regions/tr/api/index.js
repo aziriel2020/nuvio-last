@@ -1,5 +1,7 @@
 'use strict';
 
+const { withHeroTitles } = require('../../../runtime/collection-titles.cjs');
+
 const {
   DEFAULT_TIMEZONE,
   DEFAULT_COUNTRY,
@@ -1223,7 +1225,7 @@ function buildPlatformCollection(definition, entries, origin = null) {
 
 function buildNuvioCollectionsImport(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {
   const entries = buildArchiveCatalogEntries(now, timeZone);
-  return PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin));
+  return withHeroTitles(PLATFORM_COLLECTIONS.map((definition) => buildPlatformCollection(definition, entries, origin)), origin);
 }
 
 function buildArchiveBlueprint(now = runtimeNow(), timeZone = DEFAULT_TIMEZONE, origin = null) {

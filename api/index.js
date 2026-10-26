@@ -1,5 +1,6 @@
 'use strict';
 
+const { titleSvg } = require('../runtime/collection-titles.cjs');
 const fs = require('fs');
 const path = require('path');
 
@@ -406,6 +407,14 @@ function landing(req) {
 module.exports = async function handler(req, res) {
   const url = new URL(req.url, originFromRequest(req));
   const path = url.pathname;
+
+  if (path === '/collection-title.svg') {
+    const svg = titleSvg(url.searchParams.get('title'), url.searchParams.get('label'));
+    if (!svg) return sendJson(res, 400, {error:'Titre manquant'});
+    res.statusCode=200;res.setHeader('Content-Type','image/svg+xml; charset=utf-8');res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Cache-Control','public, max-age=604800');
+    return res.end(svg);
+  }
 
   if (/^\/images\/original\.(?:jpg|png)$/.test(path)) return handleOriginalImage(req, res, url);
 

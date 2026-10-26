@@ -40,6 +40,8 @@ export function edgeTtl(input) {
   const url = normalizedUrl(input);
   const path = url.pathname;
 
+  if (path === '/collection-title.svg') return GENERATED_ART_TTL;
+
   if (/^\/images\/original\.(?:jpg|png)$/.test(path)) return GENERATED_ART_TTL;
 
   // Empty/error series responses must not become a cached successful catalog.

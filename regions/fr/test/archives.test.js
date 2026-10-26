@@ -590,7 +590,7 @@ test('France genres are split into Films first and Series second, both with exac
   assert.equal(calendar.dateWindow('genre-era-2010-2014',fixedNow,tz).end,'2014-12-31');
   assert.equal(calendar.dateWindow('genre-era-before1900',fixedNow,tz).end,'1899-12-31');
   for(const folder of films.folders.filter(f=>['Histoire','Téléfilm','Guerre'].includes(f.title))) {
-    assert.equal(folder.titleLogoUrl,null,'no duplicate native text below branded genre image');
+    assert.equal(new URL(folder.titleLogoUrl).pathname,'/collection-title.svg','transparent hero title without a duplicate tile caption');
     assert.equal(folder.tileShape,'LANDSCAPE');
     assert.equal(folder.hideTitle,true);
   }

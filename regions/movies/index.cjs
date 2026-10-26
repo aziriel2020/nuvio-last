@@ -1,5 +1,7 @@
 'use strict';
 
+const { withHeroTitles } = require('../../runtime/collection-titles.cjs');
+
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
@@ -41,7 +43,7 @@ function buildManifest(origin, now = new Date()) {
 function buildCollections(origin, now = new Date(), mode = 'shield') {
   const dates = periods(now).filter(({ key }) => key !== 'all');
   const westernDates = periods(now, WESTERN_GENRE).filter(({ key }) => key !== 'all');
-  return VIEWS.map((view) => ({
+  return withHeroTitles(VIEWS.map((view) => ({
     id: `movies-world-${view.id}`, title: `🌍 ${view.name}`, pinToTop: true, focusGlowEnabled: true,
     backdropImageUrl: `${origin}/backdrop.jpg?v=${art.REVISION}`, viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
     folders: VISIBLE_GENRES.map((genre) => {
@@ -52,7 +54,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
         coverImageUrl: image, heroBackdropUrl: backdrop, tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId })) };
     })
-  }));
+  })), origin);
 }
 function send(res, code, data) {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
