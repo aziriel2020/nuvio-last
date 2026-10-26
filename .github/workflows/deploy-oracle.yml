@@ -129,6 +129,12 @@ jobs:
           ARTWORK_EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/verify-fr-service-production.mjs
 
+      - name: Verify approved Anime Japon Coree artwork and catalogue thumbnails
+        env:
+          ARTWORK_EXPECTED_SHA: ${{ github.sha }}
+          ANIME_VERIFY_CATALOGS: '1'
+        run: node scripts/verify-anime-production.mjs
+
       - name: Verify movie and series JPEG thumbnails on Oracle
         shell: bash
         run: |

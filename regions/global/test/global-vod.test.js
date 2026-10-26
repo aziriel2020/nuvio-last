@@ -409,8 +409,8 @@ test('JP/KR anime keeps AniList rows when TMDb mapping is unavailable', async ()
     assert.equal(result.metas[0].name, 'Fallback Anime');
     assert.match(result.metas[0].releaseInfo, /Épisode 7/);
     assert.equal(result.metas[0].poster, schedule.media.coverImage.extraLarge);
-    assert.equal(result.metas[0].background, schedule.media.bannerImage);
-    assert.equal(result.metas[0].landscapePoster, schedule.media.bannerImage);
+    assert.equal(result.metas[0].background, schedule.media.coverImage.extraLarge);
+    assert.equal(result.metas[0].landscapePoster, schedule.media.coverImage.extraLarge);
     assert.equal(result.metas[0].country, 'Japon');
     assert.deepEqual(result.metas[0].genres, ['Action', 'Fantasy']);
     assert.equal(result.metas[0].runtime, '24 min');

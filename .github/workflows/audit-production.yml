@@ -34,3 +34,7 @@ jobs:
         run: node scripts/verify-oracle-production.mjs
       - name: Verify approved France streaming-service artwork
         run: node scripts/verify-fr-service-production.mjs
+      - name: Verify approved Anime Japon Coree artwork and catalogue thumbnails
+        env:
+          ANIME_VERIFY_CATALOGS: '1'
+        run: node scripts/verify-anime-production.mjs

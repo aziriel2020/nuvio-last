@@ -196,6 +196,11 @@ try {
     stdio: 'inherit'
   });
 
+  execFileSync(process.execPath, ['scripts/verify-anime-production.mjs'], {
+    env: { ...process.env, PUBLIC_ORIGIN: origin, ARTWORK_EXPECTED_SHA: '', ANIME_VERIFY_CATALOGS: '' },
+    stdio: 'inherit'
+  });
+
   console.log(JSON.stringify({
     ok: true,
     standardCollections: collectionBody.length,
