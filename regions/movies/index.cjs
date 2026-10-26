@@ -28,7 +28,7 @@ function buildManifest(origin, now = new Date()) {
   const dates = periods(now), westernDates = periods(now, WESTERN_GENRE);
   return {
     id: ADDON_ID, version: VERSION, name: `Nuvio Films Monde · ${VERSION}`, language: 'fr', types: ['movie'],
-    description: 'Films de tous pays : grandes plateformes streaming, grandes boutiques VOD et cinéma France. Classés par première sortie mondiale ; les rééditions et ressorties ne changent pas leur date. Depuis 2018 (Western : historique complet). Replay uniquement dans Documentaires. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
+    description: 'Films de fiction de tous pays : grandes plateformes streaming, grandes boutiques VOD et cinéma France. Classés par première sortie mondiale ; les rééditions et ressorties ne changent pas leur date. Depuis 2018 (Western : historique complet). Documentaires uniquement dans leur rubrique. Stand-up uniquement dans sa rubrique ; spectacles et émissions exclus des films. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     resources: [{ name: 'catalog', types: ['movie'] }, { name: 'meta', types: ['movie'], idPrefixes: ['tt', 'tmdb:movie:'] }],
     catalogs: VIEWS.flatMap((view) => VISIBLE_GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
       id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
@@ -114,7 +114,7 @@ async function handler(req, res) {
     const requested = decodeURIComponent(match[1]);
     const row = store.row(requested.replace(/^tmdb:movie:/, 'tmdb:'));
     if (!row || !store.visible(row.id, { curated: true })) return send(res, 404, { meta: null });
-    return send(res, 200, { meta: { ...store.meta(row), id: requested } });
+    return send(res, 200, { meta: { ...store.meta(row, { curated: true, genre: store.contentKind(row) === 'standup' ? 'standup' : JSON.parse(row.genres).includes('99') ? '99' : 'all' }), id: requested } });
   }
   return send(res, 404, { error: 'Route inconnue' });
 }

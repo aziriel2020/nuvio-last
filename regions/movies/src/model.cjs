@@ -2,11 +2,12 @@
 
 const { isoDate, unique, classify, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods } = require('../../series/src/model.cjs');
 const { offersInFrance } = require('../../series/src/france.cjs');
+const { contentKind } = require('./content-policy.cjs');
 const ADDON_ID = 'com.nuvio.movies.france.world.v1';
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const GENRES = Object.freeze([
   ['all', 'Tous les films', 'all'], ['28', 'Action', 'action'], ['12', 'Aventure', 'adventure'],
-  ['35', 'Comédie', 'comedy'], ['80', 'Crime / Policier', 'crime'], ['99', 'Documentaires', 'documentary'],
+  ['35', 'Comédie', 'comedy'], ['standup', 'Stand-up', 'standup'], ['80', 'Crime / Policier', 'crime'], ['99', 'Documentaires', 'documentary'],
   ['18', 'Drame', 'drama'], ['10751', 'Famille', 'family'], ['14', 'Fantastique', 'fantasy'],
   ['36', 'Histoire', 'history'], ['27', 'Horreur', 'horror'], ['10402', 'Musique', 'music'],
   ['9648', 'Mystère', 'mystery'], ['10749', 'Romance', 'romance'], ['878', 'Science-fiction', 'science-fiction'],
@@ -41,6 +42,7 @@ function fromTmdb(data) {
     description: data.overview || null, firstAirDate: originalDates[0] || null,
     poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
     background: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : null,
+    movieContentKind: contentKind({ genres, title: data.title, originalTitle: data.original_title, description: data.overview, keywords, cast: data.credits?.cast, video: data.video }),
     genres, classification: classify({ genres, keywords }), countries: (data.production_countries || []).map((c) => c.iso_3166_1),
     languages: unique([data.original_language]), status: data.status || null, runtime: Number(data.runtime) || null,
     franceOffers: Object.hasOwn(data, 'watch/providers') ? offersInFrance(data) : undefined,
