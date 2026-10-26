@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import sharp from 'sharp';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+const approvedFrServices = createRequire(import.meta.url)('../regions/fr/api/service-art.cjs').manifest;
 
 const ORIGIN = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip.io').origin;
 const TIMEOUT_MS = Math.max(5000, Number(process.env.VERIFY_TIMEOUT_MS || 25000));
@@ -418,18 +420,17 @@ const frNetflixReal = standard.find((collection) => collection.title === '🇫�
 assert(frNetflixReal, 'France Netflix collection missing for approved-board verification');
 const frNetflixSeriesReal = (frNetflixReal.folders || []).find((folder) => /séries|series/i.test(String(folder.title || ''))) || frNetflixReal.folders?.[0];
 const frNetflixMovieReal = (frNetflixReal.folders || []).find((folder) => /film|movie/i.test(String(folder.title || '')));
-assert(frNetflixSeriesReal?.coverImageUrl, 'France Netflix generated series card missing');
-assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-shield\.jpg$/.test(new URL(frNetflixSeriesReal.coverImageUrl).pathname), `France Netflix Shield series is not using v5 approved asset: ${frNetflixSeriesReal.coverImageUrl}`);
-await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix approved-board series card');
-if (frNetflixMovieReal?.coverImageUrl) {
-  assert(/\/static\/assets\/generated-covers\/fr\/netflix\/movie-shield\.jpg$/.test(new URL(frNetflixMovieReal.coverImageUrl).pathname), `France Netflix Shield movie is not using v5 approved asset: ${frNetflixMovieReal.coverImageUrl}`);
-  const seriesProbe = await verifyVisual(frNetflixSeriesReal.coverImageUrl, 'France Netflix series card probe');
-  const movieProbe = await verifyVisual(frNetflixMovieReal.coverImageUrl, 'France Netflix movie card probe');
-  assert(seriesProbe.digest === movieProbe.digest, 'Netflix Films and Séries must use the same canonical approved board cell');
+for (const [folder, category] of [[frNetflixSeriesReal, 'series'], [frNetflixMovieReal, 'films']]) {
+  const expected = new URL(`/fr/service-cover.jpg?key=netflix&category=${category}&v=${approvedFrServices.revision}`, ORIGIN).href;
+  assert(folder?.coverImageUrl === expected, `France Netflix ${category} must use its approved character cover: ${folder?.coverImageUrl}`);
+  const probe = await verifyVisual(expected, 'France Netflix approved ' + category + ' cover');
+  assert(probe.digest === approvedFrServices.images.netflix[category].sha256, `France Netflix ${category} approved image checksum mismatch`);
 }
-assert(frNetflixSeriesReal?.heroBackdropUrl, 'France Netflix generated hero missing');
-assert(/\/static\/assets\/generated-covers\/fr\/netflix\/series-hero\.jpg$/.test(new URL(frNetflixSeriesReal.heroBackdropUrl).pathname), `France Netflix hero is not using v5 approved asset: ${frNetflixSeriesReal.heroBackdropUrl}`);
-await verifyVisual(frNetflixSeriesReal.heroBackdropUrl, 'France Netflix approved-board hero');
+assert(approvedFrServices.images.netflix.series.sha256 !== approvedFrServices.images.netflix.films.sha256, 'Netflix Films and Séries require distinct approved covers');
+const frNetflixHero = new URL(`/fr/service-backdrop.jpg?key=netflix&v=${approvedFrServices.revision}`, ORIGIN).href;
+assert(frNetflixSeriesReal?.heroBackdropUrl === frNetflixHero, 'France Netflix must use its approved character backdrop');
+const frNetflixHeroProbe = await verifyVisual(frNetflixHero, 'France Netflix approved character backdrop');
+assert(frNetflixHeroProbe.digest === approvedFrServices.images.netflix.backdrop.sha256, 'France Netflix approved backdrop checksum mismatch');
 
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
 const generatedDesktopVisualUrls = flattenStrings(desktop).filter((value) => {
