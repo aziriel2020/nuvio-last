@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createRequire } from 'node:module';
+const { V2_ADDON_ID, V2_VERSION } = createRequire(import.meta.url)('../regions/series/src/model.cjs');
 // Independent production guard: a running Node process is not proof that
 // worldwide live-action series are being discovered for the French market.
 const origin = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip.io').origin;
@@ -22,7 +24,8 @@ try {
   ]);
   if (!health.ok || health.runtime !== 'oracle-vm') fail('Oracle service unhealthy');
   if (!status.ok || !v2.ok) fail('Series database missing or unreadable');
-  if (v2.version !== '2.0.0') fail('Expected Series France V2 addon');
+  if (v2.version !== V2_VERSION || v2.addonId !== V2_ADDON_ID)
+    fail(`Expected Series France V2 addon ${V2_ADDON_ID}@${V2_VERSION}`);
   if (!Number.isFinite(status.eligible) || status.eligible < 1) fail('No live-action titles available in FR');
   if (age(status.lastSync?.at) > MAX_HEARTBEAT_MS) fail('Indexer heartbeat older than 90 minutes');
   if (status.lastSync?.errors?.length) fail('Indexer reports discovery errors: ' + status.lastSync.errors.join(' | '));
