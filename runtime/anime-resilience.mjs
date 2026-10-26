@@ -1,6 +1,6 @@
 const TSUZUKI_BASE = 'https://tsuzuki.top/api/v1';
 const ANIME_TIMEZONE = 'Asia/Tokyo';
-export const ANIME_RESILIENCE_REV = 'anime-series-v4-shield-cinematic-resilience';
+export const ANIME_RESILIENCE_REV = 'anime-series-v5-calendar-16x9-artwork';
 const ATTRIBUTION = 'Données AniList (anilist.co) • calendrier de secours Tsuzuki (tsuzuki.top).';
 
 function pad(value) {
@@ -223,6 +223,7 @@ function desktopBanner(origin, meta) {
   url.searchParams.set('design', 'shield3');
   const src = meta.background || meta.landscapePoster || meta.poster;
   if (src) url.searchParams.set('src', src);
+  if (meta.poster && meta.poster !== src) url.searchParams.set('fallback', meta.poster);
   url.searchParams.set('provider', 'anime-asia');
   url.searchParams.set('type', 'series');
   url.searchParams.set('title', String(meta.name || 'Anime').slice(0, 68));
@@ -241,7 +242,7 @@ function scheduleMeta(row, media, origin) {
 
   const title = media?.title?.english || media?.title?.romaji || media?.title?.native || row.title || 'Anime';
   const poster = media?.coverImage?.extraLarge || media?.coverImage?.large || media?.coverImage?.medium || row.coverImage || null;
-  const background = media?.bannerImage || poster;
+  const background = poster || media?.bannerImage;
   const local = zonedParts(Number(row.airingAt) * 1000);
   const episode = Number(row.episode);
   const releaseInfo = `Épisode ${Number.isFinite(episode) ? episode : '?'} • ${local.date.split('-').reverse().join('/')} • ${local.time}`;

@@ -34,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
+const { renderAnimeCatalogCard } = require('./anime-cards.cjs');
 
 const VERSION = '1.3.1';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -54,7 +55,7 @@ const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-rev
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
 const SOURCE_VERSION = 'calendar-archives-global-v1.3.1-modern-shield';
-const VISUAL_REV = 'coex-global131-cinematic-anime-standard3';
+const VISUAL_REV = 'coex-global131-anime-calendar-hq-v4';
 
 const REGION_ART_KEY = 'global';
 const PLATFORM_ART_DIR = path.resolve(__dirname, '../../../assets/platform-art/global');
@@ -230,11 +231,11 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
 }
 
 
-function sendDesktopCinematicJpeg(res, data) {
+function sendDesktopCinematicJpeg(res, data, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+  res.setHeader('Cache-Control', cache);
   res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');
   res.setHeader('X-Nuvio-Desktop-Format', '1600x900');
   res.end(data);
@@ -269,6 +270,21 @@ async function handleDesktopFolderCard(res, url) {
 }
 
 async function handleDesktopContentCard(res, url) {
+  if (url.searchParams.get('provider') === 'anime-asia') {
+    try {
+      const result = await renderAnimeCatalogCard(url, { isAllowedSource: isAllowedPosterSource, calendarCardSvg });
+      res.setHeader('X-Nuvio-Anime-Design', 'calendar-16x9-v1');
+      res.setHeader('X-Nuvio-Artwork-Photo', result.photo ? 'ready' : 'fallback');
+      res.setHeader('X-Nuvio-Artwork-Cache', result.cache || 'generated');
+      res.setHeader('X-Nuvio-Anime-Source', result.selectedSource?.includes('image.tmdb.org/') ? 'tmdb' : result.photo ? 'anilist-fallback' : 'unavailable');
+      sendDesktopCinematicJpeg(res, result.data, result.cacheable === false ? 'no-store' : undefined);
+      return;
+    } catch (error) {
+      res.statusCode = error.status || 502;
+      res.setHeader('Cache-Control', 'no-store');
+      return res.end('Image unavailable');
+    }
+  }
   const src = optimizedCardSource(url.searchParams.get('src') || '', 'landscape');
   const providerSlug = String(url.searchParams.get('provider') || '').trim().toLowerCase();
   const type = normalizedDesktopType(url.searchParams.get('type'));
@@ -1202,6 +1218,11 @@ function desktopContentCardUrl(origin, meta, catalog, sourceOverride = null) {
   url.searchParams.set('design', 'shield3');
   if (source && isAllowedPosterSource(source)) url.searchParams.set('src', source);
   const providerSlug = String(catalog?.providerSlug || catalog?.archiveProvider || '').trim().toLowerCase();
+  if (providerSlug === 'anime-asia') {
+    if (source?.includes('image.tmdb.org/')) url.searchParams.set('src', source.replace(/\/t\/p\/(?:original|w\d+)\//, '/t/p/w1280/'));
+    const fallback = meta?.poster;
+    if (fallback && fallback !== source && isAllowedPosterSource(fallback)) url.searchParams.set('fallback', fallback);
+  }
   if (providerSlug) url.searchParams.set('provider', providerSlug);
   url.searchParams.set('type', meta?.type || catalog?.type || 'series');
   url.searchParams.set('title', compactCardText(meta?.name || '', 68));
@@ -1265,7 +1286,7 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
       // Modern Home draws a logo/title overlay on landscape cards. A valid but
       // transparent logo freezes that overlay slot so our card artwork remains
       // the single source of truth. Detail metadata later restores the real logo.
-      logo: homeVisible && getConfig().calendarCards
+      logo: (homeVisible || animeCinematic) && getConfig().calendarCards
         ? transparentModernLogoUrl(origin)
         : meta?.logo,
       // Classic Home can still render this as a native second line when labels
@@ -3079,7 +3100,7 @@ function anilistMediaMeta(media, id = null) {
   if (!Number.isFinite(mediaId)) return null;
   const title = media?.title?.english || media?.title?.romaji || media?.title?.native || 'Anime';
   const poster = media?.coverImage?.extraLarge || media?.coverImage?.large || null;
-  const background = media?.bannerImage || poster;
+  const background = poster || media?.bannerImage;
   const country = String(media?.countryOfOrigin || '').toUpperCase();
   if (!ANIME_COUNTRY_ORIGINS.has(country) || String(media?.format || '').toUpperCase() === 'MOVIE') return null;
   return {
@@ -3152,9 +3173,9 @@ function animeScheduleToMeta(schedule, details, timeZone, window) {
   const meta = {
     ...enriched,
     name: nativeMeta.name || enriched.name,
-    poster: nativeMeta.poster || enriched.poster,
-    background: nativeMeta.background || enriched.background,
-    landscapePoster: nativeMeta.landscapePoster || enriched.landscapePoster,
+    poster: enriched.poster || nativeMeta.poster,
+    background: details.backdrop_path ? enriched.background : (enriched.poster || nativeMeta.background),
+    landscapePoster: details.backdrop_path ? enriched.landscapePoster : (enriched.poster || nativeMeta.landscapePoster),
     description: [nativeMeta.description, enriched.description].filter(Boolean).join('\n\n'),
     imdbRating: nativeMeta.imdbRating || enriched.imdbRating,
     genres: nativeMeta.genres?.length ? nativeMeta.genres : enriched.genres,
