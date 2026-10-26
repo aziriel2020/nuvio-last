@@ -276,8 +276,8 @@ test('archive imports reference real unique catalogs, cover old series, and pres
   assert.equal(JSON.stringify(collections).includes('generated_images'), false);
   assert.equal(collections[0].folders[0].coverImageUrl,
     addon._internals.genreCoverProgress().ready
-      ? addon._internals.genreCoverRoute(origin, 'all') : `${origin}/cover.jpg?v=france-v2`);
-  assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=france-v2`);
+      ? addon._internals.genreCoverRoute(origin, 'all') : `${origin}/cover.jpg?v=premium-20261025-v2`);
+  assert.equal(collections[1].backdropImageUrl, `${origin}/backdrop.jpg?v=premium-20261025-v2`);
   assert.match(manifest.name, /France/);
   assert.equal(labels.get('series-fr-premieres-all-2026-10'), 'Octobre 2026');
   assert.equal(labels.get('series-world-seasons-35-today'), 'Aujourd’hui');
@@ -343,7 +343,7 @@ test('V2 escapes the old addon cache and replaces collection sources without dup
     assert(combined.every((c) => c.folders.every((f) => f.sources.every((s) => s.addonId === fresh.id))));
     assert.equal(imported[0].folders[0].coverImageUrl,
       addon._internals.genreCoverProgress().ready
-        ? addon._internals.genreCoverRoute(origin, 'all') : `${origin}/cover.jpg?v=france-v2`);
+        ? addon._internals.genreCoverRoute(origin, 'all') : `${origin}/cover.jpg?v=premium-20261025-v2`);
   }
 });
 

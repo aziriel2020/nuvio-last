@@ -1,148 +1,147 @@
 {
-  "revision": "movies-premium-20261025-v1",
-  "styleReference": "series-covers-25-approved.zip",
+  "revision": "movies-premium-20261025-v2",
   "width": 1600,
   "height": 900,
   "items": [
     {
       "id": "all",
-      "title": "Tous les films",
+      "title": "Films mondiaux",
       "file": "all.webp",
-      "bytes": 185972,
-      "sha256": "cac2d17d3351daa8ea13b662377802ab76cd4041888713a9ea1c63b17e10b996"
+      "bytes": 146988,
+      "sha256": "ecfac4a625f4c69ab7db3b9ef1011728f7371e0a1b518514a4c5860084d615cb"
     },
     {
       "id": "28",
       "title": "Action",
       "file": "28.webp",
-      "bytes": 133560,
-      "sha256": "4644e70d07581d84706f8450233acc7cc9bf3e705c510c5e9443bec1163a14fd"
+      "bytes": 298642,
+      "sha256": "16b7e5cb13a57aa790d3240c566b34f5ff142659119ee3418d1918cf92e385b9"
     },
     {
       "id": "12",
       "title": "Aventure",
       "file": "12.webp",
-      "bytes": 124476,
-      "sha256": "238e5a6f9c92891e7152f4db2a6908b77bce6b3731c26d6023bbe724df0805f4"
+      "bytes": 93438,
+      "sha256": "c81214a36a0a1cb1bba2de2b738759d62f3966a5a3869d2a4d33fbf9de766c7a"
     },
     {
       "id": "35",
-      "title": "Comédie",
+      "title": "Confettis et quiproquo en terrasse",
       "file": "35.webp",
-      "bytes": 92452,
-      "sha256": "15d77a6ebfa1034a9ad5535ebbe2bc8e92797d5be3316fdecf8df38b1ee33176"
+      "bytes": 139068,
+      "sha256": "c6892274097a16016abd4f186a8fada5e2274e6a1378410a9e8f1705e804012a"
     },
     {
       "id": "80",
-      "title": "Crime / Policier",
+      "title": "Détective sous les rails, pluie ambrée",
       "file": "80.webp",
-      "bytes": 131716,
-      "sha256": "670c8028fee1d47cbe0ee7f72e8377ba659790c8d1b79cbcaeec3b81b18df67c"
+      "bytes": 158580,
+      "sha256": "b0051a67544aea35a4409fbe68090bc435ce56a41e88fa80e224d5074e0450f5"
     },
     {
       "id": "99",
-      "title": "Documentaires",
+      "title": "Documentaires de safari en Afrique",
       "file": "99.webp",
-      "bytes": 155976,
-      "sha256": "d9d9bddbb08aca80b3f7cd024936ef9a8adde7824702654ab50b9f5ee829d759"
+      "bytes": 145102,
+      "sha256": "1e6e312519890393033fed81d04b14f9862be650316018a42ccc96f606da9bba"
     },
     {
       "id": "18",
-      "title": "Drame",
+      "title": "Portrait à la fenêtre méditerranéenne",
       "file": "18.webp",
-      "bytes": 86640,
-      "sha256": "cac55514c9b107b85ab5916c4f0e252d7f78f58d2098b88d219e18f8c7cbaae8"
+      "bytes": 146236,
+      "sha256": "3031c2eb10bdb59ff0b6d2e814513593b0c82b2da6e7e9eecac5919e3ad69e8c"
     },
     {
       "id": "10751",
-      "title": "Famille",
+      "title": "Famille dans une cabane perchée",
       "file": "10751.webp",
-      "bytes": 109580,
-      "sha256": "a8c9d20f6c1d8f88f8454dda8d818c3a01c239778805e76ba0c2738f76f7c4f9"
+      "bytes": 179182,
+      "sha256": "600c487bfa60202d7efd18ce7c7416033b5d345c17279973f279c4bf2616d3e8"
     },
     {
       "id": "14",
       "title": "Fantastique",
       "file": "14.webp",
-      "bytes": 156160,
-      "sha256": "c62864c70b816e90f1e30d819619698f4bc84b99ceaa19cb2ce241416c77a33d"
+      "bytes": 167880,
+      "sha256": "f6237f189bcd740a88fe52eb5eda82d5f6c24277151fb34842d5602c49fbd09e"
     },
     {
       "id": "36",
-      "title": "Histoire",
+      "title": "Cour royale à la Renaissance",
       "file": "36.webp",
-      "bytes": 117464,
-      "sha256": "dda0042a42984f225508d5d314073f4c9320936d441bc0d836e3342eb8292f91"
+      "bytes": 148136,
+      "sha256": "c72d5822b7e170483967c7a17049d3095b091a4fb51b69b17e6fc96803207032"
     },
     {
       "id": "27",
-      "title": "Horreur",
+      "title": "La ferme dans la brume",
       "file": "27.webp",
-      "bytes": 94898,
-      "sha256": "9e5a6a355a1696162829a5dc77fd2cff61840a0639c032c49c56c719cad29665"
+      "bytes": 96402,
+      "sha256": "82ec1145d81ec3d85e67292e4d77e0bae26858dd52e06fc7470e9a2c618b8c74"
     },
     {
       "id": "10402",
-      "title": "Musique",
+      "title": "Voix latine sous les projecteurs",
       "file": "10402.webp",
-      "bytes": 73838,
-      "sha256": "0a3c8437c1c57ba3ea19133e356a4058905d9a49c97ee6bdae6398d37fe17949"
+      "bytes": 117380,
+      "sha256": "46669dff8f533e977e164bc1dc73f27d876f040397e3649cabd219766ceffa3e"
     },
     {
       "id": "9648",
-      "title": "Mystère",
+      "title": "Mystère à l’observatoire abandonné",
       "file": "9648.webp",
-      "bytes": 101578,
-      "sha256": "4fff7de825ba697c2a0d0a152f2e00f4acf12da512a1a96ed7f726624ef46de5"
+      "bytes": 102886,
+      "sha256": "688303c17d043218739a47a217a1ecc1b4c41e758bc3b855dc6858b12ffb4f09"
     },
     {
       "id": "10749",
-      "title": "Romance",
+      "title": "Romance au quai méditerranéen",
       "file": "10749.webp",
-      "bytes": 89250,
-      "sha256": "507c06a09edb9ef2fab31c31787d1676f0e3a81ce161a11b49d67137636bcdcf"
+      "bytes": 106060,
+      "sha256": "b162c8b213169c70ed7a4705abd2e7be5f520eb0db0756db43ef274d4f80c9cd"
     },
     {
       "id": "878",
-      "title": "Science-fiction",
+      "title": "Astronaute face à la mégastructure extraterrestre",
       "file": "878.webp",
-      "bytes": 121064,
-      "sha256": "6fea71f06f963ef61b643985c9bc94436c0c7f3b5f4c88e099b5656a9d81f585"
+      "bytes": 166220,
+      "sha256": "44dffc4ea84512f0868dec7013f6a33f8c965c177f38a2e6277ea4ec6b7fc679"
     },
     {
       "id": "10770",
-      "title": "Téléfilms",
+      "title": "Téléfilms au coucher du soleil",
       "file": "10770.webp",
-      "bytes": 62514,
-      "sha256": "7ddd7b7bf69eb3af1e149956a882736b41f76f40f4c5a898790b03c82ca966b4"
+      "bytes": 130920,
+      "sha256": "bab6e5d0f8d01c4dd87d7cb064daa40342ab13d43f092aa8a074d025970581c7"
     },
     {
       "id": "53",
-      "title": "Thriller",
+      "title": "Thriller nocturne au parking désert",
       "file": "53.webp",
-      "bytes": 85076,
-      "sha256": "23376b99766eb00e139e50c0c155ad601a4d9e5312b59b50600a5ecfbf3d91f7"
+      "bytes": 86422,
+      "sha256": "a8711f6e10aa15a37c7e1d56d164820345deee4b191155bf46dc08643b6c0049"
     },
     {
       "id": "10752",
-      "title": "Guerre",
+      "title": "Médecin militaire dans les ruines",
       "file": "10752.webp",
-      "bytes": 103154,
-      "sha256": "9de7bd6f67c6f3138b575b6f1c79331d1a17a1a8bce4e2512599e5205b2ea9bf"
+      "bytes": 154346,
+      "sha256": "ac3b92349c109a27c28b6dce3dc3e2fd82523fe649da0a9a763bf2a75863b8ed"
     },
     {
       "id": "37",
-      "title": "Western",
+      "title": "Cow-boy à Monument Valley",
       "file": "37.webp",
-      "bytes": 106880,
-      "sha256": "e480d59c5a8698f0b567268171b5289b48167241f3bf48ec6026d4ff1b3ebe0b"
+      "bytes": 134458,
+      "sha256": "3b3824418c3a39393e06b2f1b2dd7fbe9b3806a8cbb9705a79e61b828f4eed34"
     },
     {
       "id": "unclassified",
-      "title": "Genre non renseigné",
+      "title": "Porte mystérieuse dans le désert",
       "file": "unclassified.webp",
-      "bytes": 81108,
-      "sha256": "bd5d4bf759fd968f0917a8aa29c3518a01e7e95da38e6ad5a50616d310707e18"
+      "bytes": 186342,
+      "sha256": "9ba092104f2194f347025834921e4210e4ceb22f4df541802674454bad529e8d"
     }
   ]
 }
