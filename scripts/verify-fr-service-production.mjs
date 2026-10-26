@@ -15,16 +15,14 @@ async function request(url, status = 200) {
 }
 try {
   assert.equal(manifest.approved,true);
-  assert.equal(Object.keys(manifest.images).length,13);
-  assert.deepEqual(manifest.pendingProviders,['disney-plus']);
+  assert.equal(Object.keys(manifest.images).length,14);
+  assert.deepEqual(manifest.pendingProviders,[]);
+  assert.equal(manifest.images['disney-plus'].approved,true,'Disney+ proposal approved');
   const health = await (await request('/_oracle/health')).json();
   assert(health.ok);result.gitSha=health.gitSha;
   if(expectedSha)assert.equal(health.gitSha,expectedSha,'Exact deployed commit');
   for(const route of ['/nuvio-collections-shield.json','/nuvio-collections-desktop.json','/fr/nuvio-collections.json']) {
     const all = await (await request(route)).json();
-    const disney=all.find(c=>c.id==='calendar-archives-fr-disney-plus');
-    assert(disney,'Unapproved Disney+ collection retained');
-    assert(!JSON.stringify(disney).includes('/service-'),'Disney+ was not approved');
     let folders=0;
     for(const [key,item] of Object.entries(manifest.images)) {
       const parent=all.find(c=>c.id==='calendar-archives-fr-'+key);assert(parent,route+' '+key);
@@ -45,7 +43,7 @@ try {
         folders++;result.folders++;
       }
     }
-    assert.equal(folders,25,route+' approved folders');result.imports++;
+    assert.equal(folders,27,route+' approved folders');result.imports++;
   }
   const entries=[...urls];let cursor=0;const digests=new Set();
   await Promise.all(Array.from({length:4},async()=>{for(;;){const i=cursor++;if(i>=entries.length)return;
@@ -59,8 +57,8 @@ try {
     const meta=await sharp(bytes).metadata();assert.equal(meta.width,expected.width);assert.equal(meta.height,expected.height);
     result.images++;result.exactAssets++;
   }}));
-  assert.equal(result.images,38);
+  assert.equal(result.images,41);
   for(const route of ['/fr/service-cover.jpg?key=unknown&category=films','/fr/service-cover.jpg?key=vod-fr&category=series',
-    '/fr/service-cover.jpg?key=netflix&category=unknown','/fr/service-backdrop.jpg?key=disney-plus']) await request(route,404);
+    '/fr/service-cover.jpg?key=netflix&category=unknown','/fr/service-backdrop.jpg?key=unknown']) await request(route,404);
   console.log(JSON.stringify({...result,ok:true},null,2));
 } catch(error) {console.error(JSON.stringify({...result,ok:false,error:error.message},null,2));process.exitCode=1;}

@@ -5,9 +5,7 @@
   "approval": "Excellent go",
   "renderer": "precomposed-jpeg-direct",
   "exportPolicy": "Extract approved panels; contain complete composition; no regeneration, relettering, recoloring or artwork crop",
-  "pendingProviders": [
-    "disney-plus"
-  ],
+  "pendingProviders": [],
   "images": {
     "netflix": {
       "title": "NETFLIX",
@@ -565,6 +563,53 @@
           "top": 723,
           "width": 1129,
           "height": 587
+        }
+      }
+    },
+    "disney-plus": {
+      "title": "DISNEY+",
+      "approved": true,
+      "approval": "Top",
+      "characterPolicy": "Original characters evoking space adventure and fairy-tale cinema, rather than exact existing characters.",
+      "proposalFile": "exec-0c35fe20-e092-4248-ba00-5bdb86415184.png",
+      "proposalSha256": "b59b546b15179ee29ab7894f363aae731af3fcba22cbf3881b97de869d2e24bd",
+      "series": {
+        "file": "disney-plus-series.jpg",
+        "sha256": "eb289c96cd5e2ea6048647a16a6081a0ef181732a65f693e0983ed9b2d2dacbf",
+        "bytes": 582162,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 0,
+          "top": 0,
+          "width": 967,
+          "height": 535
+        }
+      },
+      "films": {
+        "file": "disney-plus-films.jpg",
+        "sha256": "dc81d29f70836733dfe35d210969b09164b53786390a6e7bd86724363aa64d63",
+        "bytes": 579161,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 0,
+          "top": 546,
+          "width": 967,
+          "height": 531
+        }
+      },
+      "backdrop": {
+        "file": "disney-plus-backdrop.jpg",
+        "sha256": "463c7853230c514aae8b8f7bec6e139d532f4f74f0bf49d11968f8b9883e8dd2",
+        "bytes": 762793,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 0,
+          "top": 1088,
+          "width": 967,
+          "height": 538
         }
       }
     }
