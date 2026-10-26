@@ -290,6 +290,9 @@ function scheduleMeta(row, media, origin) {
   meta.background = cinematic;
   meta.landscapePoster = cinematic;
   meta.banner = cinematic;
+  const logo = new URL('/global/calendar-transparent-logo.svg', origin);
+  logo.searchParams.set('v', ANIME_RESILIENCE_REV);
+  meta.logo = logo.href;
   return meta;
 }
 
@@ -344,6 +347,7 @@ export async function buildTsuzukiMeta(urlLike, options = {}) {
     meta.background = background;
     meta.landscapePoster = background;
     meta.banner = desktopBanner(url.origin, { ...meta, poster, background, landscapePoster: background });
+    delete meta.logo;
     return meta;
   }
 

@@ -35,6 +35,8 @@ const path = require('path');
 const sharp = require('sharp');
 const opentype = require('opentype.js');
 const { renderAnimeCatalogCard } = require('./anime-cards.cjs');
+const SERVICE_ART = require('./service-art.cjs');
+const SERVICE_ART_REVISION = SERVICE_ART.manifest.revision;
 
 const VERSION = '1.3.1';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -231,14 +233,30 @@ async function desktopCinematicCardBuffer(sourceBuffer, options = {}) {
 }
 
 
-function sendDesktopCinematicJpeg(res, data, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000') {
+function sendDesktopCinematicJpeg(res, data, cache = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000', format = '1600x900') {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', cache);
   res.setHeader('X-Nuvio-Card-Renderer', 'shield-desktop-jpeg-v4');
-  res.setHeader('X-Nuvio-Desktop-Format', '1600x900');
+  res.setHeader('X-Nuvio-Desktop-Format', format);
   res.end(data);
+}
+
+function serveApprovedServiceJpeg(res, url, backdrop = false) {
+  const key = String(url.searchParams.get('key') || '').trim();
+  const variant = backdrop ? 'backdrop' : String(url.searchParams.get('category') || '');
+  try {
+    const art = SERVICE_ART.artwork(key, variant);
+    res.setHeader('X-Nuvio-Service-Art', key + ':' + variant);
+    res.setHeader('X-Nuvio-Service-Style', SERVICE_ART_REVISION);
+    res.setHeader('X-Nuvio-Service-Source-SHA256', art.sourceSha256);
+    res.setHeader('X-Nuvio-Service-Render', art.cacheHit ? 'memory' : 'file');
+    return sendDesktopCinematicJpeg(res, art.data, undefined, art.width + 'x' + art.height);
+  } catch (_) {
+    res.statusCode = 404;
+    return res.end('Not found');
+  }
 }
 
 async function handleDesktopFolderCard(res, url) {
@@ -694,7 +712,9 @@ function platformImageUrls(origin, providerSlug, categoryType = 'movie') {
   if (!origin) return { backdrop: null, logo: null };
   const type = categoryType === 'series' ? 'series' : 'movie';
   return {
-    backdrop: `${origin}/platform-backdrop.svg?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`,
+    backdrop: SERVICE_ART.has(providerSlug)
+      ? `${origin}/service-backdrop.jpg?key=${encodeURIComponent(providerSlug)}&v=${SERVICE_ART_REVISION}`
+      : `${origin}/platform-backdrop.svg?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`,
     logo: `${origin}/platform-logo?provider=${encodeURIComponent(providerSlug)}&type=${type}&v=${VISUAL_REV}&asset=2`
   };
 }
@@ -719,7 +739,9 @@ function buildPlatformCollection(definition, entries, origin = null) {
     return {
       id: `archives-${provider.slug}-${category.key}`,
       title: category.title,
-      coverImageUrl: origin ? `${origin}/platform-category-card.svg?provider=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${VISUAL_REV}&asset=2` : null,
+      coverImageUrl: origin ? (SERVICE_ART.has(provider.slug)
+        ? `${origin}/service-cover.jpg?key=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${SERVICE_ART_REVISION}`
+        : `${origin}/platform-category-card.svg?provider=${encodeURIComponent(provider.slug)}&category=${category.key}&v=${VISUAL_REV}&asset=2`) : null,
       focusGifEnabled: false,
       coverEmoji: category.type === 'movie' ? '🎬' : '📺',
       tileShape: 'LANDSCAPE',
@@ -3971,6 +3993,8 @@ module.exports = async function handler(req, res) {
     if (path === '/platform-backdrop.svg') return await handlePlatformBackdrop(res, url);
     if (path === '/desktop-folder-card.jpg') return await handleDesktopFolderCard(res, url);
     if (path === '/desktop-content-card.jpg') return await handleDesktopContentCard(res, url);
+    if (path === '/service-cover.jpg') return serveApprovedServiceJpeg(res, url);
+    if (path === '/service-backdrop.jpg') return serveApprovedServiceJpeg(res, url, true);
     if (path === '/platform-card.jpg') return servePlatformArtJpeg(res, url, 'card');
     if (path === '/platform-backdrop.jpg') return servePlatformArtJpeg(res, url, 'backdrop');
     if (path === '/platform-category-card.svg') return await handlePlatformCategoryCard(res, url);

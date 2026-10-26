@@ -1,0 +1,54 @@
+{
+  "revision": "anime-jpkr-night-b-20261026-v1",
+  "direction": "B — Nuit cinématique",
+  "approved": true,
+  "approval": "Vas y a fond",
+  "renderer": "precomposed-jpeg-direct",
+  "exportPolicy": "Extract approved panels; contain complete composition; no regeneration, relettering, recoloring or artwork crop",
+  "images": {
+    "anime-asia": {
+      "title": "ANIME JAPON + CORÉE",
+      "proposalFile": "exec-88151112-826f-462a-8214-5d05bc4e4300.png",
+      "proposalSha256": "cbb730d1af06b8be06010b2957e023330a91e046ded3c6961a67d9c337523772",
+      "series": {
+        "file": "anime-asia-series.jpg",
+        "sha256": "f8b3848a904ebe1525c92fac2ab2de426c8c86833dd0fffd1f22351e3fa5b417",
+        "bytes": 652790,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 0,
+          "top": 0,
+          "width": 941,
+          "height": 604
+        }
+      },
+      "films": {
+        "file": "anime-asia-films.jpg",
+        "sha256": "cbef8c22908f5d6bf1cb5ce0e0a95d6ccfbd003d9c08ec80734d6c116adbcbad",
+        "bytes": 665067,
+        "width": 1600,
+        "height": 900,
+        "sourcePanel": {
+          "left": 0,
+          "top": 611,
+          "width": 941,
+          "height": 566
+        }
+      },
+      "backdrop": {
+        "file": "anime-asia-backdrop.jpg",
+        "sha256": "aa0d1028bc11e44d79431c9e91fd7d492edd9b076e5262e0aeb3b036539e8d58",
+        "bytes": 845260,
+        "width": 1920,
+        "height": 1080,
+        "sourcePanel": {
+          "left": 0,
+          "top": 1184,
+          "width": 941,
+          "height": 488
+        }
+      }
+    }
+  }
+}

@@ -86,6 +86,7 @@ test('Oracle runtime resilience keeps JP AniList content when the primary runtim
     assert.equal(new URL(payload.metas[0][field]).origin, 'https://edge.example', field);
   }
   assert.equal(payload.metas[0].posterShape, 'landscape');
+  assert.match(payload.metas[0].logo, /calendar-transparent-logo\.svg/);
   assert.match(payload.metas[0].banner, /desktop11/);
   assert.equal(payload.stats.anilistFallbacks, 1);
   assert.equal(response.headers.get('x-nuvio-anime-source'), 'anilist-cache-tsuzuki');
@@ -105,6 +106,7 @@ test('Oracle runtime resilience meta route reconstructs anilist:<id> from cached
   assert.equal(payload.meta.name, 'Fallback Anime');
   assert.equal(payload.meta.poster, jpMedia.coverImage.large);
   assert.equal(payload.meta.background, jpMedia.bannerImage);
+  assert.equal(payload.meta.logo, undefined);
   assert.match(payload.meta.releaseInfo, /Épisode 7/);
   assert.equal(payload.meta.country, 'Japon');
   assert.equal(payload.meta.runtime, '24 min');
