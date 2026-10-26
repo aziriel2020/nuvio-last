@@ -6,7 +6,7 @@ const sharp = require('sharp');
 const opentype = require('opentype.js');
 const { GENRES } = require('./model.cjs');
 const ROOT = path.resolve(__dirname, '../../../assets/movie-covers');
-const REVISION = 'movies-premium-20261025-v1';
+const REVISION = 'movies-premium-20261025-v2';
 const cache = new Map();
 const fonts = new Map();
 function typePath(text, x, y, size, maxWidth, color = '#f8f7f3', weight = 'normal') {

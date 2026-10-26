@@ -13,7 +13,8 @@ let cachedPath;
 const APPROVED_COVER = path.resolve(__dirname, '../../assets/collection-art/series-france-v2.jpg');
 // Approved October 2026 artwork: exact genre IDs, never a shared approximate slug.
 const GENRE_COVER_DIR = path.resolve(__dirname, '../../assets/series-covers');
-const GENRE_COVER_VERSION = 'premium-20261019-v1';
+const GENRE_BACKDROP_DIR = path.resolve(__dirname, '../../assets/series-backdrops');
+const GENRE_COVER_VERSION = 'premium-20261025-v2';
 const GENRE_COVER_IDS = new Set(GENRES.map(({ id }) => id));
 const COVER_PACK_NAME = 'series-covers-25-approved.zip';
 const coverZipCache = new Map();
@@ -69,6 +70,9 @@ function genreCoverProgress(dir = GENRE_COVER_DIR) {
 function genreCoverRoute(origin, id) {
   return `${origin}/artwork/genre/${encodeURIComponent(id)}.webp?v=${GENRE_COVER_VERSION}`;
 }
+function genreBackdropRoute(origin, id) {
+  return `${origin}/artwork/backdrop/${encodeURIComponent(id)}.jpg?v=${GENRE_COVER_VERSION}`;
+}
 async function serveGenreCover(res, id) {
   if (!GENRE_COVER_IDS.has(id)) return send(res, 404, { error: 'Genre inconnu' });
   const bytes = genreCoverBuffer(id);
@@ -79,12 +83,25 @@ async function serveGenreCover(res, id) {
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.end(bytes);
 }
+async function serveGenreBackdrop(res, id) {
+  if (!GENRE_COVER_IDS.has(id)) return send(res, 404, { error: 'Genre inconnu' });
+  const filename = path.join(GENRE_BACKDROP_DIR, id + '.jpg');
+  if (!fs.existsSync(filename)) return serveArtwork(res, 'backdrop');
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.end(fs.readFileSync(filename));
+}
 const artwork = new Map();
 
 async function serveArtwork(res, variant) {
   if (!artwork.has(variant)) {
     const dimensions = variant === 'cover' ? [1600, 900] : [1920, 1080];
-    artwork.set(variant, sharp(APPROVED_COVER).resize(...dimensions, { fit: 'cover' }).jpeg({ quality: 92, mozjpeg: true }).toBuffer());
+    const parentBackdrop = path.join(GENRE_BACKDROP_DIR, '_parent.jpg');
+    const source = variant === 'cover' && genreCoverProgress().ready ? genreCoverBuffer('all')
+      : variant === 'backdrop' && fs.existsSync(parentBackdrop) ? parentBackdrop : APPROVED_COVER;
+    artwork.set(variant, sharp(source).resize(...dimensions, { fit: 'cover' }).jpeg({ quality: 92, mozjpeg: true }).toBuffer());
   }
   let bytes;
   try { bytes = await artwork.get(variant); }
@@ -128,7 +145,7 @@ function buildManifest(origin, now = new Date()) {
       extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     }))))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
-    background: `${origin}/backdrop.jpg?v=france-v2`, behaviorHints: { configurable: false }
+    background: `${origin}/backdrop.jpg?v=${GENRE_COVER_VERSION}`, behaviorHints: { configurable: false }
   };
 }
 
@@ -143,8 +160,8 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
   // Switch the entire set atomically. A partially uploaded batch must never
   // give Shield a mix of old and new category covers.
   const premiumCoversReady = genreCoverProgress().ready;
-  const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=france-v2`;
-  const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=france-v2`;
+  const parentCover = process.env.NUVIO_SERIES_COVER_URL || `${origin}/cover.jpg?v=${GENRE_COVER_VERSION}`;
+  const parentArt = process.env.NUVIO_SERIES_BACKDROP_URL || `${origin}/backdrop.jpg?v=${GENRE_COVER_VERSION}`;
   return ['premieres', 'seasons'].map((view) => ({
     id: `series-world-${view}`, title: view === 'premieres'
       ? (fresh ? '🇫🇷 Séries France V2 · Tous services' : '🇫🇷 Séries en streaming · Tous services')
@@ -161,7 +178,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
         id: `series-world-${view}-${genre.id}`, title: genre.name,
         coverImageUrl: premiumCoversReady ? genreCoverRoute(origin, genre.id)
           : (genre.id === 'all' ? parentCover : `${root}/fr/${renderer}-genre-card.jpg?${imageParams}`),
-        heroBackdropUrl: premiumCoversReady ? genreCoverRoute(origin, genre.id)
+        heroBackdropUrl: premiumCoversReady ? genreBackdropRoute(origin, genre.id)
           : (genre.id === 'all' ? parentArt : `${root}/fr/genre-backdrop.jpg?genre=${slug}`),
         tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
@@ -222,6 +239,8 @@ async function handler(req, res) {
   if (url.pathname === '/cover.jpg' || url.pathname === '/backdrop.jpg') return serveArtwork(res, url.pathname === '/cover.jpg' ? 'cover' : 'backdrop');
   const genreArtMatch = url.pathname.match(/^\/artwork\/genre\/([a-z0-9-]+)\.webp$/);
   if (genreArtMatch) return serveGenreCover(res, genreArtMatch[1]);
+  const genreBackdropMatch = url.pathname.match(/^\/artwork\/backdrop\/([a-z0-9-]+)\.jpg$/);
+  if (genreBackdropMatch) return serveGenreBackdrop(res, genreBackdropMatch[1]);
   if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now), 'public, max-age=300');
   if (['/nuvio-collections.json', '/collections.json', '/nuvio-collections-desktop.json'].includes(url.pathname)) {
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'), 'public, max-age=300');

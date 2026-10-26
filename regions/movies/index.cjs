@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 const sharp = require('sharp');
 const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
@@ -8,6 +9,7 @@ const art = require('./src/artwork.cjs');
 const { decorateMovieMetas } = require('./src/presentation.cjs');
 let cachedStore, cachedPath;
 const imageCache = new Map();
+const GENRE_BACKDROP_DIR = path.resolve(__dirname, '../../assets/movie-backdrops');
 function reader() {
   const filename = defaultPath();
   if (!fs.existsSync(filename)) return null;
@@ -42,9 +44,10 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
     backdropImageUrl: `${origin}/backdrop.jpg?v=${art.REVISION}`, viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
     folders: GENRES.map((genre) => {
       const image = `${origin}/artwork/genre/${genre.id}.webp?v=${art.REVISION}`;
+      const backdrop = `${origin}/artwork/backdrop/${genre.id}.jpg?v=${art.REVISION}`;
       const sources = (genre.id === WESTERN_GENRE ? westernDates : dates).map((date) => ({ provider: 'addon', addonId: ADDON_ID, type: 'movie', catalogId: catalogId(view.id, genre.id, date.key) }));
       return { id: `movies-world-${view.id}-${genre.id}`, title: genre.name,
-        coverImageUrl: image, heroBackdropUrl: image, tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
+        coverImageUrl: image, heroBackdropUrl: backdrop, tileShape: 'LANDSCAPE', hideTitle: mode !== 'desktop', focusGifEnabled: false,
         sources, catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId })) };
     })
   }));
@@ -66,12 +69,22 @@ async function handler(req, res) {
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'));
   const genre = url.pathname.match(/^\/artwork\/genre\/([a-z0-9]+)\.webp$/);
   if (genre) { const bytes = art.genreBytes(genre[1]); return bytes ? image(res, bytes) : send(res, 404, { error: 'Cover inconnue' }); }
+  const backdrop = url.pathname.match(/^\/artwork\/backdrop\/([a-z0-9]+)\.jpg$/);
+  if (backdrop) {
+    if (!GENRES.some((item) => item.id === backdrop[1])) return send(res, 404, { error: 'Genre inconnu' });
+    const filename = path.join(GENRE_BACKDROP_DIR, backdrop[1] + '.jpg');
+    if (fs.existsSync(filename)) return image(res, fs.readFileSync(filename), 'image/jpeg');
+    const parent = path.join(GENRE_BACKDROP_DIR, '_parent.jpg');
+    return fs.existsSync(parent) ? image(res, fs.readFileSync(parent), 'image/jpeg') : send(res, 404, { error: 'Backdrop en préparation' });
+  }
   if (['/cover.jpg', '/backdrop.jpg'].includes(url.pathname)) {
     const size = url.pathname === '/cover.jpg' ? [1600, 900] : [1920, 1080];
     if (!imageCache.has(url.pathname)) {
-      const bytes = art.genreBytes('all');
+      const parent = path.join(GENRE_BACKDROP_DIR, '_parent.jpg');
+      const isBackdrop = url.pathname === '/backdrop.jpg' && fs.existsSync(parent);
+      const bytes = isBackdrop ? fs.readFileSync(parent) : art.genreBytes('all');
       if (!bytes) return send(res, 503, { error: 'Illustration en préparation' });
-      imageCache.set(url.pathname, sharp(bytes).resize(...size, { fit: 'contain', background: '#06090f' }).jpeg({ quality: 92 }).toBuffer());
+      imageCache.set(url.pathname, sharp(bytes).resize(...size, { fit: 'cover' }).jpeg({ quality: 92 }).toBuffer());
     }
     return image(res, await imageCache.get(url.pathname), 'image/jpeg');
   }
