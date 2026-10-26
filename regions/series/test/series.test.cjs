@@ -318,8 +318,9 @@ test('V2 escapes the old addon cache and replaces collection sources without dup
   const fresh = addon._internals.buildManifest(origin, NOW);
   assert.notEqual(fresh.id, legacy.id);
   assert.equal(fresh.id, V2_ADDON_ID); assert.equal(fresh.version, V2_VERSION);
-  assert.match(fresh.name, /V2.*2\.0\.1/);
-  assert.equal(fresh.catalogs.length * 2, legacy.catalogs.length);
+  assert(fresh.name.includes(V2_VERSION));
+  assert(fresh.catalogs.length * 2 < legacy.catalogs.length);
+  assert(!fresh.catalogs.some(c => /-(unclassified|10763)-/.test(c.id)));
   const names = new Map(fresh.catalogs.map((c) => [c.id, c.name]));
   assert.equal(names.get('series-fr-premieres-all-2026-10'), 'Octobre 2026');
   assert.equal(names.has('series-world-premieres-all-all'), false);
@@ -329,7 +330,7 @@ test('V2 escapes the old addon cache and replaces collection sources without dup
     assert.deepEqual(imported.map((c) => c.id), previous.map((c) => c.id));
     for (const [index, collection] of imported.entries()) {
       assert.match(collection.title, /V2/);
-      assert.deepEqual(collection.folders.map((f) => f.id), previous[index].folders.map((f) => f.id));
+      assert.deepEqual(collection.folders.map((f) => f.id), previous[index].folders.filter(f => !/-unclassified$|-10763$/.test(f.id)).map((f) => f.id));
       for (const folder of collection.folders) {
         assert.equal(folder.tileShape, 'LANDSCAPE');
         assert.deepEqual(folder.catalogSources.map((s) => s.addonId), folder.sources.map((s) => s.addonId));

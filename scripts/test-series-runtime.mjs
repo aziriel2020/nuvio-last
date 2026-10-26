@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import sharp from 'sharp';
 const require = createRequire(import.meta.url);
 const { SeriesStore } = require('../regions/series/src/store.cjs');
-const { fromTmdb } = require('../regions/series/src/model.cjs');
+const { fromTmdb, V2_VERSION } = require('../regions/series/src/model.cjs');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nuvio-series-runtime-'));
 const port = process.env.SERIES_TEST_PORT || '3328';
@@ -38,7 +38,7 @@ try {
   const install = await (await get('/install.json')).json();
   assert.equal(install.seriesManifest, `${origin}/series-v2/manifest.json`);
   assert.equal(install.seriesLegacyManifest, `${origin}/series/manifest.json`);
-  assert.equal(install.seriesVersion, '2.0.1');
+  assert.equal(install.seriesVersion, V2_VERSION);
   const manifestResponse = await get('/series/manifest.json');
   assert.equal(manifestResponse.headers.get('cache-control'), 'no-store');
   const manifest = await manifestResponse.json();
@@ -52,9 +52,10 @@ try {
   const v2Response = await get('/series-v2/manifest.json');
   assert.equal(v2Response.headers.get('cache-control'), 'no-store');
   const v2 = await v2Response.json();
-  assert.notEqual(v2.id, manifest.id); assert.equal(v2.version, '2.0.1');
-  assert.match(v2.name, /V2.*2\.0\.1/);
-  assert.equal(v2.catalogs.length * 2, manifest.catalogs.length);
+  assert.notEqual(v2.id, manifest.id); assert.equal(v2.version, V2_VERSION);
+  assert(v2.name.includes(V2_VERSION));
+  assert(v2.catalogs.length * 2 < manifest.catalogs.length);
+  assert(!v2.catalogs.some(c => /-(unclassified|10763)-/.test(c.id)));
   const v2Names = new Map(v2.catalogs.map((c) => [c.id, c.name]));
   for (const route of ['/series-v2/nuvio-collections.json', '/series-v2/nuvio-collections-desktop.json']) {
     const response = await get(route); assert.equal(response.headers.get('cache-control'), 'no-store');
@@ -68,7 +69,7 @@ try {
   assert.equal(v2Data.metas.length, 100);
   assert(v2Data.metas.every((m) => new URL(m.background).pathname === '/fr/calendar-card.jpg'));
   const v2Status = await (await get('/series-v2/status.json')).json();
-  assert.equal(v2Status.version, '2.0.1'); assert.equal(v2Status.addonId, v2.id);
+  assert.equal(v2Status.version, V2_VERSION); assert.equal(v2Status.addonId, v2.id);
   assert.equal(v2Status.genreArtwork.total, 25);
   assert.equal(v2Status.genreArtwork.ready, v2Status.genreArtwork.loaded === 25);
   const importedGenreImage = new URL((await (await get('/series-v2/nuvio-collections.json')).json())[0].folders[0].coverImageUrl);
@@ -118,6 +119,15 @@ try {
   const background = await get('/series/backdrop.jpg?v=france-v2');
   const backgroundMeta = await sharp(Buffer.from(await background.arrayBuffer())).metadata();
   assert.equal(backgroundMeta.width, 1920); assert.equal(backgroundMeta.height, 1080);
+  const tvOffers = { results: { FR: { free: [{ provider_id: 1967, provider_name: 'Molotov TV' }] } } };
+  store.upsert(fromTmdb({ id: 2001, name: 'Cleanup replay fiction', first_air_date: '2026-10-17', genres: [{id:18}], 'watch/providers': tvOffers }));
+  store.upsert(fromTmdb({ id: 2002, name: 'Cleanup replay documentary', first_air_date: '2026-10-17', genres: [{id:18},{id:99}], 'watch/providers': tvOffers }));
+  const mainCleanup = await (await get('/series-v2/catalog/series/series-fr-premieres-all-2026-10/search=Cleanup.json')).json();
+  assert.equal(mainCleanup.metas.length,0);
+  const docCleanup = await (await get('/series-v2/catalog/series/series-fr-premieres-99-2026-10/search=Cleanup.json')).json();
+  assert.equal(docCleanup.metas.length,1);assert.equal(docCleanup.metas[0].name,'Cleanup replay documentary');
+  const hiddenDiscover = await (await get('/series-v2/catalog/series/series-fr-premieres-unclassified-all.json')).json();
+  assert.equal(hiddenDiscover.metas.length,0);
   console.log('Series Oracle integration passed: manifests, Shield/Desktop imports, 205 paginated entries, live animation correction, metadata gate, progress and cover renderer.');
 } finally {
   child.kill('SIGTERM');

@@ -56,17 +56,18 @@ test('cinema and digital dates do not invent availability or platform-arrival da
   const s = memory(t);
   s.upsert(record(1, { release_date: '2001-01-01', 'watch/providers': { results: {} },
     release_dates: regional([3, '2026-10-20'], [4, '2026-10-25']) }));
-  const all = s.query({ now: NOW }); assert.equal(all.length, 1);
-  assert.equal(all[0].released.slice(0, 10), '2026-10-25');
-  assert.equal(s.query({ view: 'cinema', now: NOW })[0].released.slice(0, 10), '2026-10-20');
+  assert.equal(s.query({ now: NOW }).length, 0, 'a 2001 film reissued in 2026 is not a 2026 release');
+  assert.equal(s.query({ view: 'cinema', now: NOW }).length, 0);
   assert.equal(s.query({ view: 'streaming', now: NOW }).length, 0);
-  assert.match(all[0].description, /disponibilité actuelle.*vérifier/);
-  assert.match(all[0].description, /ne constitue pas une date d’arrivée/);
+  const original = s.meta(s.row('tmdb:1'));
+  assert.equal(original.released.slice(0,10),'2001-01-01');
+  assert.match(original.description, /disponibilité actuelle.*vérifier/);
+  assert.match(original.description, /ne constitue pas une date d’arrivée/);
 });
 
 test('archives stop today; tomorrow and next week can show verified announced releases', (t) => {
   const s = memory(t);
-  s.upsert(record(1, { 'watch/providers': { results: {} }, release_dates: regional([3, '2026-10-26']) }));
+  s.upsert(record(1, { release_date: '2026-10-26', 'watch/providers': { results: {} }, release_dates: regional([3, '2026-10-26']) }));
   assert.equal(s.query({ view: 'cinema', period: '2026-10', now: NOW }).length, 0);
   assert.equal(s.query({ view: 'cinema', now: NOW }).length, 0);
   assert.equal(s.query({ view: 'cinema', period: 'tomorrow', now: NOW }).length, 1);
@@ -200,6 +201,7 @@ test('every import source has a named manifest catalog, with stable standalone i
   const origin = 'https://example.test/movies';
   const manifest = addon._internals.buildManifest(origin, NOW);
   const names = new Map(manifest.catalogs.map((c) => [c.id, c.name]));
+  assert(!manifest.catalogs.some(c => c.id.includes('-unclassified-')));
   assert.equal(names.size, manifest.catalogs.length); assert.equal(manifest.types[0], 'movie');
   assert.equal(VIEWS.length, 4); assert.equal(GENRES.length, 20);
   assert.notEqual(manifest.id, 'com.nuvio.series.france.liveaction.v2');
@@ -207,6 +209,7 @@ test('every import source has a named manifest catalog, with stable standalone i
     const imported = addon._internals.buildCollections(origin, NOW, mode);
     assert.equal(imported.length, 4);
     for (const collection of imported) for (const folder of collection.folders) {
+      assert(!folder.id.endsWith('-unclassified'));
       assert.equal(folder.tileShape, 'LANDSCAPE');
       assert.deepEqual(folder.sources.slice(0, 5).map((s) => parseCatalog(s.catalogId).period), ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
       assert(!folder.sources.some((s) => /-all$|-2027-|-2026-11/.test(s.catalogId)));

@@ -4,8 +4,8 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const suites = [
-  { name: 'Worldwide movies France', cwd: root, args: ['--test', 'regions/movies/test/movies.test.cjs'] },
-  { name: 'Worldwide live-action series', cwd: root, args: ['--test', 'regions/series/test/series.test.cjs'] },
+  { name: 'Worldwide movies France', cwd: root, args: ['--test', 'regions/movies/test/movies.test.cjs', 'regions/movies/test/catalog-policy.test.cjs'] },
+  { name: 'Worldwide live-action series', cwd: root, args: ['--test', 'regions/series/test/series.test.cjs', 'regions/series/test/catalog-policy.test.cjs'] },
   { name: 'Live Series freshness monitor', cwd: root, args: ['--test', 'test/series-freshness.test.mjs'] },
   { name: 'USA engine', cwd: path.join(root, 'regions', 'us'), args: ['--test'] },
   { name: 'France engine', cwd: path.join(root, 'regions', 'fr'), args: ['--test'] },

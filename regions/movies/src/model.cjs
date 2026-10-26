@@ -3,7 +3,7 @@
 const { isoDate, unique, classify, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods } = require('../../series/src/model.cjs');
 const { offersInFrance } = require('../../series/src/france.cjs');
 const ADDON_ID = 'com.nuvio.movies.france.world.v1';
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const GENRES = Object.freeze([
   ['all', 'Tous les films', 'all'], ['28', 'Action', 'action'], ['12', 'Aventure', 'adventure'],
   ['35', 'Comédie', 'comedy'], ['80', 'Crime / Policier', 'crime'], ['99', 'Documentaires', 'documentary'],
@@ -25,6 +25,10 @@ function fromTmdb(data) {
   const genres = unique((data.genres || []).map((g) => g.id));
   const keywords = (data.keywords?.keywords || data.keywords?.results || []).map((k) => k.name);
   const regional = (data.release_dates?.results || []).find((r) => r.iso_3166_1 === 'FR');
+  const primaryDate = isoDate(data.release_date);
+  const originalDates = (primaryDate ? [primaryDate, ...(data.release_dates?.results || []).flatMap(region =>
+    (region.release_dates || []).filter(r => [1,2,3,4,5,6].includes(Number(r.type)))
+      .map(r => isoDate(String(r.release_date || '').slice(0,10))))] : []).filter(Boolean).sort();
   const releases = (regional?.release_dates || []).flatMap((r) => {
     const kind = [2, 3].includes(Number(r.type)) ? 'cinema' : Number(r.type) === 4 ? 'digital' : null;
     const date = isoDate(String(r.release_date || '').slice(0, 10));
@@ -34,7 +38,7 @@ function fromTmdb(data) {
     key: `tmdb:${data.id}`, source: 'tmdb', sourceId: data.id,
     imdbId: /^tt\d+$/.test(data.imdb_id || data.external_ids?.imdb_id || '') ? (data.imdb_id || data.external_ids.imdb_id) : null,
     title: data.title || data.original_title || `Film ${data.id}`, originalTitle: data.original_title || null,
-    description: data.overview || null, firstAirDate: isoDate(data.release_date),
+    description: data.overview || null, firstAirDate: originalDates[0] || null,
     poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
     background: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : null,
     genres, classification: classify({ genres, keywords }), countries: (data.production_countries || []).map((c) => c.iso_3166_1),
