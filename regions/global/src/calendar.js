@@ -529,7 +529,9 @@ function movieDetailsToMeta(details, providerLabel, window, options = {}) {
     details,
     'movie',
     event.viewerDate,
-    `Première streaming • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
+    recovered
+      ? `Première sortie TMDb • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
+      : `Première streaming • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
   );
   meta.description = recovered
     ? [`${providerLabel} • Disponibilité plateforme vérifiée, date initiale TMDb (date de lancement streaming inconnue)`, meta.description].filter(Boolean).join('\n\n')
