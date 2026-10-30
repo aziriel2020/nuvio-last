@@ -16,6 +16,8 @@ export function config(env = process.env) {
   return {
     origin: new URL(env.PUBLIC_ORIGIN || 'https://nuvio-last-aziriel2020-1343705637.pages.dev').origin,
     regions: list(env.AUDIT_REGIONS || 'fr,global,tr,us'), mode,
+    shardCount: integer(env.AUDIT_SHARD_COUNT, 1, 1, 256),
+    shardIndex: integer(env.AUDIT_SHARD_INDEX, 0, 0, 255),
     concurrency: integer(env.AUDIT_CONCURRENCY, 4, 1, 6),
     attempts: integer(env.AUDIT_ATTEMPTS, 3, 1, 5),
     timeout: integer(env.AUDIT_TIMEOUT_MS, 25000, 100, 120000),
@@ -141,7 +143,8 @@ export async function discover(client, region) {
 export function select(catalogs, cfg, prior = [], now = new Date()) {
   const replay = new Set(prior.filter(r => r.status === 'FAIL' || r.status === 'NOT_TESTED').map(r => r.region + ':' + r.type + ':' + r.id));
   const months = [now, new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))].map(d => d.toISOString().slice(0, 7));
-  return catalogs.filter(c => {
+  if (cfg.shardIndex >= cfg.shardCount) throw new Error('Shard index must be less than shard count');
+  const eligible = catalogs.filter(c => {
     if (cfg.failures && !replay.has(c.region + ':' + c.type + ':' + c.id)) return false;
     if (cfg.providers.length && !cfg.providers.some(p => c.family === p || c.family.endsWith('-' + p))) return false;
     if (cfg.years.length && !cfg.years.some(y => c.id.match(/-(\d{4})-\d{2}$/)?.[1] === y)) return false;
@@ -149,6 +152,9 @@ export function select(catalogs, cfg, prior = [], now = new Date()) {
     if (cfg.mode !== 'safe' || cfg.failures || cfg.years.length || cfg.ids.length) return true;
     return !/-\d{4}-\d{2}$/.test(c.id) || months.some(m => c.id.endsWith('-' + m));
   });
+  // Deterministically partition the full eligible set so all declared
+  // catalogs are covered over a rotation, without thousands of live calls at once.
+  return cfg.shardCount === 1 ? eligible : eligible.filter((_, index) => index % cfg.shardCount === cfg.shardIndex);
 }
 async function pool(items, count, fn) {
   let cursor = 0;
@@ -286,7 +292,7 @@ export async function run(cfg, fetcher = fetch) {
   Object.assign(report, { finishedAt: new Date().toISOString(), summary: summarize(results, inventory), requests: client.requests, metaRoutes: metas.size, fatal });
   fs.mkdirSync(path.dirname(cfg.report), { recursive: true });
   fs.writeFileSync(cfg.report, JSON.stringify(report, null, 2));
-  console.log(JSON.stringify({ ...report.summary, families: undefined, requests: report.requests, desktop: cards, fatal }, null, 2));
+  console.log(JSON.stringify({ ...report.summary, families: undefined, shardIndex: cfg.shardIndex, shardCount: cfg.shardCount, requests: report.requests, desktop: cards, fatal }, null, 2));
   const uncertainEmpty = report.summary.families.some(f => f.complete && f.allEmpty && f.discovered >= 6);
   return { report, failed: Boolean(fatal || Object.values(health).some(h => h.status === 'FAIL') || results.some(r => ['FAIL', 'NOT_TESTED'].includes(r.status)) || cards.some(c => c.status === 'FAIL') || (cfg.cards && cards.length < cfg.cards) || uncertainEmpty) };
 }
