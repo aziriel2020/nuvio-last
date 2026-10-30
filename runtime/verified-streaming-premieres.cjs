@@ -5,6 +5,30 @@
 const { day, isInside } = require('./streaming-release-recovery.cjs');
 
 const RECORDS = Object.freeze([
+  // Amazon confirms this release is global (240+ territories); these
+  // country-specific Prime Video parents exist and use the same platform date.
+  Object.freeze({
+    market: 'US', type: 'movie', providerSlug: 'prime-video',
+    providerLabel: 'Prime Video', tmdbId: 1507696, imdbId: 'tt37522541',
+    title: 'Apocalypse Z: New World',
+    originalTitle: 'Apocalipsis Z: Nuevo mundo',
+    platformDate: '2026-10-30',
+    overview: 'Following the TSJ outbreak, a team crosses from the Canary Islands to Madrid to collect essential supplies.',
+    officialSource: 'https://www.aboutamazon.com/news/entertainment/apocalypse-z-2-new-world-sequel-prime-video',
+    regionalSource: 'https://www.aboutamazon.com/news/entertainment/halloween-movies-shows-on-prime-video',
+    watchUrl: 'https://www.primevideo.com/detail/0NBVXAJ6EQW7OTHPOIWASZ9313'
+  }),
+  Object.freeze({
+    market: 'TR', type: 'movie', providerSlug: 'prime-video',
+    providerLabel: 'Prime Video', tmdbId: 1507696, imdbId: 'tt37522541',
+    title: 'Apocalypse Z: New World',
+    originalTitle: 'Apocalipsis Z: Nuevo mundo',
+    platformDate: '2026-10-30',
+    overview: 'Following the TSJ outbreak, a team crosses from the Canary Islands to Madrid to collect essential supplies.',
+    officialSource: 'https://www.aboutamazon.com/news/entertainment/apocalypse-z-2-new-world-sequel-prime-video',
+    regionalSource: 'https://www.aboutamazon.com/news/entertainment/apocalypse-z-2-new-world-sequel-prime-video',
+    watchUrl: 'https://www.primevideo.com/detail/0NBVXAJ6EQW7OTHPOIWASZ9313'
+  }),
   Object.freeze({
     market: 'FR', type: 'movie', providerSlug: 'prime-video',
     providerLabel: 'Prime Video', tmdbId: 1507696, imdbId: 'tt37522541',
