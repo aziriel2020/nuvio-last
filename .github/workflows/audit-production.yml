@@ -19,7 +19,7 @@ jobs:
   audit:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       PUBLIC_ORIGIN: https://141-145-215-202.nip.io
       VERIFY_TIMEOUT_MS: 30000
@@ -35,10 +35,7 @@ jobs:
       - name: Verify Oracle production
         if: github.event_name != 'schedule'
         run: node scripts/verify-oracle-production.mjs
-      - name: Assert officially verified streaming releases are present
-        run: node scripts/check-premiere-coverage.mjs
-      - name: Daily audit of every platform movie folder across FR, US, TR and Global
-        if: github.event_name == 'schedule'
+      - name: Audit every active streaming platform catalog and verified premiere across FR, US, TR and Global
         env:
           AUDIT_ALL_PLATFORMS: '1'
         run: node scripts/check-premiere-coverage.mjs
