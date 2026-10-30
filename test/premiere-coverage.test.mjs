@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources } from '../scripts/check-premiere-coverage.mjs';
+import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, duplicateCatalogCards } from '../scripts/check-premiere-coverage.mjs';
 const require = createRequire(import.meta.url);
 const { RECORDS, verifiedForCatalog, retainVerifiedMetas, verifiedMeta } = require('../runtime/verified-streaming-premieres.cjs');
 
@@ -44,4 +44,16 @@ test('verified premieres survive maxItems cap without dupes or changing historic
     {id:'v',_dedupeKey:'movie:3',released:'2026-10-30',_calendarSource:'verified-platform-premiere'}];
   assert.deepEqual(retainVerifiedMetas(raw,2).map(x=>x.id),['a','v']);
   assert.deepEqual(retainVerifiedMetas(raw,3).map(x=>x.id),['a','b','v']);
+});
+
+test('episode-aware duplicate detection preserves distinct episodes but rejects true duplicates', () => {
+  const episode = (code, date='2026-10-30') => ({
+    type: 'series', id: 'tt1234567', name: 'Test show',
+    released: date, releaseInfo: code + ' • 30 octobre', poster: 'https://example.com/show.jpg'
+  });
+  assert.deepEqual(duplicateCatalogCards([episode('S01E01'),episode('S01E02')]), []);
+  assert.equal(duplicateCatalogCards([episode('S01E01'),episode('S01E01')]).length, 1);
+  assert.deepEqual(duplicateCatalogCards([episode('S01E01'),episode('S01E01','2026-10-31')]), []);
+  assert.equal(duplicateCatalogCards([{type:'movie',id:'tt500',released:'2026-10-10'},
+    {type:'movie',id:'tt500',released:'2026-10-30'}]).length, 1);
 });
