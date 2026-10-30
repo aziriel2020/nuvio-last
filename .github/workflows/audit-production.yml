@@ -5,6 +5,8 @@ on:
   workflow_run:
     workflows: ["Deploy Oracle Production"]
     types: [completed]
+  schedule:
+    - cron: '15 5,17 * * *'
 
 permissions:
   contents: read
@@ -31,7 +33,15 @@ jobs:
       - name: Install audit dependencies
         run: npm install --no-audit --no-fund
       - name: Verify Oracle production
+        if: github.event_name != 'schedule'
         run: node scripts/verify-oracle-production.mjs
+      - name: Assert officially verified streaming releases are present
+        run: node scripts/check-premiere-coverage.mjs
+      - name: Daily audit of every platform movie folder across FR, US, TR and Global
+        if: github.event_name == 'schedule'
+        env:
+          AUDIT_ALL_PLATFORMS: '1'
+        run: node scripts/check-premiere-coverage.mjs
       - name: Verify approved France streaming-service artwork
         run: node scripts/verify-fr-service-production.mjs
       - name: Verify approved Anime Japon Coree artwork and catalogue thumbnails
