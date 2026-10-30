@@ -23,20 +23,23 @@ function matchPremiere(metas, p) {
       (m.name === p.title && String(m.released || '').slice(0,10) === p.platformDate))
   );
 }
-function allMovieTodaySources(collections, region) {
+function allPlatformTodaySources(collections, region) {
   const prefix = PREFIX[region];
   if (!Array.isArray(collections)) throw Error('Collection import is not an array');
   const found = new Map();
   for (const collection of collections) {
     for (const folder of collection?.folders || []) {
       for (const source of folder?.sources || []) {
-        if (source.type !== 'movie' || typeof source.catalogId !== 'string') continue;
-        if (!source.catalogId.startsWith(prefix+'-movie-') || !source.catalogId.endsWith('-today')) continue;
-        found.set(source.catalogId, { type:'movie', provider:collection.title, id:source.catalogId });
+        if (!['movie','series'].includes(source.type) || typeof source.catalogId !== 'string') continue;
+        if (!source.catalogId.startsWith(prefix+'-'+source.type+'-') || !source.catalogId.endsWith('-today')) continue;
+        found.set(source.catalogId, { type:source.type, provider:collection.title, id:source.catalogId });
       }
     }
   }
   return [...found.values()];
+}
+function allMovieTodaySources(collections, region) {
+  return allPlatformTodaySources(collections, region).filter(source => source.type === 'movie');
 }
 async function getJson(path, { retries = 2 } = {}) {
   let lastError;
@@ -75,25 +78,36 @@ async function checkMovieFolders(region) {
   let collections;
   try { collections = await getJson('/'+root+'/nuvio-collections.json'); }
   catch(error) { failures.push({market:region,error:'collections unavailable: '+error.message});return; }
-  const sources=allMovieTodaySources(collections,region);
-  if (!sources.length) { failures.push({market:region,error:'No platform movie folders discovered'});return; }
+  const sources=allPlatformTodaySources(collections,region);
+  if (!sources.length) { failures.push({market:region,error:'No active streaming platform folders discovered'});return; }
+  try {
+    const manifest=await getJson('/'+root+'/manifest.json');
+    if (!Array.isArray(manifest.catalogs)) throw Error('No catalogs in manifest');
+    const ids=new Set(manifest.catalogs.map(c=>c.type+':'+c.id));
+    for (const source of sources) {
+      if (!ids.has(source.type+':'+source.id))
+        failures.push({market:region,catalog:source.id,error:'Platform catalog not declared in manifest'});
+    }
+  } catch(error) {
+    failures.push({market:region,error:'Cannot validate active platform catalog links: '+error.message});
+  }
   // Bound concurrency and rate to respect the upstream TMDb rate budget.
   for (let i=0;i<sources.length;i+=3) {
     const batch=sources.slice(i,i+3);
     await Promise.all(batch.map(async source=>{
-      const path=`/${root}/catalog/movie/${encodeURIComponent(source.id)}.json`;
+      const path=`/${root}/catalog/${source.type}/${encodeURIComponent(source.id)}.json`;
       try{
         const data=await getJson(path);
         if (!Array.isArray(data?.metas)) throw Error('metas[] missing');
         const ids=data.metas.map(m=>m.id);
         if (ids.length!==new Set(ids).size) throw Error('Duplicate movie cards');
-        if (data.metas.some(m=>m.type!=='movie' || !m.id || !m.name)) throw Error('Malformed movie card');
+        if (data.metas.some(m=>m.type!==source.type || !m.id || !m.name)) throw Error('Malformed catalog card');
         observations.push({status:'healthy',market:region,provider:source.provider,catalog:source.id,count:ids.length});
       }catch(error){failures.push({market:region,provider:source.provider,catalog:source.id,error:error.message});}
     }));
   }
 }
-export { pathFor, matchPremiere, allMovieTodaySources };
+export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources };
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   if (FULL_SCAN) for (const region of Object.keys(REGION)) await checkMovieFolders(region);
   for (const p of RECORDS) await verifyRecord(p);
