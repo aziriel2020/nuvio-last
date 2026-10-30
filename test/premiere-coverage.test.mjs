@@ -11,6 +11,12 @@ test('provenance registry routes any provider to its own market and archive fold
   assert.deepEqual(verifiedForCatalog({type:'movie',providerSlug:'netflix'}, {start:p.platformDate,end:p.platformDate},'FR'),[]);
   assert.deepEqual(verifiedForCatalog({type:'movie',providerSlug:'prime-video'}, {start:p.platformDate,end:p.platformDate},'BE'),[]);
   assert.equal(verifiedForCatalog({type:'movie',providerSlug:'prime-video'}, {start:p.platformDate,end:p.platformDate},'FR').length,1);
+  for (const market of ['US','TR']) {
+    const matches=verifiedForCatalog({type:'movie',providerSlug:'prime-video'},
+      {start:'2026-10-30',end:'2026-10-30'},market);
+    assert.equal(matches.length,1,'global Amazon release must cover '+market);
+    assert.match(pathFor(matches[0]),/\/catalog\/movie\/archives-(?:v3|tr-v1)-movie-prime-video-2026-10\.json$/);
+  }
 });
 test('coverage detects a genuinely missing card rather than matching a similar title', () => {
   const p=RECORDS[0];
