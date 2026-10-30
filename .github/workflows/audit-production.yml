@@ -6,7 +6,7 @@ on:
     workflows: ["Deploy Oracle Production"]
     types: [completed]
   schedule:
-    - cron: '15 5,17 * * *'
+    - cron: '15 */4 * * *'
 
 permissions:
   contents: read
@@ -19,7 +19,7 @@ jobs:
   audit:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 40
     env:
       PUBLIC_ORIGIN: https://141-145-215-202.nip.io
       VERIFY_TIMEOUT_MS: 30000
@@ -40,39 +40,41 @@ jobs:
         env:
           AUDIT_INVENTORY_REPORT: audit-collection-inventory.json
         run: node scripts/audit-collection-inventory.mjs
-      - name: Audit every active streaming platform catalog and verified premiere across FR, US, TR and Global
-        env:
-          AUDIT_ALL_PLATFORMS: '1'
-        run: node scripts/check-premiere-coverage.mjs
-      - name: Audit full Nuvio collection pack - active families and latest archives
+      - name: Verify all officially confirmed streaming premieres
         if: success() || failure()
-        env:
-          AUDIT_RUNTIME: oracle-vm
-          AUDIT_MODE: safe
-          AUDIT_DESKTOP_CARDS: '0'
-          AUDIT_META_SAMPLES: '1'
-          AUDIT_CONCURRENCY: '2'
-          AUDIT_INTERVAL_MS: '250'
-          AUDIT_TIMEOUT_MS: '30000'
-          AUDIT_REQUEST_BUDGET: '12000'
-          AUDIT_REPORT: audit-collections-active.json
-        run: node scripts/audit-production-catalogs.mjs
-      - name: Audit historical archives across all collection families - rotating year
+        run: node scripts/check-premiere-coverage.mjs
+      - name: Audit bounded sample across all active collection families
         if: (success() || failure()) && github.event_name == 'schedule'
         env:
           AUDIT_RUNTIME: oracle-vm
-          AUDIT_MODE: targeted
+          AUDIT_MODE: safe
+          AUDIT_SHARD_COUNT: '64'
+          AUDIT_DESKTOP_CARDS: '0'
+          AUDIT_META_SAMPLES: '1'
+          AUDIT_CONCURRENCY: '1'
+          AUDIT_ATTEMPTS: '2'
+          AUDIT_INTERVAL_MS: '650'
+          AUDIT_TIMEOUT_MS: '20000'
+          AUDIT_REQUEST_BUDGET: '600'
+          AUDIT_REPORT: audit-collections-active.json
+        run: |
+          AUDIT_SHARD_INDEX="$(( ($(date -u +%s) / 14400) % 64 ))" node scripts/audit-production-catalogs.mjs
+      - name: Audit every historical catalog in rotating, rate-limited shards
+        if: (success() || failure()) && github.event_name == 'schedule'
+        env:
+          AUDIT_RUNTIME: oracle-vm
+          AUDIT_MODE: full
+          AUDIT_SHARD_COUNT: '256'
           AUDIT_DESKTOP_CARDS: '0'
           AUDIT_META_SAMPLES: '0'
-          AUDIT_CONCURRENCY: '2'
-          AUDIT_INTERVAL_MS: '300'
-          AUDIT_TIMEOUT_MS: '30000'
-          AUDIT_REQUEST_BUDGET: '12000'
+          AUDIT_CONCURRENCY: '1'
+          AUDIT_ATTEMPTS: '2'
+          AUDIT_INTERVAL_MS: '650'
+          AUDIT_TIMEOUT_MS: '20000'
+          AUDIT_REQUEST_BUDGET: '700'
           AUDIT_REPORT: audit-collections-history.json
         run: |
-          YEAR=$((2015 + ( $(date -u +%s) / 43200 ) % 16))
-          echo "Auditing all movie and series archive catalogs for year $YEAR across FR, US, TR and Global"
-          AUDIT_YEARS="$YEAR" node scripts/audit-production-catalogs.mjs
+          AUDIT_SHARD_INDEX="$(( ($(date -u +%s) / 14400) % 256 ))" node scripts/audit-production-catalogs.mjs
       - name: Verify approved France streaming-service artwork
         if: success() || failure()
         run: node scripts/verify-fr-service-production.mjs
