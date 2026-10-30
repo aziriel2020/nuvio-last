@@ -1,5 +1,6 @@
 'use strict';
 const { secondaryMovieDiscoveryParams, mergeCandidatePages } = require('../../../runtime/streaming-release-recovery.cjs');
+const { verifiedForCatalog, verifiedMeta } = require('../../../runtime/verified-streaming-premieres.cjs');
 
 const { withHeroTitles } = require('../../../runtime/collection-titles.cjs');
 
@@ -2824,53 +2825,11 @@ function hasProviderAccess(details, provider) {
 // Official platform premieres are independently sourced when TMDb's French
 // digital-release / watch-provider index is incomplete or arrives late.
 // Each exception requires a primary release announcement and a France offer.
-const VERIFIED_STREAMING_PREMIERES = Object.freeze([
-  Object.freeze({
-    providerSlug: 'prime-video',
-    tmdbId: 1507696,
-    imdbId: 'tt37522541',
-    title: 'Apocalypse Z : Nouveau Monde',
-    originalTitle: 'Apocalipsis Z: Nuevo mundo',
-    platformDate: '2026-10-30',
-    overview: 'Aux Canaries, une équipe part chercher des provisions sur le continent, au milieu des infectés.',
-    officialSource: 'https://www.aboutamazon.com/news/entertainment/apocalypse-z-2-new-world-sequel-prime-video',
-    regionalSource: 'https://www.justwatch.com/fr/film/apocalypse-z-nouveau-monde',
-    watchUrl: 'https://www.primevideo.com/detail/0NBVXAJ6EQW7OTHPOIWASZ9313'
-  })
-]);
 function verifiedPremieresForCatalog(catalog, window) {
-  if (catalog?.type !== 'movie' || window?.empty || !window?.start || !window?.end) return [];
-  return VERIFIED_STREAMING_PREMIERES.filter((premiere) =>
-    premiere.providerSlug === catalog.providerSlug &&
-    premiere.platformDate >= window.start && premiere.platformDate <= window.end
-  );
+  return verifiedForCatalog(catalog, window, DEFAULT_COUNTRY);
 }
 function verifiedPremiereMovieMeta(premiere, details = null) {
-  // Enrich artwork and synopsis from TMDb, but retain the verified platform
-  // premiere rather than a festival/first-world premiere.
-  const source = {
-    ...(details || {}),
-    id: premiere.tmdbId,
-    imdb_id: premiere.imdbId,
-    external_ids: { ...(details?.external_ids || {}), imdb_id: premiere.imdbId },
-    title: premiere.title,
-    original_title: premiere.originalTitle,
-    overview: details?.overview || premiere.overview
-  };
-  const meta = baseMeta(source, 'movie', premiere.platformDate,
-    `Première Prime Video • ${humanCalendarDate(premiere.platformDate)}`);
-  meta._calendarProvider = 'Prime Video';
-  meta._calendarSource = 'verified-platform-premiere';
-  meta.description = [
-    `Sortie Prime Video France : ${humanCalendarDate(premiere.platformDate)} (date plateforme vérifiée, distincte de la première mondiale).`,
-    meta.description
-  ].filter(Boolean).join('\n\n');
-  meta.links = [
-    { name: 'Regarder sur Prime Video', category: 'Regarder', url: premiere.watchUrl },
-    { name: 'Annonce officielle Amazon', category: 'Sources', url: premiere.officialSource },
-    { name: 'Disponibilité France', category: 'Sources', url: premiere.regionalSource }
-  ];
-  return meta;
+  return verifiedMeta(premiere, details, baseMeta, humanCalendarDate, 'France');
 }
 
 function platformCollectionTitle(providerSlug) {
