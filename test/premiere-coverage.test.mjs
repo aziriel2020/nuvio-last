@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const { RECORDS, verifiedForCatalog, retainVerifiedMetas, verifiedMeta } = require('../runtime/verified-streaming-premieres.cjs');
 
 test('provenance registry routes any provider to its own market and archive folder', () => {
-  const p=RECORDS[0];
+  const p=RECORDS.find(entry=>entry.market==='FR');
   assert.equal(pathFor(p),'/fr/catalog/movie/archives-fr-v1-movie-prime-video-2026-10.json');
   assert.deepEqual(verifiedForCatalog({type:'movie',providerSlug:'netflix'}, {start:p.platformDate,end:p.platformDate},'FR'),[]);
   assert.deepEqual(verifiedForCatalog({type:'movie',providerSlug:'prime-video'}, {start:p.platformDate,end:p.platformDate},'BE'),[]);
@@ -19,7 +19,7 @@ test('provenance registry routes any provider to its own market and archive fold
   }
 });
 test('coverage detects a genuinely missing card rather than matching a similar title', () => {
-  const p=RECORDS[0];
+  const p=RECORDS.find(entry=>entry.market==='FR');
   assert.equal(matchPremiere([{type:'movie',id:'tt12345678',name:'Apocalypse Z : Nouveau Monde',released:'2026-10-09'}],p),undefined);
   assert.equal(matchPremiere([{type:'movie',id:p.imdbId,name:p.title,released:p.platformDate}],p)?.id,p.imdbId);
 });
