@@ -27,12 +27,21 @@ function fromTmdb(data) {
   const keywords = (data.keywords?.keywords || data.keywords?.results || []).map((k) => k.name);
   const regional = (data.release_dates?.results || []).find((r) => r.iso_3166_1 === 'FR');
   const primaryDate = isoDate(data.release_date);
-  // Keep the earliest real-world release when TMDb omits release_date but
-  // still supplies country-specific releases. Never silently classify such a
-  // film as undated and hide it from every dated Films Monde collection.
-  const originalDates = [primaryDate, ...(data.release_dates?.results || []).flatMap(region =>
+  // If primary release_date is absent, require release evidence in at least
+  // TWO distinct countries. A lone regional rerelease (often a late digital
+  // release) must NOT be mislabeled as the worldwide first release.
+  const regionalGroups = data.release_dates?.results || [];
+  const corroboratedCountries = new Set(regionalGroups
+    .filter(region => (region.release_dates || []).some(r =>
+      [1,2,3,4,5,6].includes(Number(r.type)) &&
+      isoDate(String(r.release_date || '').slice(0,10))))
+    .map(region => region.iso_3166_1).filter(Boolean));
+  const candidateDates = regionalGroups.flatMap(region =>
     (region.release_dates || []).filter(r => [1,2,3,4,5,6].includes(Number(r.type)))
-      .map(r => isoDate(String(r.release_date || '').slice(0,10))))].filter(Boolean).sort();
+      .map(r => isoDate(String(r.release_date || '').slice(0,10))));
+  const originalDates = [primaryDate,
+    ...(primaryDate || corroboratedCountries.size >= 2 ? candidateDates : [])]
+    .filter(Boolean).sort();
   const releases = (regional?.release_dates || []).flatMap((r) => {
     const kind = [2, 3].includes(Number(r.type)) ? 'cinema' : Number(r.type) === 4 ? 'digital' : null;
     const date = isoDate(String(r.release_date || '').slice(0, 10));
