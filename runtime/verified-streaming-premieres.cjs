@@ -65,4 +65,14 @@ function verifiedMeta(premiere, details, baseMeta, formatDate = (d)=>d, marketLa
   ];
   return meta;
 }
-module.exports = { RECORDS, assertValid, verifiedForCatalog, verifiedMeta };
+// Mandatory provenance-confirmed premieres must never be crowded out by
+// popularity/size limits. Sort chronology without sacrificing the proof set.
+function retainVerifiedMetas(sorted, maxItems) {
+  const max = Math.max(0, Number(maxItems) || 0);
+  const required = sorted.filter(meta => meta?._calendarSource === 'verified-platform-premiere');
+  const others = sorted.filter(meta => meta?._calendarSource !== 'verified-platform-premiere');
+  const chosen = [...others.slice(0, Math.max(0, max - required.length)), ...required].slice(0, max);
+  const order = new Map(sorted.map((meta, index) => [meta._dedupeKey || meta.id, index]));
+  return chosen.sort((a, b) => (order.get(a._dedupeKey || a.id) || 0) - (order.get(b._dedupeKey || b.id) || 0));
+}
+module.exports = { RECORDS, assertValid, verifiedForCatalog, verifiedMeta, retainVerifiedMetas };
