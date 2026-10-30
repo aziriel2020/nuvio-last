@@ -1,6 +1,6 @@
 'use strict';
 const { secondaryMovieDiscoveryParams, mergeCandidatePages } = require('../../../runtime/streaming-release-recovery.cjs');
-const { verifiedForCatalog, verifiedMeta } = require('../../../runtime/verified-streaming-premieres.cjs');
+const { verifiedForCatalog, verifiedMeta, retainVerifiedMetas } = require('../../../runtime/verified-streaming-premieres.cjs');
 
 const { withHeroTitles } = require('../../../runtime/collection-titles.cjs');
 
@@ -2755,7 +2755,7 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
   stats.verifiedPremieres = verified.filter(result => !result?.error).length;
   const sorted = sortAndDedupeMetas([...allMetas.values()]);
   stats.duplicatesRemoved = Math.max(0, metas.length + stats.verifiedPremieres - sorted.length);
-  const finalMetas = sorted.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
+  const finalMetas = retainVerifiedMetas(sorted, getConfig().maxItems).map(cleanCatalogMeta);
   stats.final = finalMetas.length;
   const result = { metas: finalMetas, stats };
   return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
