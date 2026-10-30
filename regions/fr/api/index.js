@@ -2820,6 +2820,58 @@ function hasProviderAccess(details, provider) {
   return provider.ids.some((id) => activeIds.has(Number(id)));
 }
 
+// Official platform premieres are independently sourced when TMDb's French
+// digital-release / watch-provider index is incomplete or arrives late.
+// Each exception requires a primary release announcement and a France offer.
+const VERIFIED_STREAMING_PREMIERES = Object.freeze([
+  Object.freeze({
+    providerSlug: 'prime-video',
+    tmdbId: 1507696,
+    imdbId: 'tt37522541',
+    title: 'Apocalypse Z : Nouveau Monde',
+    originalTitle: 'Apocalipsis Z: Nuevo mundo',
+    platformDate: '2026-10-30',
+    overview: 'Aux Canaries, une équipe part chercher des provisions sur le continent, au milieu des infectés.',
+    officialSource: 'https://www.aboutamazon.com/news/entertainment/apocalypse-z-2-new-world-sequel-prime-video',
+    regionalSource: 'https://www.justwatch.com/fr/film/apocalypse-z-nouveau-monde',
+    watchUrl: 'https://www.primevideo.com/detail/0NBVXAJ6EQW7OTHPOIWASZ9313'
+  })
+]);
+function verifiedPremieresForCatalog(catalog, window) {
+  if (catalog?.type !== 'movie' || window?.empty || !window?.start || !window?.end) return [];
+  return VERIFIED_STREAMING_PREMIERES.filter((premiere) =>
+    premiere.providerSlug === catalog.providerSlug &&
+    premiere.platformDate >= window.start && premiere.platformDate <= window.end
+  );
+}
+function verifiedPremiereMovieMeta(premiere, details = null) {
+  // Enrich artwork and synopsis from TMDb, but retain the verified platform
+  // premiere rather than a festival/first-world premiere.
+  const source = {
+    ...(details || {}),
+    id: premiere.tmdbId,
+    imdb_id: premiere.imdbId,
+    external_ids: { ...(details?.external_ids || {}), imdb_id: premiere.imdbId },
+    title: premiere.title,
+    original_title: premiere.originalTitle,
+    overview: details?.overview || premiere.overview
+  };
+  const meta = baseMeta(source, 'movie', premiere.platformDate,
+    `Première Prime Video • ${humanCalendarDate(premiere.platformDate)}`);
+  meta._calendarProvider = 'Prime Video';
+  meta._calendarSource = 'verified-platform-premiere';
+  meta.description = [
+    `Sortie Prime Video France : ${humanCalendarDate(premiere.platformDate)} (date plateforme vérifiée, distincte de la première mondiale).`,
+    meta.description
+  ].filter(Boolean).join('\n\n');
+  meta.links = [
+    { name: 'Regarder sur Prime Video', category: 'Regarder', url: premiere.watchUrl },
+    { name: 'Annonce officielle Amazon', category: 'Sources', url: premiere.officialSource },
+    { name: 'Disponibilité France', category: 'Sources', url: premiere.regionalSource }
+  ];
+  return meta;
+}
+
 function platformCollectionTitle(providerSlug) {
   if (providerSlug === 'crunchyroll') return 'Crunchyroll + AniList';
   if (providerSlug === 'cinema-torrentio') return 'Cinéma · Torrentio';
@@ -3760,14 +3812,29 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
-  const provider = await resolveProvider(catalog.providerSlug, catalog.type);
+  const verifiedPremieres = verifiedPremieresForCatalog(catalog, window);
+  let provider;
+  try {
+    provider = await resolveProvider(catalog.providerSlug, catalog.type);
+  } catch (error) {
+    if (!verifiedPremieres.length) throw error;
+    provider = { label: catalog.cardProvider || 'Prime Video', ids: [] };
+  }
   const stats = emptyStats(provider, { ...catalog, period }, window, timeZone);
-  if (!provider?.ids?.length) {
+  if (!provider?.ids?.length && !verifiedPremieres.length) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
 
-  const raw = await discoverCandidates({ ...catalog, period }, window, provider.ids, timeZone);
+  let raw = [];
+  if (provider?.ids?.length) {
+    try {
+      raw = await discoverCandidates({ ...catalog, period }, window, provider.ids, timeZone);
+    } catch (error) {
+      if (!verifiedPremieres.length) throw error;
+      stats.discoveryFallback = true;
+    }
+  }
   stats.candidates = raw.length;
 
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
@@ -3794,8 +3861,20 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
     metas.push(result.meta);
   }
 
-  const sorted = sortAndDedupeMetas(metas);
-  stats.duplicatesRemoved = Math.max(0, metas.length - sorted.length);
+  const verified = await mapLimitSettled(verifiedPremieres, ENRICH_CONCURRENCY, async (premiere) => {
+    const details = await fetchDetails('movie', premiere.tmdbId).catch(() => null);
+    return verifiedPremiereMovieMeta(premiere, details);
+  });
+  // The official platform premiere wins over an outdated TMDb card for the
+  // same movie; it is never appended as a second copy.
+  const canonicalMetas = new Map(metas.map((meta) => [meta._dedupeKey || meta.id, meta]));
+  for (const result of verified) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (result?._dedupeKey || result?.id) canonicalMetas.set(result._dedupeKey || result.id, result);
+  }
+  stats.verifiedPremieres = verified.filter((result) => !result?.error).length;
+  const sorted = sortAndDedupeMetas([...canonicalMetas.values()]);
+  stats.duplicatesRemoved = Math.max(0, metas.length + stats.verifiedPremieres - sorted.length);
   const finalMetas = sorted.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
   stats.final = finalMetas.length;
   const result = { metas: finalMetas, stats };
@@ -5866,6 +5945,8 @@ module.exports._internals = {
   platformProviderDefinition,
   providerMonetizationTypes,
   hasProviderAccess,
+  verifiedPremieresForCatalog,
+  verifiedPremiereMovieMeta,
   platformCollectionTitle,
   regionCollectionTitle,
   platformLogoAsset,
