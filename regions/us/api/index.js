@@ -1,5 +1,6 @@
 'use strict';
 const { secondaryMovieDiscoveryParams, mergeCandidatePages } = require('../../../runtime/streaming-release-recovery.cjs');
+const { verifiedForCatalog, verifiedMeta } = require('../../../runtime/verified-streaming-premieres.cjs');
 
 const { withHeroTitles } = require('../../../runtime/collection-titles.cjs');
 
@@ -2692,14 +2693,29 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
-  const provider = await resolveProvider(catalog.providerSlug, catalog.type);
+  const verifiedPremieres = verifiedForCatalog(catalog, window, DEFAULT_COUNTRY);
+  let provider;
+  try {
+    provider = await resolveProvider(catalog.providerSlug, catalog.type);
+  } catch (error) {
+    if (!verifiedPremieres.length) throw error;
+    provider = { label: catalog.cardProvider || catalog.providerSlug, ids: [] };
+  }
   const stats = emptyStats(provider, { ...catalog, period }, window, timeZone);
-  if (!provider?.ids?.length) {
+  if (!provider?.ids?.length && !verifiedPremieres.length) {
     const result = { metas: [], stats };
     return useCache ? catalogCache.set(key, result, CATALOG_TTL_MS) : result;
   }
 
-  const raw = await discoverCandidates({ ...catalog, period }, window, provider.ids, timeZone);
+  let raw = [];
+  try {
+    if (provider?.ids?.length || false) {
+      raw = await discoverCandidates({ ...catalog, period }, window, provider.ids || [], timeZone);
+    }
+  } catch (error) {
+    if (!verifiedPremieres.length) throw error;
+    stats.discoveryFallback = true;
+  }
   stats.candidates = raw.length;
 
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
@@ -2727,8 +2743,18 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
     metas.push(result.meta);
   }
 
-  const sorted = sortAndDedupeMetas(metas);
-  stats.duplicatesRemoved = Math.max(0, metas.length - sorted.length);
+  const verified = await mapLimitSettled(verifiedPremieres, ENRICH_CONCURRENCY, async (premiere) => {
+    const details = await fetchDetails('movie', premiere.tmdbId).catch(() => null);
+    return verifiedMeta(premiere, details, baseMeta, humanCalendarDate, 'États-Unis');
+  });
+  const allMetas = new Map(metas.map(meta => [meta._dedupeKey || meta.id, meta]));
+  for (const result of verified) {
+    if (result?.error) { stats.enrichmentErrors += 1; continue; }
+    if (result?._dedupeKey || result?.id) allMetas.set(result._dedupeKey || result.id, result);
+  }
+  stats.verifiedPremieres = verified.filter(result => !result?.error).length;
+  const sorted = sortAndDedupeMetas([...allMetas.values()]);
+  stats.duplicatesRemoved = Math.max(0, metas.length + stats.verifiedPremieres - sorted.length);
   const finalMetas = sorted.slice(0, getConfig().maxItems).map(cleanCatalogMeta);
   stats.final = finalMetas.length;
   const result = { metas: finalMetas, stats };
