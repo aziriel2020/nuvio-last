@@ -119,6 +119,12 @@ jobs:
           set -Eeuo pipefail
           node scripts/verify-oracle-production.mjs | tee "$RUNNER_TEMP/oracle-production-audit.json.log"
 
+      - name: Fail and roll back if a verified platform premiere disappears
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/check-premiere-coverage.mjs
+
       - name: Verify the seven approved Tendances and Cinema artwork pairs
         env:
           ARTWORK_EXPECTED_SHA: ${{ github.sha }}
