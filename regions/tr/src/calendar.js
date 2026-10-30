@@ -1,4 +1,5 @@
 'use strict';
+const { originalPremiereWhenDigitalMissing } = require('../../../runtime/streaming-release-recovery.cjs');
 
 const DEFAULT_TIMEZONE = 'Europe/Istanbul';
 const DEFAULT_COUNTRY = 'TR';
@@ -505,10 +506,16 @@ function baseMeta(details, type, releaseDate, releaseInfo) {
   };
 }
 
-function movieDetailsToMeta(details, providerLabel, window) {
+function movieDetailsToMeta(details, providerLabel, window, options = {}) {
   const selected = selectDigitalRelease(details, window);
-  if (!selected.release) return { meta: null, reason: selected.reason };
-  const eventResult = buildStreamingDateEvent(selected.release.date, window, providerLabel);
+  // This fallback is gated by an EXACT provider-offer check in the catalog
+  // pipeline. Never apply it to VOD, theatrical or non-provider feeds.
+  const recovered = !selected.release && options.providerConfirmed === true
+    ? originalPremiereWhenDigitalMissing(details, window, DEFAULT_COUNTRY)
+    : null;
+  const releaseDate = selected.release?.date || recovered?.date;
+  if (!releaseDate) return { meta: null, reason: selected.reason };
+  const eventResult = buildStreamingDateEvent(releaseDate, window, providerLabel);
   if (!eventResult.event) return { meta: null, reason: eventResult.reason };
   const event = eventResult.event;
   const meta = baseMeta(
@@ -517,9 +524,11 @@ function movieDetailsToMeta(details, providerLabel, window) {
     event.viewerDate,
     `Première streaming • ${humanDate(event.viewerDate, DEFAULT_TIMEZONE, window.today)}`
   );
-  meta.description = [`${providerLabel} Türkiye • Première digitale`, meta.description].filter(Boolean).join('\n\n');
+  meta.description = recovered
+    ? [`${providerLabel} • Disponibilité plateforme vérifiée, date initiale TMDb (date de lancement streaming inconnue)`, meta.description].filter(Boolean).join('\n\n')
+    : [`${providerLabel} • Sortie numérique TMDb`, meta.description].filter(Boolean).join('\n\n');
   meta._eventMode = event.eventMode;
-  return { meta, reason: null, event };
+  return { meta, reason: null, event, recovered: Boolean(recovered) };
 }
 
 function movieVodDetailsToMeta(details, providerLabel, window) {
