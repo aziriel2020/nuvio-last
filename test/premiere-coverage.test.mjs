@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pathFor, matchPremiere, allMovieTodaySources } from '../scripts/check-premiere-coverage.mjs';
+import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources } from '../scripts/check-premiere-coverage.mjs';
 const require = createRequire(import.meta.url);
 const { RECORDS, verifiedForCatalog, retainVerifiedMetas, verifiedMeta } = require('../runtime/verified-streaming-premieres.cjs');
 
@@ -26,6 +26,8 @@ test('platform scan covers every dated movie platform folder and ignores editori
       {type:'movie',catalogId:'archives-fr-v1-movie-netflix-today'}]}]},
     {title:'Editorial',folders:[{sources:[{type:'movie',catalogId:'editorial-movies-new-today'}]}]}
   ];
+  entries[0].folders[0].sources.push({type:'series',catalogId:'archives-fr-v1-series-prime-video-today'});
+  assert.equal(allPlatformTodaySources(entries,'FR').length,3);
   assert.deepEqual(allMovieTodaySources(entries,'FR').map(x=>x.id).sort(),[
     'archives-fr-v1-movie-netflix-today','archives-fr-v1-movie-prime-video-today'
   ]);
