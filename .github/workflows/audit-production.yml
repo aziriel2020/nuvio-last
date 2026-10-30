@@ -39,9 +39,47 @@ jobs:
         env:
           AUDIT_ALL_PLATFORMS: '1'
         run: node scripts/check-premiere-coverage.mjs
+      - name: Audit full Nuvio collection pack - active families and latest archives
+        env:
+          AUDIT_RUNTIME: oracle-vm
+          AUDIT_MODE: safe
+          AUDIT_DESKTOP_CARDS: '0'
+          AUDIT_META_SAMPLES: '1'
+          AUDIT_CONCURRENCY: '2'
+          AUDIT_INTERVAL_MS: '250'
+          AUDIT_TIMEOUT_MS: '30000'
+          AUDIT_REQUEST_BUDGET: '12000'
+          AUDIT_REPORT: audit-collections-active.json
+        run: node scripts/audit-production-catalogs.mjs
+      - name: Audit historical archives across all collection families - rotating year
+        if: github.event_name == 'schedule'
+        env:
+          AUDIT_RUNTIME: oracle-vm
+          AUDIT_MODE: targeted
+          AUDIT_DESKTOP_CARDS: '0'
+          AUDIT_META_SAMPLES: '0'
+          AUDIT_CONCURRENCY: '2'
+          AUDIT_INTERVAL_MS: '300'
+          AUDIT_TIMEOUT_MS: '30000'
+          AUDIT_REQUEST_BUDGET: '12000'
+          AUDIT_REPORT: audit-collections-history.json
+        run: |
+          YEAR=$((2015 + ( $(date -u +%s) / 43200 ) % 16))
+          echo "Auditing all movie and series archive catalogs for year $YEAR across FR, US, TR and Global"
+          AUDIT_YEARS="$YEAR" node scripts/audit-production-catalogs.mjs
       - name: Verify approved France streaming-service artwork
         run: node scripts/verify-fr-service-production.mjs
       - name: Verify approved Anime Japon Coree artwork and catalogue thumbnails
         env:
           ANIME_VERIFY_CATALOGS: '1'
         run: node scripts/verify-anime-production.mjs
+      - name: Upload all-collections audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-all-collections-audits
+          path: |
+            audit-collections-active.json
+            audit-collections-history.json
+          if-no-files-found: ignore
+          retention-days: 14
