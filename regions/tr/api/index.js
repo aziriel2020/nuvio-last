@@ -1,4 +1,5 @@
 'use strict';
+const { secondaryMovieDiscoveryParams, mergeCandidatePages } = require('../../../runtime/streaming-release-recovery.cjs');
 
 const { withHeroTitles } = require('../../../runtime/collection-titles.cjs');
 
@@ -59,7 +60,7 @@ const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-reval
 const DYNAMIC_CATALOG_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 const ARCHIVE_CATALOG_CACHE = 'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400';
 const EMPTY_CATALOG_CACHE = 'public, max-age=300, s-maxage=3600';
-const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network6-dsmart-cms';
+const SOURCE_VERSION = 'calendar-archives-tr-v1.4.0-modern-shield-network6-dsmart-cms-release-recovery-v1';
 const VISUAL_REV = 'coex-tr140-cinematic-services2';
 
 const REGION_ART_KEY = 'tr';
@@ -2964,30 +2965,45 @@ function fallbackDiscoverParams(catalog, window, providerIds, page, timeZone) {
 
 async function discoverCandidates(catalog, window, providerIds, timeZone) {
   const endpoint = catalog.type === 'movie' ? '/discover/movie' : '/discover/tv';
-  const maxCandidates = providerIds.length
-    ? getConfig().maxCandidates
-    : Math.min(240, Math.max(120, getConfig().maxCandidates * 2));
-  const items = [];
-  for (let page = 1; page <= 5 && items.length < maxCandidates; page += 1) {
-    let payload;
-    try {
-      payload = await tmdbFetch(
-        endpoint,
-        providerIds.length
-          ? discoverParams(catalog, window, providerIds, page, timeZone)
-          : fallbackDiscoverParams(catalog, window, providerIds, page, timeZone)
-      );
-    } catch (error) {
-      if (error?.code === 'TMDB_HTTP_ERROR' && [400, 422].includes(error.status)) {
-        payload = await tmdbFetch(endpoint, fallbackDiscoverParams(catalog, window, providerIds, page, timeZone));
-      } else {
-        throw error;
+  const maxCandidates = getConfig().maxCandidates;
+  const collect = async (mode, maxPages, limit) => {
+    const items = [];
+    for (let page = 1; page <= maxPages && items.length < limit; page += 1) {
+      const raw = discoverParams(catalog, window, providerIds, page, timeZone);
+      const params = mode === 'primary-release' ? secondaryMovieDiscoveryParams(raw, window) : raw;
+      let payload;
+      try {
+        payload = await tmdbFetch(endpoint, params);
+      } catch (error) {
+        if (error?.code === 'TMDB_HTTP_ERROR' && [400, 422].includes(error.status)) {
+          const fallbackRaw = fallbackDiscoverParams(catalog, window, providerIds, page, timeZone);
+          const fallback = mode === 'primary-release'
+            ? secondaryMovieDiscoveryParams(fallbackRaw, window) : fallbackRaw;
+          payload = await tmdbFetch(endpoint, fallback);
+        } else {
+          throw error;
+        }
       }
+      items.push(...(payload?.results || []));
+      if (page >= Number(payload?.total_pages || 1)) break;
     }
-    items.push(...(payload?.results || []));
-    if (page >= Number(payload?.total_pages || 1)) break;
+    return items.slice(0, limit);
+  };
+  // Pass 1: exact regional digital release, as before.
+  const primary = await collect('digital', 5, maxCandidates);
+  if (catalog.type !== 'movie') return primary;
+
+  // Pass 2: platform-filtered original premieres. TMDb often omits Digital
+  // type 4 for a new streaming film. This discovery pass is not proof of
+  // streaming: each result MUST pass watch/provider AND date verification.
+  let secondary = [];
+  try {
+    secondary = await collect('primary-release', 2, Math.min(40, maxCandidates));
+  } catch (error) {
+    // Preserve the verified digital results if the recovery query is unsupported.
+    console.warn('[movie-release-recovery] secondary TMDb scan failed:', error?.code || error?.message);
   }
-  return items.slice(0, maxCandidates);
+  return mergeCandidatePages(primary, secondary, maxCandidates + Math.min(40, maxCandidates));
 }
 
 function vodDiscoverParams(window, page) {
@@ -3323,7 +3339,7 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
   const settled = await mapLimitSettled(raw, ENRICH_CONCURRENCY, async (candidate) => {
     const details = await fetchDetails(catalog.type, candidate.id);
     if (!hasProviderAccess(details, provider)) return { meta: null, reason: 'wrong-provider' };
-    if (catalog.type === 'movie') return movieDetailsToMeta(details, provider.label, window);
+    if (catalog.type === 'movie') return movieDetailsToMeta(details, provider.label, window, { providerConfirmed: true });
     return seriesDetailsToMeta(details, provider.label, window);
   });
 
@@ -3341,6 +3357,7 @@ async function buildStreamingCatalog({ catalog, timeZone, now = new Date(), peri
       countReason(stats, result?.reason);
       continue;
     }
+    if (result.recovered) stats.recoveredOriginalPremieres = (stats.recoveredOriginalPremieres || 0) + 1;
     metas.push(result.meta);
   }
 
