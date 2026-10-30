@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const suites = [
+  { name: 'Cross-region movie streaming release recovery', cwd: root, args: ['--test', 'test/streaming-release-recovery.test.cjs'] },
   { name: 'Worldwide movies France', cwd: root, args: ['--test', 'regions/movies/test/movies.test.cjs', 'regions/movies/test/catalog-policy.test.cjs'] },
   { name: 'Worldwide live-action series', cwd: root, args: ['--test', 'regions/series/test/series.test.cjs', 'regions/series/test/catalog-policy.test.cjs'] },
   { name: 'Live Series freshness monitor', cwd: root, args: ['--test', 'test/series-freshness.test.mjs'] },
