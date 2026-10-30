@@ -33,6 +33,18 @@ test('movie identity, FR-only release evidence and animation classification', ()
   assert.equal(record(4, { original_language: 'ja', production_countries: [{ iso_3166_1: 'JP' }] }).classification, 'eligible');
 });
 
+test('Films Monde retains international release dates even without TMDb primary date', () => {
+  const item=record(654, {
+    release_date:'',
+    release_dates:{results:[
+      {iso_3166_1:'US',release_dates:[{type:3,release_date:'2026-10-17T00:00:00Z'}]},
+      {iso_3166_1:'FR',release_dates:[{type:4,release_date:'2026-10-30T00:00:00Z'}]}
+    ]}
+  });
+  assert.equal(item.firstAirDate,'2026-10-17');
+  assert(item.releases.some(e=>e.kind==='digital'&&e.date==='2026-10-30'));
+});
+
 test('streaming, rental/purchase and cinema are independently gated by French evidence', (t) => {
   const s = memory(t);
   s.upsert(record(1)); s.upsert(record(2, { 'watch/providers': FR('rent') }));
