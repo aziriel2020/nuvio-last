@@ -35,6 +35,11 @@ jobs:
       - name: Verify Oracle production
         if: github.event_name != 'schedule'
         run: node scripts/verify-oracle-production.mjs
+      - name: Inventory all Nuvio collection and catalog links across FR, US, TR and Global
+        if: success() || failure()
+        env:
+          AUDIT_INVENTORY_REPORT: audit-collection-inventory.json
+        run: node scripts/audit-collection-inventory.mjs
       - name: Audit every active streaming platform catalog and verified premiere across FR, US, TR and Global
         env:
           AUDIT_ALL_PLATFORMS: '1'
@@ -82,6 +87,7 @@ jobs:
         with:
           name: oracle-all-collections-audits
           path: |
+            audit-collection-inventory.json
             audit-collections-active.json
             audit-collections-history.json
           if-no-files-found: ignore
