@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { config, createClient, family, select, shape, summarize } from '../scripts/audit-production-catalogs.mjs';
+import { inventory as collectionInventory } from '../scripts/audit-collection-inventory.mjs';
 
 const native = { 'content-type': 'application/json', 'x-nuvio-origin': 'cloudflare-only' };
 test('audit stops on fail-open HTML without retrying every catalog', async () => {
@@ -65,4 +66,25 @@ test('regional health can report fail-open HTML without poisoning later catalog 
   const catalog = await client.get('/fr/catalog/series/example.json');
   assert.deepEqual(catalog.data, { metas: [] });
   assert.equal(client.stopped, null);
+});
+
+test('all-collection inventory validates every referenced catalog, not just streaming', () => {
+  const collections = [
+    { title:'Films Monde', folders:[{ title:'Films',sources:[{type:'movie',catalogId:'movies-world-2026-10'}] }] },
+    { title:'Documentaires', folders:[{ title:'Docs',sources:[{type:'series',catalogId:'docs-series-today'}] }] }
+  ];
+  const manifest = { catalogs: [
+    { type:'movie',id:'movies-world-2026-10' },
+    { type:'series',id:'docs-series-today' }
+  ] };
+  const ok=collectionInventory('fr',collections,manifest);
+  assert.equal(ok.collections,2);
+  assert.equal(ok.uniqueCatalogsLinked,2);
+  assert.deepEqual(ok.errors,[]);
+  const missing=collectionInventory('fr',collections,{catalogs:[manifest.catalogs[0]]});
+  assert.match(missing.errors.join(' '),/Missing catalog in manifest.*docs-series-today/);
+  const repeated=collectionInventory('fr',[{title:'Films Monde',folders:[{title:'Films',sources:[
+    {type:'movie',catalogId:'movies-world-2026-10'},
+    {type:'movie',catalogId:'movies-world-2026-10'}]}]}],manifest);
+  assert.match(repeated.errors.join(' '),/Repeated source in folder/);
 });
