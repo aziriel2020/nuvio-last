@@ -2965,11 +2965,15 @@ function fallbackDiscoverParams(catalog, window, providerIds, page, timeZone) {
 
 async function discoverCandidates(catalog, window, providerIds, timeZone) {
   const endpoint = catalog.type === 'movie' ? '/discover/movie' : '/discover/tv';
-  const maxCandidates = getConfig().maxCandidates;
+  const maxCandidates = providerIds.length
+    ? getConfig().maxCandidates
+    : Math.min(240, Math.max(120, getConfig().maxCandidates * 2));
   const collect = async (mode, maxPages, limit) => {
     const items = [];
     for (let page = 1; page <= maxPages && items.length < limit; page += 1) {
-      const raw = discoverParams(catalog, window, providerIds, page, timeZone);
+      const raw = providerIds.length
+        ? discoverParams(catalog, window, providerIds, page, timeZone)
+        : fallbackDiscoverParams(catalog, window, providerIds, page, timeZone);
       const params = mode === 'primary-release' ? secondaryMovieDiscoveryParams(raw, window) : raw;
       let payload;
       try {
