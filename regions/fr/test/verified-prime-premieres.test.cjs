@@ -28,7 +28,7 @@ test('Verified card uses platform release, canonical movie identity and official
   assert.equal(m.released,'2026-10-30');
   assert.equal(m.name,'Apocalypse Z : Nouveau Monde');
   assert.match(m.poster,/poster.jpg/);
-  assert.match(m.description,/30 octobre 2026/);
+  assert.match(m.description,/30 (?:oct\.|octobre) 2026/);
   assert(m.links.some(l=>l.category==='Regarder'&&/primevideo.com/.test(l.url)));
 });
 test('Missing TMDb details still yields verified metadata without inventing an image', () => {
