@@ -50,7 +50,7 @@ function duplicateCatalogCards(metas) {
   for (const meta of metas || []) {
     if (!meta?.id || !['movie', 'series'].includes(meta.type)) continue;
     const episode = String(meta.episodeCode || '').trim()
-      || (String(meta.releaseInfo || '').match(/S\\d{1,3}E\\d{1,4}/i)?.[0] || '');
+      || (String(meta.releaseInfo || '').match(/S[0-9]{1,3}E[0-9]{1,4}/i)?.[0] || '');
     const event = episode || String(meta.releaseInfo || '').trim();
     const key = meta.type === 'series'
       ? ['series', meta.id, String(meta.released || '').slice(0, 10), event].join(':')
