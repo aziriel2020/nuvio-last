@@ -580,7 +580,10 @@ function cleanCatalogMeta(meta) {
 function sortAndDedupeMetas(metas = []) {
   const map = new Map();
   for (const meta of metas.filter(Boolean)) {
-    const key = meta._dedupeKey || meta.id;
+    const code = String(meta.episodeCode || meta.releaseInfo || '').match(/S\d{1,3}E\d{1,4}/i)?.[0]?.toUpperCase();
+    const day = String(meta.released || '').slice(0, 10);
+    const key = meta.type === 'series' && code && meta.id && /^\d{4}-\d{2}-\d{2}$/.test(day)
+      ? ['episode',meta.id,day,code].join(':') : meta._dedupeKey || meta.id;
     if (!key) continue;
     const previous = map.get(key);
     if (!previous) {
