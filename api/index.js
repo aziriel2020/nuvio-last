@@ -205,7 +205,9 @@ async function nativeBridgeAddon(req, res, region, handler, pathname) {
         // Transform only Stremio catalog and meta JSON. Preserve identity,
         // period, provider and release metadata byte-for-byte as values.
         const data = JSON.parse(Buffer.isBuffer(body) ? body.toString('utf8') : String(body));
-        const normalized = nativeBridgePayload(data, publicOrigin);
+        const normalized = nativeBridgePayload(data, publicOrigin, {
+          landscapeCatalog: region === 'movies' && suffix.startsWith('/catalog/')
+        });
         res.removeHeader?.('Content-Length');
         res.setHeader('X-Nuvio-Native-Bridge', 'direct-upstream-art-v1');
         return res.end(JSON.stringify(normalized));
