@@ -63,7 +63,7 @@ function allPlatformDaySources(collections, region) {
 }
 function invalidCalendarDates(metas, expectedDate) {
   return (metas || []).filter(meta =>
-    !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(meta?.released || '').slice(0,10)) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(String(meta?.released || '').slice(0,10)) ||
     String(meta.released).slice(0,10) !== expectedDate
   ).map(meta => ({ id: meta?.id, name: meta?.name, released: meta?.released || null }));
 }
