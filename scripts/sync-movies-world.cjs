@@ -148,7 +148,7 @@ async function runDetailJobs(store, { api = tmdb, limit = 60, concurrency = 3, d
   for (let i = 0; i < jobs.length && !stopping; i += concurrency) {
     await mapLimit(jobs.slice(i, i + concurrency), concurrency, async (job) => {
       try {
-        const data = await api(`/movie/${job.source_id}`, { language: 'fr-FR', append_to_response: 'external_ids,keywords,credits,watch/providers,release_dates' });
+        const data = await api(`/movie/${job.source_id}`, { language: 'fr-FR', append_to_response: 'external_ids,keywords,credits,watch/providers,release_dates,images', include_image_language: 'fr,en,null' });
         if (!Object.hasOwn(data, 'watch/providers') || !Object.hasOwn(data, 'release_dates')) throw new Error('Incomplete movie availability/release response');
         store.upsert(fromTmdb(data)); store.done('movie-detail', job.source_id, REFRESH);
       } catch (error) {
@@ -181,6 +181,21 @@ async function syncCycle(store, options = {}) {
   if (store.state('verifiedMovieSeedRevision') !== verifiedRevision) {
     store.enqueue('movie-detail', VERIFIED_FR.map(p => p.tmdbId), 1, { refresh: true });
     store.state('verifiedMovieSeedRevision', verifiedRevision);
+  }
+  // One-time bounded enrichment of recent titles: populate logos quickly
+  // without placing tens of thousands of historic movie requests up front.
+  // Older films naturally gain logos during their normal scheduled detail refresh.
+  const LOGO_REVISION = 'tmdb-title-logo-v1';
+  if (store.state('movieLogoSeedRevision') !== LOGO_REVISION) {
+    const recent = store.db.prepare(`
+      SELECT src.source_id AS id
+      FROM shows s JOIN sources src ON src.show_id=s.id AND src.source='tmdb'
+      WHERE s.classification='eligible'
+        AND s.first_air_date BETWEEN date('now','-90 days') AND date('now')
+      ORDER BY s.first_air_date DESC, src.source_id DESC LIMIT 1200
+    `).all().map(r => Number(r.id));
+    store.enqueue('movie-detail', recent, 1, { refresh: true });
+    store.state('movieLogoSeedRevision', LOGO_REVISION);
   }
   // Give existing ambiguous formats a bounded refresh before discovery work.
   await runDetailJobs(store, { ...options, api });
