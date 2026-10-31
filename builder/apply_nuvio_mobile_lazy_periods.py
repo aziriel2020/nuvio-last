@@ -41,10 +41,10 @@ def main():
         "            viewMode = if (isNuvioPeriodFolder) FolderViewMode.TABBED_GRID else collection.folderViewMode,\n")
 
     source = once(source,
-        "            tabs = tabs,\\n".replace("\\\\n", "\\n"),
-        "            tabs = if (isNuvioPeriodFolder) tabs.mapIndexed { index, tab ->\\n".replace("\\\\n", "\\n")
-        + "                if (index == 0) tab else tab.copy(isLoading = false)\\n".replace("\\\\n", "\\n")
-        + "            } else tabs,\\n".replace("\\\\n", "\\n"))
+        "            tabs = tabs,\n",
+        "            tabs = if (isNuvioPeriodFolder) tabs.mapIndexed { index, tab ->\n"
+        "                if (index == 0) tab else tab.copy(isLoading = false)\n"
+        "            } else tabs,\n")
 
     source = once(source,
         "            loadTabPage(tabIndex, reset = true)\n        }\n\n        // If no sources, mark as done\n",
