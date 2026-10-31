@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
 const tf = fs.readFileSync(path.join(root, 'oracle/terraform/main.tf'), 'utf8');
+const caddy = fs.readFileSync(path.join(root, 'oracle/Caddyfile.template'), 'utf8');
 const service = fs.readFileSync(path.join(root, 'oracle/nuvio.service'), 'utf8');
 const updater = fs.readFileSync(path.join(root, 'oracle/update.sh'), 'utf8');
 const bootstrap = fs.readFileSync(path.join(root, 'oracle/bootstrap.sh'), 'utf8');
@@ -101,4 +102,11 @@ test('Oracle runtime imports only the neutral runtime layer and repository-local
   assert.match(server, /pathname\.startsWith\('\/static\/assets\/'\)/);
   assert.match(server, /path\.join\(ROOT, 'assets'\)/);
   assert.doesNotMatch(server, /cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io/i);
+});
+
+test('The single Oracle reverse-proxy backend avoids active-health 503 blackouts', () => {
+  assert.ok(caddy.includes('reverse_proxy 127.0.0.1:3000'));
+  assert.doesNotMatch(caddy, /health_uri|health_interval|health_timeout/);
+  assert.ok(updater.includes('127.0.0.1:3000/_oracle/health'));
+  assert.ok(updater.includes('systemctl reload caddy'));
 });
