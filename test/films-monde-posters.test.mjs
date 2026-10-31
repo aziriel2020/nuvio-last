@@ -27,22 +27,22 @@ function directRequest(uri) {
 test('Films Monde versioned genre posters and backdrops stay in Oracle disk cache', async () => {
   const prefix = 'https://nuvio.example';
   const paths = [
-    '/movies/artwork/genre/action.webp?v=movies-premium-20261025-v2',
-    '/movies/artwork/backdrop/action.jpg?v=movies-premium-20261025-v2',
+    '/movies/artwork/genre/28.webp?v=movies-premium-20261025-v2',
+    '/movies/artwork/backdrop/28.jpg?v=movies-premium-20261025-v2',
     '/movies/cover.jpg?v=movies-premium-20261025-v2',
     '/movies/backdrop.jpg?v=movies-premium-20261025-v2'
   ];
   for (const path of paths) assert.equal(edgeTtl(prefix + path), 604800, path);
   for (const path of [
-    '/movies/artwork/genre/action.webp',
+    '/movies/artwork/genre/28.webp',
     '/movies/catalog/movie/movies-fr-all-action-today.json',
     '/movies/meta/movie/tt123.json',
     '/movies/manifest.json',
     '/movies/status.json',
-    '/movies/artwork/genre/action.webp?v=%3Cbad%3E'
+    '/movies/artwork/genre/28.webp?v=%3Cbad%3E'
   ]) assert.equal(edgeTtl(prefix + path), 0, 'Dynamic or unversioned URL must not be cached: ' + path);
 
-  const image = await directRequest('/movies/artwork/genre/action.webp?v=movies-premium-20261025-v2');
+  const image = await directRequest('/movies/artwork/genre/28.webp?v=movies-premium-20261025-v2');
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('content-type'), 'image/webp');
   assert.equal(image.bytes.toString('ascii', 0, 4), 'RIFF');
