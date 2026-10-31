@@ -612,7 +612,16 @@ function cleanCatalogMeta(meta) {
 function sortAndDedupeMetas(metas = []) {
   const map = new Map();
   for (const meta of metas.filter(Boolean)) {
-    const key = meta._dedupeKey || meta.id;
+    // Different discovery paths (TMDB, TVmaze, provider calendars) may assign
+    // different internal dedupe keys to the same broadcast episode. The same
+    // episode of a series must appear once in a platform/day folder, while
+    // other episodes of the same series remain separate cards.
+    const episode = String(meta.episodeCode || meta.releaseInfo || '')
+      .match(/S\\d{1,3}E\\d{1,4}/i)?.[0]?.toUpperCase();
+    const calendarDay = String(meta.released || '').slice(0, 10);
+    const key = meta.type === 'series' && episode && meta.id && /^\\d{4}-\\d{2}-\\d{2}$/.test(calendarDay)
+      ? `episode:${meta.id}:${calendarDay}:${episode}`
+      : meta._dedupeKey || meta.id;
     if (!key) continue;
     const previous = map.get(key);
     if (!previous) {
