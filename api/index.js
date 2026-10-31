@@ -98,6 +98,53 @@ async function collectionsOnlyAddon(req, res, region, handler, pathname) {
   return delegate(req, res, prefix, handler);
 }
 
+// Opt-in compatibility profile for Nuvio Mobile / Desktop.
+// Both clients (HomeCatalogDefinitions.kt) create Home rows for every
+// manifest catalog with no required extras, ignoring showInHome=false.
+// Their collection resolver, however, requires the catalog to be declared.
+// A required "genre" extra is the only required extra their collection
+// editor permits. It keeps collection IDs registered, suppresses automatic
+// Home row loads, and allows existing collections to keep requesting their
+// canonical catalog IDs without a genre (our regional handlers allow this).
+// Do not enable globally until Nuvio UI behavior is validated on devices.
+function mobileDesktopCollectionManifest(manifest) {
+  return {
+    ...manifest,
+    catalogs: manifest.catalogs.map((catalog) => {
+      const originalExtra = Array.isArray(catalog.extra) ? catalog.extra : [];
+      const originalGenre = originalExtra.find((extra) => extra.name === 'genre');
+      const requiredGenre = originalGenre
+        ? { ...originalGenre, isRequired: true }
+        : { name: 'genre', isRequired: true };
+      const extra = [
+        requiredGenre,
+        ...originalExtra.filter((extra) => extra.name !== 'genre' && extra.name !== 'search')
+      ];
+      return {
+        ...catalog,
+        showInHome: false,
+        extra,
+        extraSupported: [...new Set([
+          ...(Array.isArray(catalog.extraSupported) ? catalog.extraSupported : []),
+          'genre'
+        ])].filter((name) => name !== 'search')
+      };
+    })
+  };
+}
+
+async function mobileDesktopCollectionsAddon(req, res, region, handler, pathname) {
+  const prefix = `/${region}/mobile-desktop-collections`;
+  if (pathname === `${prefix}/manifest.json`) {
+    const canonicalOrigin = `${originFromRequest(req)}/${region}`;
+    const now = handler._internals.runtimeNow?.() || new Date();
+    const timeZone = handler._internals.requestTimeZone?.(req);
+    const manifest = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
+    return sendJson(res, 200, mobileDesktopCollectionManifest(manifest), 'no-store');
+  }
+  return delegate(req, res, prefix, handler);
+}
+
 const GENERATED_COVER_REV = 'generated-v11-genre-photo-frames-period-labels';
 const GENERATED_COVER_ROOT = path.resolve(__dirname, '../assets/generated-covers');
 
@@ -522,6 +569,13 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), 'no-store');
   }
+  // Mobile and Desktop: preserve catalog registration for collection lookup
+  // while suppressing automatic Home fetching in both client repositories.
+  const mobileDesktopRoute = path.match(new RegExp('^/(fr|us|tr|global|movies|series(?:-v2)?)/mobile-desktop-collections(?:/|$)'));
+  if (mobileDesktopRoute) {
+    const region = mobileDesktopRoute[1];
+    return mobileDesktopCollectionsAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
+  }
   // Opt-in Android TV install endpoints (no changes to existing addon URLs).
   const collectionsOnlyRoute = path.match(new RegExp('^/(fr|us|tr|global|movies|series(?:-v2)?)/collections-only(?:/|$)'));
   if (collectionsOnlyRoute) {
@@ -557,6 +611,7 @@ module.exports._internals = {
   coexistenceReport,
   coexistenceReportLive,
   delegate,
+  mobileDesktopCollectionManifest,
   usHandler,
   frHandler,
   globalHandler,
