@@ -48,13 +48,23 @@ try {
   assert.equal(manifest.version,'1.0.3');
   assert(manifest.catalogs.some(c=>c.id==='movies-fr-streaming-standup-today'));
   const ids = [];
-  for (const skip of [0, 100, 200]) {
+  const firstCatalog = manifest.catalogs.find(c => c.id === 'movies-fr-all-all-all');
+  assert.equal(firstCatalog.pageSize, 24, 'Shield receives a compact page with native skip pagination');
+  for (let skip = 0; skip < 205; skip += firstCatalog.pageSize) {
     const r = await get(`/movies/catalog/movie/movies-fr-all-all-all/skip=${skip}.json`);
-    assert.equal(r.headers.get('cache-control'), 'no-store');
+    assert.match(r.headers.get('cache-control') || '', /public/, 'Nonempty catalog pages can be served from Oracle cache');
     const data = await r.json(); ids.push(...data.metas.map((m) => m.id));
+    assert(data.metas.length > 0 && data.metas.length <= firstCatalog.pageSize);
     assert(data.metas.every((m) => m.posterShape === 'landscape' && new URL(m.background).pathname === '/fr/calendar-card.jpg'));
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
+  const cached = await get('/movies/catalog/movie/movies-fr-all-all-all/skip=0.json');
+  assert.equal(cached.headers.get('x-nuvio-disk-cache'), 'HIT',
+    'Oracle cache avoids repeated 24-film enrichment when the same period is reopened');
+  await cached.arrayBuffer();
+  const endOfRows = await get('/movies/catalog/movie/movies-fr-all-all-all/skip=216.json');
+  assert.equal(endOfRows.headers.get('cache-control'), 'no-store', 'Empty pages must not be cached');
+  assert.deepEqual((await endOfRows.json()).metas, []);
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A998.json')).status, 404);
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A999.json')).status, 404);
   const detail = await (await get('/movies/meta/movie/tmdb%3Amovie%3A1.json')).json();
