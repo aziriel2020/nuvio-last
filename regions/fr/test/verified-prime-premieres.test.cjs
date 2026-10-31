@@ -10,6 +10,17 @@ test('Prime official premiere is present in today and October but not yesterday 
   assert.equal(api.verifiedPremieresForCatalog(source, { start:'2026-10-29',end:'2026-10-29' }).length,0);
   assert.equal(api.verifiedPremieresForCatalog(source, { start:'2026-11-01',end:'2026-11-30' }).length,0);
 });
+test('31 October rollover puts the 30 October Prime premiere in yesterday, not today', () => {
+  const saturday = { start: '2026-10-31', end: '2026-10-31', empty: false };
+  const friday = { start: '2026-10-30', end: '2026-10-30', empty: false };
+  for (const market of ['FR', 'US', 'TR']) {
+    const { verifiedForCatalog } = require('../../../runtime/verified-streaming-premieres.cjs');
+    assert.equal(verifiedForCatalog(source, friday, market).length, 1, `${market}: yesterday`);
+    assert.equal(verifiedForCatalog(source, saturday, market).length, 0, `${market}: today`);
+  }
+  assert.equal(api.verifiedPremieresForCatalog(source, saturday).length, 0);
+  assert.equal(api.verifiedPremieresForCatalog(source, friday).length, 1);
+});
 test('Other providers and TV cannot inherit Prime release', () => {
   assert.deepEqual(api.verifiedPremieresForCatalog({...source,providerSlug:'netflix'},now),[]);
   assert.deepEqual(api.verifiedPremieresForCatalog({...source,type:'series'},now),[]);
