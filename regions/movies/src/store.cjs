@@ -8,11 +8,9 @@ const policy = require('../../series/src/catalog-policy.cjs');
 const { RECORDS: PREMIERES } = require('../../../runtime/verified-streaming-premieres.cjs');
 // Official positive evidence temporarily bridges delayed third-party FR provider indexes.
 const VERIFIED_FR = PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie');
-const VERIFIED_GRACE_MS = 45 * 24 * 3600000;
-const premiereActive = (p, now = Date.now()) => {
-  const launch = Date.parse(p.platformDate + 'T00:00:00Z');
-  return now >= launch && now < launch + VERIFIED_GRACE_MS;
-};
+// A past officially documented streaming premiere is a permanent historical
+// release signal, not an expiring claim that an offer remains available today.
+const premiereActive = (p, now = Date.now()) => now >= Date.parse(p.platformDate + 'T00:00:00Z');
 const defaultPath = () => process.env.NUVIO_MOVIES_DB || '/var/lib/nuvio-movies/index.sqlite';
 const parse = (value) => { try { return JSON.parse(value); } catch { return []; } };
 
@@ -130,8 +128,13 @@ class MovieStore extends SeriesStore {
     if (window.undated) where.push('s.first_air_date IS NULL');
     else if (window.start) { where.push('s.first_air_date BETWEEN ? AND ?'); args.push(window.start, window.end); }
     else { where.push('(s.first_air_date<=? OR s.first_air_date IS NULL)'); args.push(window.end); }
+    // Ensure a verified world premiere cannot be pushed off the first page by
+    // hundreds of later releases. Sorting happens before LIMIT/OFFSET so pages
+    // remain mutually exclusive.
+    const priority = curated && ['all','streaming'].includes(view)
+      ? `CASE WHEN ${this.verifiedStreamingClause('s',now)} THEN 0 ELSE 1 END,` : '';
     const rows = this.db.prepare(`SELECT s.*,${content.sqlKind()} AS content_kind,s.first_air_date AS event_date,'original' AS event_kind
-      FROM shows s WHERE ${where.join(' AND ')} ORDER BY s.first_air_date DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
+      FROM shows s WHERE ${where.join(' AND ')} ORDER BY ${priority}s.first_air_date DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
     return rows.map((row) => this.meta(row, { curated, genre, view, now }));
   }
   contentKind(row) {
