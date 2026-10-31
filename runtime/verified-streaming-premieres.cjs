@@ -33,6 +33,9 @@ const RECORDS = Object.freeze([
     market: 'FR', type: 'movie', providerSlug: 'prime-video',
     providerLabel: 'Prime Video', tmdbId: 1507696, imdbId: 'tt37522541',
     title: 'Apocalypse Z : Nouveau Monde',
+    // Sitges' official 2026 announcement dates the first festival screening to 10 October.
+    worldPremiereDate: '2026-10-10',
+    worldPremiereSource: 'https://sitgesfilmfestival.com/es/noticies/kevin-bacon-kyra-sedgwick-meiko-kaji-adrienne-barbeau-nuevos-premios-sitges-2026',
     originalTitle: 'Apocalipsis Z: Nuevo mundo',
     platformDate: '2026-10-30',
     overview: 'Aux Canaries, une équipe part chercher des provisions sur le continent, au milieu des infectés.',
@@ -46,7 +49,8 @@ function assertValid(p) {
   if (p.type !== 'movie' || !/^[a-z0-9-]+$/.test(p.providerSlug)) throw Error('Invalid verified-premiere type/provider');
   if (!Number.isSafeInteger(p.tmdbId) || p.tmdbId < 1 || !day(p.platformDate)) throw Error('Invalid verified-premiere ID/date');
   if (!p.title || !p.providerLabel || !p.officialSource || !p.regionalSource || !p.watchUrl) throw Error('Unverified premiere evidence');
-  for (const url of [p.officialSource,p.regionalSource,p.watchUrl]) {
+  if ((p.worldPremiereDate || p.worldPremiereSource) && (!day(p.worldPremiereDate) || !p.worldPremiereSource || p.worldPremiereDate > p.platformDate)) throw Error('Invalid original worldwide premiere evidence');
+  for (const url of [p.officialSource,p.regionalSource,p.watchUrl,p.worldPremiereSource].filter(Boolean)) {
     if (new URL(url).protocol !== 'https:') throw Error('Insecure premiere evidence');
   }
 }
