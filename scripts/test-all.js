@@ -16,6 +16,7 @@ const suites = [
   { name: 'Coexistence wrapper', cwd: root, args: ['--test', 'test/coexist.test.js'] },
   { name: 'TV collection-only catalogs', cwd: root, args: ['--test', 'test/collections-only.test.js'] },
   { name: 'Mobile Desktop collection-only Home performance', cwd: root, args: ['--test', 'test/mobile-desktop-collections.test.js'] },
+  { name: 'Mobile collection period tabs and reduced visible posters', cwd: root, args: ['--test', 'test/mobile-period-tabs.test.js'] },
   { name: 'Production audit helpers', cwd: root, args: ['--test', 'test/audit.test.mjs'] },
   { name: 'Artwork recovery and persistent cache', cwd: root, args: ['--test', 'test/artwork-runtime.test.mjs'] },
   { name: 'Oracle Always Free guardrails', cwd: root, args: ['--test', 'test/oracle-config.test.mjs'] }
