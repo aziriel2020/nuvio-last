@@ -1,0 +1,81 @@
+name: Read-only Oracle Health Diagnostic
+
+on:
+  push:
+    branches: [diag/oracle-read-only-health-20261031]
+    paths: [.github/workflows/diagnose-oracle-health.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PUBLIC_ORIGIN: https://141-145-215-202.nip.io
+      PUBLIC_IP: 141.145.215.202
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SSH key without printing secret
+        shell: bash
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=os.environ["ORACLE_SSH_PRIVATE_KEY"].strip()
+          vals=[raw]
+          if len(raw)>=2 and raw[0]==raw[-1]=='"':
+              try: vals.append(json.loads(raw))
+              except Exception: pass
+          for v in list(vals):
+              vals.append(v.replace(chr(13),"").replace(chr(92)+"r","").replace(chr(92)+"n",chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              v=v.replace(chr(13),"")
+              for label in ("OPENSSH PRIVATE KEY","PRIVATE KEY","RSA PRIVATE KEY"):
+                  b="-----BEGIN "+label+"-----"; e="-----END "+label+"-----"
+                  if b in v and e in v:
+                      body="".join(v.split(b,1)[1].split(e,1)[0].split())
+                      if body:
+                          p=Path(os.environ["RUNNER_TEMP"]+"/keys/oracle_ssh.pem")
+                          p.write_text(b+"\n"+body+"\n"+e+"\n")
+                          raise SystemExit(0)
+          raise SystemExit("SSH key is not configured")
+          PY
+          chmod 600 "$RUNNER_TEMP/keys/oracle_ssh.pem"
+          echo "ORACLE_SSH_KEY=$RUNNER_TEMP/keys/oracle_ssh.pem" >> "$GITHUB_ENV"
+      - name: Public health sampling (read-only)
+        run: |
+          set +e
+          for n in 1 2 3 4 5; do
+            printf "Probe %d -> " "$n"
+            curl -sS -o /dev/null -w '%{http_code} in %{time_total}s\n' --max-time 8 "$PUBLIC_ORIGIN/_oracle/health"
+            sleep 1
+          done
+      - name: Service status on Oracle (read-only, no logs or secrets)
+        shell: bash
+        run: |
+          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12 ubuntu@"$PUBLIC_IP" "sudo bash -s" <<'REMOTE'
+          set +e
+          echo "== Oracle service states =="
+          systemctl is-active nuvio caddy nuvio-update.timer
+          echo "== Nuvio restart count and memory use =="
+          systemctl show nuvio --property=ActiveState,SubState,NRestarts,MemoryCurrent,ExecMainStatus,Result --no-pager
+          echo "== Memory summary =="
+          free -m | head -n 3
+          echo "== Local backend status and latency =="
+          for n in 1 2 3; do
+            curl -sS -o /dev/null -w '%{http_code} in %{time_total}s\n' --max-time 6 http://127.0.0.1:3000/_oracle/health
+          done
+          echo "== Local reverse-proxy status and latency =="
+          for n in 1 2 3; do
+            curl -k -sS -o /dev/null -w '%{http_code} in %{time_total}s\n' --max-time 6 --resolve 141-145-215-202.nip.io:443:127.0.0.1 https://141-145-215-202.nip.io/_oracle/health
+          done
+          echo "== OOM counters, last 60min =="
+          journalctl -k --since "60 min ago" --no-pager 2>/dev/null | grep -E 'Out of memory:|oom-kill:|Killed process' | sed -E 's/(task=)[^ ,]+/\1redacted/g' | tail -n 10 || true
+          REMOTE
