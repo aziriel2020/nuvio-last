@@ -12,6 +12,10 @@ function decorateMovieMetas(origin, metas, descriptor) {
         : meta.streamingProviders?.[0] || (meta.movieReleaseKind === 'digital' ? 'VOD FRANCE' : 'FILMS FRANCE'));
     const decorated = decorateCatalogMetas(franceOrigin, [meta], { type: 'movie', period, forceLandscapeCards: true, cardProvider: label }, 'Europe/Brussels')[0];
     const fast = fastContentCards(franceOrigin, meta, decorated);
+    // Films Monde overlays logos natively; the shared France calendar decorator
+    // intentionally inserts a transparent placeholder for precomposed cards.
+    // Restore the real TMDB title logo only for this standalone movie addon.
+    fast.logo = meta.logo || undefined;
     if (!meta.poster && !meta.background) {
       const image = new URL(fast.background); image.searchParams.set('provider', label);
       for (const field of ['poster', 'background', 'landscapePoster', 'banner']) fast[field] = image.href;
