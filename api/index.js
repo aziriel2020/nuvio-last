@@ -69,15 +69,42 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
-// Nuvio TV resolves collection sources by addonId/type/catalogId even when the
-// catalog is not advertised in the addon manifest. Keep canonical manifests
-// unchanged for Mobile/Desktop, where unlisted source support differs.
-// This opt-in manifest prevents internal calendar catalogs from flooding Home
-// and Discovery, while retaining their direct /catalog endpoints.
+// Nuvio TV needs named manifest catalogs to render collection period rows.
+// Previously catalogs: [] hid Home/Discover but silently replaced every label
+// (Aujourd'hui, Octobre 2026, etc.) with generic "Films" / "Séries".
+// Keep lightweight *named* descriptors with the same id/type and paging extras.
+// NuvioTV's current client predicates:
+//   Home: isSearchOnlyCatalog() => false, and explicit showInHome=false.
+//   Search: isSearchable() rejects required non-search extras.
+//   Discover: filters catalogs with a required 'search' extra.
+//   Collections: findCollectionCatalog(type,id) uses catalog.name for row labels
+//                and fetches data by unchanged direct catalog routes.
+// Both required extras are display-only markers; underlying handlers do NOT
+// require them, and original unmodified manifests remain available.
 const COLLECTIONS_ONLY_HANDLERS = Object.freeze({
   fr: frHandler, us: usHandler, tr: trHandler, global: globalHandler,
   movies: moviesHandler, series: seriesHandler, 'series-v2': seriesHandler
 });
+
+function shieldCollectionOnlyCatalog(catalog) {
+  const extra = Array.isArray(catalog.extra) ? catalog.extra : [];
+  const skip = extra.find((item) => item.name === 'skip');
+  return {
+    type: catalog.type,
+    id: catalog.id,
+    name: catalog.name,
+    pageSize: catalog.pageSize,
+    showInHome: false,
+    extraSupported: skip || (Array.isArray(catalog.extraSupported) && catalog.extraSupported.includes('skip'))
+      ? ['skip', 'search', 'genre']
+      : ['search', 'genre'],
+    extra: [
+      ...(skip ? [{ name: 'skip', isRequired: false }] : []),
+      { name: 'search', isRequired: true },
+      { name: 'genre', isRequired: true, options: [] }
+    ]
+  };
+}
 
 async function collectionsOnlyAddon(req, res, region, handler, pathname) {
   const prefix = `/${region}/collections-only`;
@@ -88,13 +115,11 @@ async function collectionsOnlyAddon(req, res, region, handler, pathname) {
     const manifest = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
     return sendJson(res, 200, {
       ...manifest,
-      // Source catalog URLs still work: they are simply absent from Home/Discover.
-      catalogs: []
+      // Preserve exact catalog IDs + human-readable period names in Collections.
+      // Do not publish them to Home, Search or Discover.
+      catalogs: manifest.catalogs.map(shieldCollectionOnlyCatalog)
     }, 'no-store');
   }
-  // Installed addon base URL is /REGION/collections-only; Nuvio therefore
-  // sends collection catalog and metadata requests under this same prefix.
-  // Delegate to the *same* handler and IDs used by the canonical addon.
   return delegate(req, res, prefix, handler);
 }
 
@@ -646,6 +671,7 @@ module.exports._internals = {
   coexistenceReportLive,
   delegate,
   mobileDesktopCollectionManifest,
+  shieldCollectionOnlyCatalog,
   usHandler,
   frHandler,
   globalHandler,
