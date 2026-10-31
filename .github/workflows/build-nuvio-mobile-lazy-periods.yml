@@ -47,8 +47,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # Ubuntu GitHub runners already include Android SDK and accepted licenses.
+      # A redundant setup-android action is avoided here because it failed
+      # before the compilation stage on the first beta build.
+      - name: Verify Android SDK on runner
+        shell: bash
+        run: |
+          test -d "${ANDROID_HOME}"
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          ls "${ANDROID_HOME}/platforms" | tail -n 5
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
