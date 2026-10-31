@@ -527,12 +527,15 @@ module.exports = async function handler(req, res) {
   if (path === '/nuvio-collections-mobile.json') {
     return sendJson(res, 200, combinedMobileCollections(req), CINEMA_COLLECTION_CACHE);
   }
-  if (path === '/nuvio-collections-movies-mobile.json' || path === '/nuvio-collections-series-mobile.json') {
+  if (path === '/nuvio-collections-movies-mobile.json' ||
+      path === '/nuvio-collections-series-mobile.json' ||
+      path === '/nuvio-collections-series-v2-mobile.json') {
     const origin = originFromRequest(req);
     const movies = path.includes('movies');
+    const seriesRoute = path.includes('series-v2') ? 'series-v2' : 'series';
     const collections = movies
       ? moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), 'shield')
-      : seriesHandler._internals.buildCollections(`${origin}/series-v2`, new Date(), 'shield');
+      : seriesHandler._internals.buildCollections(`${origin}/${seriesRoute}`, new Date(), 'shield');
     return sendJson(res, 200, collections.map(mobileizeCollectionArt), CINEMA_COLLECTION_CACHE);
   }
   if (path === '/nuvio-collections-global.json') {
