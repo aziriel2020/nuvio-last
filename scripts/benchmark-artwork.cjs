@@ -10,7 +10,15 @@ async function main() {
     assert(response.ok, 'Catalog HTTP ' + response.status); const data = await response.json();
     for (const meta of data.metas.slice(0, path.startsWith('/movies') ? 6 : 12)) for (const field of ['background', 'banner']) {
       if (!meta[field]) continue;
-      const url = new URL(meta[field]); urls.push({ field, url: origin + url.pathname + url.search });
+      const url = new URL(meta[field]);
+      // Films Monde collection posters intentionally use the smaller 896x504
+      // profile; all standard calendar and series thumbnails remain 960x540.
+      // Other image variants must not silently weaken the production guard.
+      const worldMovie = url.pathname.endsWith('/calendar-card.jpg')
+        && url.searchParams.get('world') === '1'
+        && url.searchParams.get('type') === 'movie'
+        && url.searchParams.get('layout') === 'landscape';
+      urls.push({ field, worldMovie, url: origin + url.pathname + url.search });
     }
   }
   assert(urls.length > 0, 'No artwork available for the live test');
@@ -24,7 +32,11 @@ async function main() {
         const ms = Math.round(performance.now() - start);
         assert.equal(response.status, 200, 'Artwork response');
         assert.match(response.headers.get('content-type'), /^image\/jpeg/, 'Native cards must be JPEG');
-        const info = await sharp(data).metadata(); assert.equal(info.width, 960); assert.equal(info.height, 540);
+        const info = await sharp(data).metadata();
+        assert.equal(info.width, urls[i].worldMovie ? 896 : 960,
+          'Unexpected artwork width for ' + (urls[i].worldMovie ? 'Films Monde' : 'standard'));
+        assert.equal(info.height, urls[i].worldMovie ? 504 : 540,
+          'Unexpected artwork height for ' + (urls[i].worldMovie ? 'Films Monde' : 'standard'));
         samples.push({ ms, bytes: data.length, cache: response.headers.get('x-nuvio-cache'), photo: response.headers.get('x-nuvio-artwork-photo') });
       }
     }));
