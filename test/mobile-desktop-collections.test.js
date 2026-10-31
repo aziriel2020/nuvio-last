@@ -43,7 +43,9 @@ test('Mobile/Desktop alternative manifests avoid Home work while preserving ever
     assert.deepEqual(base.catalogs.map(c=>[c.type,c.id]),
       mobileDesktop.catalogs.map(c=>[c.type,c.id]),
       `every imported catalog must still resolve: ${region}`);
-    assert.deepEqual(television.catalogs,[],`existing Shield variant unchanged: ${region}`);
+    assert.deepEqual(television.catalogs.map(c=>[c.id,c.type,c.name]),
+      base.catalogs.map(c=>[c.id,c.type,c.name]),
+      `Shield now preserves named periods without changing Mobile/Desktop IDs: ${region}`);
     for(const cat of mobileDesktop.catalogs){
       assert.equal(cat.showInHome,false);
       assert(cat.extra.some(e=>e.name==='genre'&&e.isRequired===true&&e.options?.length===0),

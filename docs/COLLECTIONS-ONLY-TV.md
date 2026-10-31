@@ -26,8 +26,15 @@ Utiliser le même hôte Oracle public que pour les manifestes standards.
 
 ### Ce qui change
 
-- Le manifeste TV publie `catalogs: []`, sans catalogues internes dans les
-  menus Home et Découverte.
+- Le manifeste TV conserve des **descripteurs compacts** pour chaque
+  catalogue (mêmes identifiants, types et noms de périodes), indispensables
+  pour afficher **Aujourd’hui, Hier, Octobre 2026**, etc. dans les dossiers
+  de Collections. L’ancienne variante `catalogs: []` masquait les menus
+  mais produisait des titres génériques comme « Films – Films ».
+- Les catalogues sont explicitement exclus de Home, Recherche et Découverte
+  selon les règles actuelles du client Nuvio TV : `showInHome: false`,
+  recherche requise et genre requis, sans lancer de recherches inutiles.
+  Les endpoints réels continuent d’accepter les appels sans ces paramètres.
 - L'addon conserve **le même ID**, les ressources `catalog` et `meta`,
   ainsi que les URLs et identifiants des catalogues sous-jacents.
 - Toutes les requêtes `/catalog/...`, `/meta/...` et les visuels reçues sous
@@ -43,19 +50,25 @@ Utiliser le même hôte Oracle public que pour les manifestes standards.
 
 1. Sur **Nuvio Android TV**, supprimer les anciens addons Nuvio Calendar concernés,
    puis installer les mêmes addons avec les URLs alternatives ci-dessus.
-2. Conserver/importer les mêmes collections que précédemment. Vérifier un dossier
+2. Conserver les mêmes collections que précédemment. **Actualiser les addons** pour
+   recharger leur manifeste : il n’est pas nécessaire de réinstaller les
+   URL alternatives ni de réimporter les collections. Vérifier un dossier
    France, un dossier Global, un dossier Türkiye, un dossier USA et, le cas
    échéant, Films Monde et Séries France V2.
-3. Vérifier que les posters chargent dans les dossiers ; contrôler ensuite
+3. Vérifier que les **noms des périodes** (Aujourd’hui, mois et année) et les
+   posters chargent dans les dossiers ; contrôler ensuite
    l'absence de catalogues calendaires individuels sur Home et dans Découverte.
-4. Si la version Nuvio TV ne résout pas les catalogues absents du manifeste,
-   revenir aux URLs standards `/REGION/manifest.json`.
+4. Si une version de Nuvio TV interprète différemment les extras requis,
+   revenir aux URLs standards `/REGION/manifest.json`. Les tests de code
+   n’équivalent pas à une vérification réelle sur Shield.
 
 ### Compatibilité
 
-Ce profil est **destiné uniquement à Android TV / Shield**, qui sait résoudre
-les catalogues d'une collection via `addonId` / `type` / `catalogId` sans
-que chaque catalogue soit déclaré dans le manifeste.
+Ce profil est **destiné uniquement à Android TV / Shield**. Le code source
+actuel de Nuvio TV (`FolderDetailViewModel.buildAddonTabLabels` et
+`SearchViewModel`) explique pourquoi il faut **déclarer** les catalogues
+avec leur nom tout en les excluant des autres écrans. Les catalogues ne
+sont pas supprimés, seulement masqués dans les sélecteurs globaux.
 
 Ne pas le substituer automatiquement au manifeste de Nuvio Mobile : la
 compatibilité des catalogues non déclarés y est différente. Voir la demande
