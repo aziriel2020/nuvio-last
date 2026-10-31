@@ -5,11 +5,65 @@ const { withHeroTitles } = require('../../runtime/collection-titles.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
-const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, WESTERN_GENRE } = require('./src/model.cjs');
+const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowFor, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const catalogPolicy = require('../series/src/catalog-policy.cjs');
 const art = require('./src/artwork.cjs');
 const { decorateMovieMetas } = require('./src/presentation.cjs');
+const { RECORDS: VERIFIED_PREMIERES } = require('../../runtime/verified-streaming-premieres.cjs');
+const VERIFIED_WORLD = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie'
+  && p.worldPremiereDate && p.worldPremiereSource);
+
+function officialWorldMeta(p, row = null) {
+  const date = p.worldPremiereDate;
+  return {
+    id: p.imdbId || `tmdb:movie:${p.tmdbId}`,
+    type: 'movie', name: p.title, poster: row?.poster || undefined,
+    background: row?.background || row?.poster || undefined, posterShape: 'poster',
+    movieContentKind: 'fiction', movieReleaseKind: 'original', originalReleaseDate: date,
+    released: `${date}T00:00:00.000Z`, releaseInfo: date.slice(0,4), imdb_id: p.imdbId,
+    streamingProviders: [p.providerLabel], providersByKind: { streaming: [p.providerLabel], vod: [] },
+    genres: [], description: [
+      `Première projection mondiale vérifiée : ${date}.`,
+      `Sortie ${p.providerLabel} France : ${p.platformDate}. Cette date de streaming est distincte de la première mondiale.`,
+      p.overview
+    ].filter(Boolean).join('\n\n'),
+    links: [
+      { name: `Regarder sur ${p.providerLabel}`, category: 'Regarder', url: p.watchUrl },
+      { name: 'Première mondiale', category: 'Sources', url: p.worldPremiereSource },
+      { name: 'Sortie streaming officielle', category: 'Sources', url: p.officialSource }
+    ]
+  };
+}
+function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) {
+  if (skip !== 0 || !['all', 'streaming'].includes(descriptor.view)) return metas;
+  const window = catalogWindowFor(descriptor.period, descriptor.genre, now);
+  if (!window || window.undated) return metas;
+  const nowMs = +new Date(now);
+  const normalizedSearch = String(search || '').trim().toLocaleLowerCase('fr');
+  const additions = [];
+  for (const p of VERIFIED_WORLD) {
+    if (nowMs < Date.parse(`${p.platformDate}T00:00:00Z`)) continue;
+    if (window.start && p.worldPremiereDate < window.start) continue;
+    if (window.end && p.worldPremiereDate > window.end) continue;
+    if (normalizedSearch && ![p.title, p.originalTitle].some(v =>
+      String(v || '').toLocaleLowerCase('fr').includes(normalizedSearch))) continue;
+    const row = store?.row(`tmdb:${p.tmdbId}`) || null;
+    if (descriptor.genre !== 'all') {
+      if (!row) continue; // Never invent genres when metadata is missing.
+      let genres = [];
+      try { genres = JSON.parse(row.genres); } catch {}
+      if (!genres.some(g => String(g) === descriptor.genre)) continue;
+    }
+    if (row?.classification === 'animation') continue;
+    if (metas.some(m => m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`)) continue;
+    additions.push(officialWorldMeta(p, row));
+  }
+  // A verified original first release belongs on the first page even when
+  // TMDB's provider directory has not indexed it or the database is not ready.
+  return [...additions, ...metas].slice(0, 100);
+}
+
 let cachedStore, cachedPath;
 const imageCache = new Map();
 const GENRE_BACKDROP_DIR = path.resolve(__dirname, '../../assets/movie-backdrops');
@@ -103,22 +157,32 @@ async function handler(req, res) {
   if (catalog) {
     const descriptor = parseCatalog(decodeURIComponent(catalog[1]));
     if (!descriptor) return send(res, 404, { error: 'Catalogue inconnu' });
-    if (!store) return send(res, 503, { metas: [], error: 'Index en préparation' });
     const extra = new URLSearchParams(catalog[2] || '');
-    try { return send(res, 200, { metas: decorateMovieMetas(origin, store.query({ ...descriptor,
-      skip: Number(extra.get('skip') || url.searchParams.get('skip') || 0),
-      search: String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200), now, curated: true }), descriptor) }); }
+    const skip = Number(extra.get('skip') || url.searchParams.get('skip') || 0);
+    const search = String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200);
+    try {
+      const indexed = store ? store.query({ ...descriptor, skip, search, now, curated: true }) : [];
+      const metas = verifiedWorldCatalogMetas(store, descriptor, now, skip, search, indexed);
+      if (!store && !metas.length) return send(res, 503, { metas: [], error: 'Index en préparation' });
+      return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) });
+    }
     catch (e) { if (/Invalid/.test(e.message)) return send(res, 400, { metas: [], error: e.message }); throw e; }
   }
   const match = url.pathname.match(/^\/meta\/movie\/([^/]+)\.json$/);
   if (match) {
-    if (!store) return send(res, 503, { meta: null });
     const requested = decodeURIComponent(match[1]);
-    const row = store.row(requested.replace(/^tmdb:movie:/, 'tmdb:'));
-    if (!row || !store.visible(row.id, { curated: true })) return send(res, 404, { meta: null });
+    const verified = VERIFIED_WORLD.find(p =>
+      requested === p.imdbId || requested === `tmdb:movie:${p.tmdbId}`);
+    const row = store?.row(requested.replace(/^tmdb:movie:/, 'tmdb:')) || (verified ? store?.row(`tmdb:${verified.tmdbId}`) : null);
+    if (!row || !store.visible(row.id, { curated: true })) {
+      if (verified && +now >= Date.parse(`${verified.platformDate}T00:00:00Z`)) {
+        return send(res, 200, { meta: { ...officialWorldMeta(verified, row), id: requested } });
+      }
+      return send(res, store ? 404 : 503, { meta: null });
+    }
     return send(res, 200, { meta: { ...store.meta(row, { curated: true, genre: store.contentKind(row) === 'standup' ? 'standup' : JSON.parse(row.genres).includes('99') ? '99' : 'all' }), id: requested } });
   }
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, reader };
+module.exports._internals = { buildManifest, buildCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas };
