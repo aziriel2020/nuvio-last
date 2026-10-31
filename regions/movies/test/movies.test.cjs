@@ -45,6 +45,37 @@ test('Films Monde retains international release dates even without TMDb primary 
   assert(item.releases.some(e=>e.kind==='digital'&&e.date==='2026-10-30'));
 });
 
+test('official Prime debut belongs to its real world premiere month despite a delayed FR provider index', (t) => {
+  const s = memory(t);
+  const movie = record(1507696, {
+    title: 'Apocalypse Z : Nouveau Monde',
+    imdb_id: 'tt37522541',
+    release_date: '2026-10-30',
+    'watch/providers': { results: {} },
+    release_dates: regional([4, '2026-10-30'])
+  });
+  // Sitges first screening and Prime arrival are different proven events.
+  assert.equal(movie.firstAirDate, '2026-10-10');
+  s.upsert(movie);
+  const halloween = new Date('2026-10-31T12:00:00Z');
+  const options = { period: '2026-10', now: halloween, curated: true };
+  const worldwide = s.query({ ...options, view: 'all' });
+  const streaming = s.query({ ...options, view: 'streaming' });
+  assert.deepEqual(worldwide.map(m => m.name), ['Apocalypse Z : Nouveau Monde']);
+  assert.equal(worldwide[0].originalReleaseDate, '2026-10-10');
+  assert.equal(worldwide[0].released.slice(0,10), '2026-10-10');
+  assert.deepEqual(streaming[0].providersByKind.streaming, ['Prime Video']);
+  assert.match(worldwide[0].description, /2026-10-30/);
+  assert.equal(s.query({ ...options, period: 'today', view: 'all' }).length, 0);
+  assert.equal(s.query({ ...options, period: 'yesterday', view: 'all' }).length, 0);
+  // Official positive distribution evidence must survive TMDB provider lag.
+  s.setFranceOffers(1507696, []);
+  assert.equal(s.query({ ...options, view: 'all' }).length, 1);
+  // Before the confirmed Prime launch, a title without other valid offers
+  // must not be represented as already available for streaming in France.
+  assert.equal(s.query({ ...options, now: new Date('2026-10-29T12:00:00Z'), view: 'streaming' }).length, 0);
+});
+
 test('streaming, rental/purchase and cinema are independently gated by French evidence', (t) => {
   const s = memory(t);
   s.upsert(record(1)); s.upsert(record(2, { 'watch/providers': FR('rent') }));
