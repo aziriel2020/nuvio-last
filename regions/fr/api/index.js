@@ -2396,8 +2396,10 @@ async function handleCalendarCard(res, url) {
   const append = url.searchParams.get('append') || url.searchParams.get('info') || '';
   const type = url.searchParams.get('type') || '';
   const jpeg = url.pathname.endsWith('.jpg');
+  const compactWorldMovie = jpeg && layout === 'landscape' && type === 'movie'
+    && url.searchParams.get('world') === '1';
   if (src && !isAllowedPosterSource(src)) { res.statusCode = 400; return res.end('Invalid source'); }
-  const key = JSON.stringify(['calendar-v2', src, fallback, title, provider, append, type, layout, jpeg]);
+  const key = JSON.stringify(['calendar-v2', src, fallback, title, provider, append, type, layout, jpeg, compactWorldMovie]);
   const result = await artworkCache.render(key, async () => {
     const photo = await contentPhoto(src, fallback);
     return artworkCache.raster(async () => {
@@ -2407,8 +2409,12 @@ async function handleCalendarCard(res, url) {
         imageDataUri = `data:${photo.type === 'image/webp' ? 'image/jpeg' : photo.type};base64,${bytes.toString('base64')}`;
       }
       const svg = calendarCardSvg({ imageDataUri, title, provider, append, type, layout });
-      const data = jpeg ? await sharp(Buffer.from(svg)).resize(layout === 'landscape' ? 960 : 500, layout === 'landscape' ? 540 : 750)
-        .jpeg({ quality: 84, progressive: true }).toBuffer() : Buffer.from(svg);
+      // The smaller Films Monde thumbnail is sized for collection poster rows.
+      // Keep default Calendar and detail renderers at their original resolution.
+      const width = compactWorldMovie ? 896 : (layout === 'landscape' ? 960 : 500);
+      const height = compactWorldMovie ? 504 : (layout === 'landscape' ? 540 : 750);
+      const data = jpeg ? await sharp(Buffer.from(svg)).resize(width, height)
+        .jpeg({ quality: compactWorldMovie ? 80 : 84, progressive: true }).toBuffer() : Buffer.from(svg);
       return { data, photo: Boolean(photo), cacheable: Boolean(photo) || (!src && !fallback) };
     });
   });

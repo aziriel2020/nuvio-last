@@ -20,6 +20,7 @@ const suites = [
   { name: 'Production audit helpers', cwd: root, args: ['--test', 'test/audit.test.mjs'] },
   { name: 'Artwork recovery and persistent cache', cwd: root, args: ['--test', 'test/artwork-runtime.test.mjs'] },
   { name: 'Concurrent Shield artwork request deduplication', cwd: root, args: ['--test', 'test/shield-poster-singleflight.test.mjs'] },
+  { name: 'Films Monde poster/cache performance regression', cwd: root, args: ['--test', 'test/films-monde-posters.test.mjs'] },
   { name: 'Oracle Always Free guardrails', cwd: root, args: ['--test', 'test/oracle-config.test.mjs'] }
 ];
 
