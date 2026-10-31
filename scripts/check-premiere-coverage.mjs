@@ -55,6 +55,18 @@ function allPlatformTodaySources(collections, region) {
 function allMovieTodaySources(collections, region) {
   return allPlatformTodaySources(collections, region).filter(source => source.type === 'movie');
 }
+function allPlatformDaySources(collections, region) {
+  return allPlatformTodaySources(collections, region).flatMap(source =>
+    ['today','yesterday'].map(period => ({
+      ...source, period, id: source.id.replace(/-today$/, '-'+period)
+    })));
+}
+function invalidCalendarDates(metas, expectedDate) {
+  return (metas || []).filter(meta =>
+    !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(meta?.released || '').slice(0,10)) ||
+    String(meta.released).slice(0,10) !== expectedDate
+  ).map(meta => ({ id: meta?.id, name: meta?.name, released: meta?.released || null }));
+}
 
 function duplicateCatalogCards(metas) {
   // Movies represent a title once. A series may legitimately publish several
@@ -178,7 +190,7 @@ async function checkMovieFolders(region) {
   let collections;
   try { collections = await getJson('/'+root+'/nuvio-collections.json'); }
   catch(error) { failures.push({market:region,error:'collections unavailable: '+error.message});return; }
-  const sources=allPlatformTodaySources(collections,region);
+  const sources=allPlatformDaySources(collections,region);
   if (!sources.length) { failures.push({market:region,error:'No active streaming platform folders discovered'});return; }
   try {
     const manifest=await getJson('/'+root+'/manifest.json');
@@ -202,12 +214,16 @@ async function checkMovieFolders(region) {
         const duplicates=duplicateCatalogCards(data.metas);
         if (duplicates.length) throw Error('Duplicate catalog cards: '+JSON.stringify(duplicates.slice(0, 5)));
         if (data.metas.some(m=>m.type!==source.type || !m.id || !m.name)) throw Error('Malformed catalog card');
-        observations.push({status:'healthy',market:region,provider:source.provider,catalog:source.id,count:data.metas.length});
+        const expected = source.period === 'today' ? localDay(region) : previousDay(localDay(region));
+        const invalid = invalidCalendarDates(data.metas, expected);
+        if (invalid.length) throw Error('Incorrect daily release dates: '+JSON.stringify(invalid.slice(0,5)));
+        observations.push({status:'healthy',market:region,provider:source.provider,
+          period:source.period,catalog:source.id,count:data.metas.length});
       }catch(error){failures.push({market:region,provider:source.provider,catalog:source.id,error:error.message});}
     }));
   }
 }
-export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, duplicateCatalogCards, localDay, previousDay };
+export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, duplicateCatalogCards, localDay, previousDay };
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   if (FULL_SCAN) for (const region of Object.keys(REGION)) await checkMovieFolders(region);
   for (const p of RECORDS) { await verifyRecord(p); await verifyLivePremiere(p); await verifyWorldPremiere(p); }
