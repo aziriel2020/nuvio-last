@@ -56,7 +56,14 @@ function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) 
       if (!genres.some(g => String(g) === descriptor.genre)) continue;
     }
     if (row?.classification === 'animation') continue;
-    if (metas.some(m => m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`)) continue;
+    const existing = metas.findIndex(m => m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`);
+    if (existing >= 0) {
+      // The index may still carry the later digital date from an older crawl.
+      // Correct the actual card rather than merely avoiding duplicates.
+      if (metas[existing].originalReleaseDate !== p.worldPremiereDate)
+        metas[existing] = officialWorldMeta(p, row);
+      continue;
+    }
     additions.push(officialWorldMeta(p, row));
   }
   // A verified original first release belongs on the first page even when
@@ -174,12 +181,12 @@ async function handler(req, res) {
     const verified = VERIFIED_WORLD.find(p =>
       requested === p.imdbId || requested === `tmdb:movie:${p.tmdbId}`);
     const row = store?.row(requested.replace(/^tmdb:movie:/, 'tmdb:')) || (verified ? store?.row(`tmdb:${verified.tmdbId}`) : null);
-    if (!row || !store.visible(row.id, { curated: true })) {
-      if (verified && +now >= Date.parse(`${verified.platformDate}T00:00:00Z`)) {
-        return send(res, 200, { meta: { ...officialWorldMeta(verified, row), id: requested } });
-      }
-      return send(res, store ? 404 : 503, { meta: null });
+    // Verified premiere evidence is canonical for the date even when an old
+    // SQLite row still contains the streaming date as its first release.
+    if (verified && +now >= Date.parse(`${verified.platformDate}T00:00:00Z`)) {
+      return send(res, 200, { meta: { ...officialWorldMeta(verified, row), id: requested } });
     }
+    if (!row || !store.visible(row.id, { curated: true })) return send(res, store ? 404 : 503, { meta: null });
     return send(res, 200, { meta: { ...store.meta(row, { curated: true, genre: store.contentKind(row) === 'standup' ? 'standup' : JSON.parse(row.genres).includes('99') ? '99' : 'all' }), id: requested } });
   }
   return send(res, 404, { error: 'Route inconnue' });
