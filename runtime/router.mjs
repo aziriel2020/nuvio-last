@@ -616,10 +616,17 @@ async function invokeNodeHandler(request, timeZone) {
 const artworkInFlight = new Map();
 const MAX_INFLIGHT_ARTWORK = 96;
 
+const COALESCED_ARTWORK_NAMES = new Set([
+  'calendar-card.jpg', 'calendar-card.svg', 'desktop-content-card.jpg',
+  'shield-content-card.jpg', 'genre-folder-art.svg',
+  'platform-category-card.svg', 'platform-backdrop.svg',
+  'original.jpg', 'original.png'
+]);
+
 function canCoalesceArtwork(request) {
   if (request.method !== 'GET' || request.headers.has('authorization')) return false;
-  const pathname = new URL(request.url).pathname;
-  return /(?:^|\\/)(?:calendar-card\\.(?:svg|jpg)|desktop-content-card\\.jpg|shield-content-card\\.jpg|genre-folder-art\\.svg|platform-category-card\\.svg|platform-backdrop\\.svg|original\\.(?:jpg|png))$/.test(pathname);
+  const name = new URL(request.url).pathname.split('/').pop();
+  return COALESCED_ARTWORK_NAMES.has(name);
 }
 
 async function dynamicResponse(request, env, ctx) {
