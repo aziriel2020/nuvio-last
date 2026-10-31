@@ -3,6 +3,15 @@
 const assert = require('node:assert/strict');
 const sharp = require('sharp');
 const origin = process.env.ARTWORK_BENCHMARK_ORIGIN || 'http://127.0.0.1:3000';
+function expectedArtworkDimensions(urlLike) {
+  const url = urlLike instanceof URL ? urlLike : new URL(urlLike);
+  const worldMovie = url.pathname.endsWith('/calendar-card.jpg')
+    && url.searchParams.get('world') === '1'
+    && url.searchParams.get('type') === 'movie'
+    && url.searchParams.get('layout') === 'landscape';
+  return worldMovie ? [896, 504] : [960, 540];
+}
+
 async function main() {
   const urls = [];
   for (const path of ['/movies/catalog/movie/movies-fr-all-all-today.json', '/series-v2/catalog/series/series-fr-premieres-all-' + new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit' }).format(new Date()) + '.json']) {
@@ -10,7 +19,9 @@ async function main() {
     assert(response.ok, 'Catalog HTTP ' + response.status); const data = await response.json();
     for (const meta of data.metas.slice(0, path.startsWith('/movies') ? 6 : 12)) for (const field of ['background', 'banner']) {
       if (!meta[field]) continue;
-      const url = new URL(meta[field]); urls.push({ field, url: origin + url.pathname + url.search });
+      const url = new URL(meta[field]);
+      const [expectedWidth, expectedHeight] = expectedArtworkDimensions(url);
+      urls.push({ field, expectedWidth, expectedHeight, url: origin + url.pathname + url.search });
     }
   }
   assert(urls.length > 0, 'No artwork available for the live test');
@@ -24,7 +35,9 @@ async function main() {
         const ms = Math.round(performance.now() - start);
         assert.equal(response.status, 200, 'Artwork response');
         assert.match(response.headers.get('content-type'), /^image\/jpeg/, 'Native cards must be JPEG');
-        const info = await sharp(data).metadata(); assert.equal(info.width, 960); assert.equal(info.height, 540);
+        const info = await sharp(data).metadata();
+        assert.equal(info.width, urls[i].expectedWidth, 'Unexpected poster JPEG width');
+        assert.equal(info.height, urls[i].expectedHeight, 'Unexpected poster JPEG height');
         samples.push({ ms, bytes: data.length, cache: response.headers.get('x-nuvio-cache'), photo: response.headers.get('x-nuvio-artwork-photo') });
       }
     }));
@@ -36,4 +49,5 @@ async function main() {
     if (pass === 'first') await new Promise((r) => setTimeout(r, 300));
   }
 }
-main().catch((error) => { console.error(error.message); process.exitCode = 1; });
+if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
+module.exports = { expectedArtworkDimensions };

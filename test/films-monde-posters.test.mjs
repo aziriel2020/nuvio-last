@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import api from '../api/index.js';
 import { edgeTtl } from '../runtime/router.mjs';
 import { fastContentCards, REVISION } from '../regions/fr/api/fast-content-cards.cjs';
+import artworkBenchmark from '../scripts/benchmark-artwork.cjs';
 
 function directRequest(uri) {
   return new Promise((resolve, reject) => {
@@ -95,4 +96,15 @@ test('Films Monde render has smaller pixels and bytes without affecting default 
   const portraitInfo = await sharp(portrait.bytes).metadata();
   assert.deepEqual([portraitInfo.width, portraitInfo.height], [500, 750],
     'Portrait and non-Films Monde cards keep existing quality');
+});
+
+test('Oracle production benchmark checks Films Monde compact dimensions and retains 960x540 for everything else', () => {
+  const { expectedArtworkDimensions } = artworkBenchmark;
+  const base = 'https://nuvio.example/fr/calendar-card.jpg?layout=landscape&type=movie&title=Example';
+  assert.deepEqual(expectedArtworkDimensions(base + '&world=1'), [896, 504]);
+  assert.deepEqual(expectedArtworkDimensions(base), [960, 540]);
+  assert.deepEqual(expectedArtworkDimensions(base + '&world=0'), [960, 540]);
+  assert.deepEqual(expectedArtworkDimensions(base.replace('type=movie', 'type=series') + '&world=1'), [960, 540]);
+  assert.deepEqual(expectedArtworkDimensions(base.replace('layout=landscape', 'layout=portrait') + '&world=1'), [960, 540]);
+  assert.deepEqual(expectedArtworkDimensions('https://nuvio.example/fr/desktop-content-card.jpg?layout=landscape&type=movie&world=1'), [960, 540]);
 });
