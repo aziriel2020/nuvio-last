@@ -53,3 +53,15 @@ test('MovieStore persists logos and exposes them without changing dates, poster 
   assert.equal(store.row(id).logo,null,'explicit no-logo detail clears stale logo');
   assert.equal(store.meta(store.row(id)).logo,undefined);
 });
+
+test('Films Monde catalog presentation preserves native title logos through the French calendar decorator',()=>{
+  const { decorateMovieMetas } = require('../src/presentation.cjs');
+  const logo='https://image.tmdb.org/t/p/w500/test-title.png';
+  const base={ id:'tt12345678',type:'movie',name:'Film',poster:'https://image.tmdb.org/t/p/w500/a.jpg',
+    background:'https://image.tmdb.org/t/p/w1280/b.jpg',logo, released:'2026-10-30T00:00:00.000Z',
+    releaseInfo:'2026' };
+  const decorated=decorateMovieMetas('https://example.test/movies',[base],{view:'all',period:'2026-10'})[0];
+  assert.equal(decorated.logo,logo);
+  const noLogo=decorateMovieMetas('https://example.test/movies',[{...base,logo:null}],{view:'all',period:'2026-10'})[0];
+  assert.equal(noLogo.logo,undefined,'avoid forcing an empty transparent placeholder');
+});
