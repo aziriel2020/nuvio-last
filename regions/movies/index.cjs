@@ -175,9 +175,9 @@ function sourcesInFolder(folder, sources, id, title, archive = false) {
 }
 function buildFastCollections(origin, now = new Date(), mode = 'shield') {
   const cutoff = fastMonthCutoff(now);
-  return buildCollections(origin, now, mode).map(collection => ({
-    ...collection,
-    folders: collection.folders.flatMap(folder => {
+  return buildCollections(origin, now, mode).map(collection => {
+    const currentFolders = [], archiveFolders = [];
+    for (const folder of collection.folders) {
       const recent = [], buckets = new Map();
       for (const source of folder.sources) {
         const period = sourcePeriod(source);
@@ -201,21 +201,22 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
           buckets.get(key).sources.push(source);
         }
       }
-      const output = [sourcesInFolder(folder, recent, folder.id, folder.title)];
+      currentFolders.push(sourcesInFolder(folder, recent, folder.id, folder.title));
       for (const [key, group] of buckets) {
         for (let i = 0; i < group.sources.length; i += FAST_MAX_SOURCES_PER_FOLDER) {
           const slice = group.sources.slice(i, i + FAST_MAX_SOURCES_PER_FOLDER);
           const part = Math.floor(i / FAST_MAX_SOURCES_PER_FOLDER);
           const subkey = `${key}-${part}`;
           const label = `${group.label}${part ? ` · ${part + 1}` : ''}`;
-          output.push(sourcesInFolder(
+          archiveFolders.push(sourcesInFolder(
             folder, slice, `${folder.id}-${subkey}`, `${folder.title} · ${label}`, true
           ));
         }
       }
-      return output;
-    })
-  }));
+    }
+    // Keep the original genre grid first; place clearly labeled archives after it.
+    return { ...collection, folders: [...currentFolders, ...archiveFolders] };
+  });
 }
 function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
