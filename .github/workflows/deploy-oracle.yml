@@ -125,6 +125,9 @@ jobs:
           set -Eeuo pipefail
           node scripts/check-premiere-coverage.mjs
 
+      - name: Verify Films Monde live index, native posters, dates and bounded fast imports
+        run: node scripts/verify-films-monde-production.mjs
+
       - name: Verify the seven approved Tendances and Cinema artwork pairs
         env:
           ARTWORK_EXPECTED_SHA: ${{ github.sha }}

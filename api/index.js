@@ -610,6 +610,11 @@ module.exports = async function handler(req, res) {
       : seriesHandler._internals.buildCollections(`${origin}/${seriesRoute}`, new Date(), 'shield');
     return sendJson(res, 200, collections.map(mobileizeCollectionArt), CINEMA_COLLECTION_CACHE);
   }
+  if (path === '/nuvio-collections-movies-fast-mobile.json') {
+    const origin = originFromRequest(req);
+    const collections = moviesHandler._internals.buildFastCollections(`${origin}/movies`, new Date(), 'shield');
+    return sendJson(res, 200, collections.map(mobileizeCollectionArt), CINEMA_COLLECTION_CACHE);
+  }
   if (path === '/nuvio-collections-global.json') {
     const origin = originFromRequest(req);
     return sendJson(
@@ -651,6 +656,9 @@ module.exports = async function handler(req, res) {
       moviesVersion: MOVIES_VERSION,
       moviesManifest: `${origin}/movies/manifest.json`,
       moviesCollections: `${origin}/movies/nuvio-collections.json`,
+      moviesFastCollections: `${origin}/movies/nuvio-collections-fast.json`,
+      moviesFastDesktopCollections: `${origin}/movies/nuvio-collections-fast-desktop.json`,
+      moviesFastMobileCollections: `${origin}/nuvio-collections-movies-fast-mobile.json`,
       moviesDesktopCollections: `${origin}/movies/nuvio-collections-desktop.json`,
       moviesStatus: `${origin}/movies/status.json`,
       franceManifest: `${origin}/fr/manifest.json`,

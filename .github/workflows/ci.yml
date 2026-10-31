@@ -28,6 +28,9 @@ jobs:
       - name: Run full test suite
         run: npm test
 
+      - name: Check strict Films Monde production audit script syntax
+        run: node --check scripts/verify-films-monde-production.mjs
+
       - name: Validate Films Monde custom artwork and Oracle integration
         run: |
           node scripts/verify-movie-covers.mjs

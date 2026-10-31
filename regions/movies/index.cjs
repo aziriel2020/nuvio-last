@@ -146,6 +146,78 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
     })
   })), origin);
 }
+
+// Opt-in fast Collections import: never remove a catalog/period. Retain the
+// original twenty genre folder identities for recent movies; archive periods
+// are presented in 24-source-or-smaller folders so Nuvio doesn't fire 120+
+// network requests at once when opening a single genre. This is necessary
+// because stock NuvioTV's FolderDetailViewModel loads EVERY source eagerly.
+const FAST_LIVE_MONTHS = 12;
+const FAST_MAX_SOURCES_PER_FOLDER = 24;
+function sourcePeriod(source) {
+  return parseCatalog(source?.catalogId)?.period || '';
+}
+function fastMonthCutoff(now) {
+  // Use the same Brussels calendar month as the movie source calendar.
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit'
+  }).formatToParts(now);
+  const year = Number(parts.find(p => p.type === 'year')?.value);
+  const month = Number(parts.find(p => p.type === 'month')?.value);
+  return new Date(Date.UTC(year, month - FAST_LIVE_MONTHS, 1)).toISOString().slice(0, 7);
+}
+function sourcesInFolder(folder, sources, id, title, archive = false) {
+  return {
+    ...folder, id, title, hideTitle: archive ? false : folder.hideTitle,
+    sources,
+    catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
+  };
+}
+function buildFastCollections(origin, now = new Date(), mode = 'shield') {
+  const cutoff = fastMonthCutoff(now);
+  return buildCollections(origin, now, mode).map(collection => {
+    const currentFolders = [], archiveFolders = [];
+    for (const folder of collection.folders) {
+      const recent = [], buckets = new Map();
+      for (const source of folder.sources) {
+        const period = sourcePeriod(source);
+        if (!period || ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek'].includes(period) ||
+            (/^\d{4}-\d{2}$/.test(period) && period >= cutoff)) {
+          recent.push(source);
+          continue;
+        }
+        // Pair years to get at most 24 monthly sources in each archive.
+        if (/^\d{4}-\d{2}$/.test(period)) {
+          const year = Number(period.slice(0, 4));
+          const from = Math.floor(year / 2) * 2;
+          const key = `months-${from}`;
+          if (!buckets.has(key)) buckets.set(key, {
+            label: `Archives ${from}–${from + 1}`, sources: []
+          });
+          buckets.get(key).sources.push(source);
+        } else {
+          const key = 'historical';
+          if (!buckets.has(key)) buckets.set(key, { label: 'Archives historiques', sources: [] });
+          buckets.get(key).sources.push(source);
+        }
+      }
+      currentFolders.push(sourcesInFolder(folder, recent, folder.id, folder.title));
+      for (const [key, group] of buckets) {
+        for (let i = 0; i < group.sources.length; i += FAST_MAX_SOURCES_PER_FOLDER) {
+          const slice = group.sources.slice(i, i + FAST_MAX_SOURCES_PER_FOLDER);
+          const part = Math.floor(i / FAST_MAX_SOURCES_PER_FOLDER);
+          const subkey = `${key}-${part}`;
+          const label = `${group.label}${part ? ` · ${part + 1}` : ''}`;
+          archiveFolders.push(sourcesInFolder(
+            folder, slice, `${folder.id}-${subkey}`, `${folder.title} · ${label}`, true
+          ));
+        }
+      }
+    }
+    // Keep the original genre grid first; place clearly labeled archives after it.
+    return { ...collection, folders: [...currentFolders, ...archiveFolders] };
+  });
+}
 function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', cacheControl);
@@ -160,6 +232,8 @@ async function handler(req, res) {
   const url = new URL(req.url, base), origin = `${url.origin}/movies`;
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now));
+  if (url.pathname === '/nuvio-collections-fast.json' || url.pathname === '/nuvio-collections-fast-desktop.json')
+    return send(res, 200, buildFastCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'));
   if (['/nuvio-collections.json', '/collections.json', '/nuvio-collections-desktop.json'].includes(url.pathname))
     return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'));
   const genre = url.pathname.match(/^\/artwork\/genre\/([a-z0-9]+)\.webp$/);
@@ -224,4 +298,4 @@ async function handler(req, res) {
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
+module.exports._internals = { buildManifest, buildCollections, buildFastCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
