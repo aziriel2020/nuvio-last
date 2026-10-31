@@ -146,9 +146,10 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
     })
   })), origin);
 }
-function send(res, code, data) {
+function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', 'no-store'); res.end(JSON.stringify(data));
+  res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', cacheControl);
+  res.end(JSON.stringify(data));
 }
 function image(res, bytes, type = 'image/webp') {
   res.statusCode = 200; res.setHeader('Content-Type', type); res.setHeader('Access-Control-Allow-Origin', '*');
@@ -199,7 +200,10 @@ async function handler(req, res) {
     try {
       const metas = pagedMovieCatalog(store, descriptor, now, skip, search);
       if (!store && !metas.length) return send(res, 503, { metas: [], error: 'Index en préparation' });
-      return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) });
+      // Cache only nonempty, successful catalog pages. Never cache a missing
+      // DB index or an empty page: fresh imports must appear immediately.
+      const cachePolicy = metas.length ? 'public, max-age=15, s-maxage=60' : 'no-store';
+      return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) }, cachePolicy);
     }
     catch (e) { if (/Invalid/.test(e.message)) return send(res, 400, { metas: [], error: e.message }); throw e; }
   }
