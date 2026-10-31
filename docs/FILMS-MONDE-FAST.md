@@ -26,7 +26,7 @@ New opt-in imports:
 
 The same original four collection IDs and 20 main genre folder IDs are retained.
 Main genres appear first, with existing approved premium covers and backdrops.
-Each main genre contains five rolling date periods plus the last eighteen
+Each main genre contains five rolling date periods plus the last twelve
 monthly periods. Older months are still accessible, grouped in chronologically
 labeled archive folders (at most 24 periods per folder). Western historic
 year and undated rows remain reachable in bounded archival groups.
