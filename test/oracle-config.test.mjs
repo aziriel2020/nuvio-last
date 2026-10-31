@@ -104,9 +104,9 @@ test('Oracle runtime imports only the neutral runtime layer and repository-local
   assert.doesNotMatch(server, /cloudflare|pages\.dev|workers\.dev|vercel\.app|sslip\.io/i);
 });
 
-test('The single Oracle reverse-proxy backend never enters a 30-second active-health 503 blackout', () => {
-  assert.match(caddy, /reverse_proxy 127\\.0\\.0\\.1:3000/);
+test('The single Oracle reverse-proxy backend avoids active-health 503 blackouts', () => {
+  assert.ok(caddy.includes('reverse_proxy 127.0.0.1:3000'));
   assert.doesNotMatch(caddy, /health_uri|health_interval|health_timeout/);
-  assert.match(updater, /127\\.0\\.0\\.1:3000\\/_oracle\\/health/);
-  assert.match(updater, /systemctl reload caddy/);
+  assert.ok(updater.includes('127.0.0.1:3000/_oracle/health'));
+  assert.ok(updater.includes('systemctl reload caddy'));
 });
