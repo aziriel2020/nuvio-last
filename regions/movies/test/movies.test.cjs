@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const sharp = require('sharp');
 const { MovieStore } = require('../src/store.cjs');
-const { fromTmdb, GENRES, VIEWS, periods, parseCatalog } = require('../src/model.cjs');
+const { fromTmdb, GENRES, VIEWS, periods, parseCatalog, windowFor, displayDateForPremiere } = require('../src/model.cjs');
 const { discoverParams, splitMovieDates, scanLane, runDetailJobs } = require('../../../scripts/sync-movies-world.cjs');
 const { decorateMovieMetas } = require('../src/presentation.cjs');
 const addon = require('../index.cjs');
@@ -45,7 +45,7 @@ test('Films Monde retains international release dates even without TMDb primary 
   assert(item.releases.some(e=>e.kind==='digital'&&e.date==='2026-10-30'));
 });
 
-test('official Prime debut belongs to its real world premiere month despite a delayed FR provider index', (t) => {
+test('new Prime film uses its 30 October display date and retains its separate 9 October provenance', (t) => {
   const s = memory(t);
   const movie = record(1507696, {
     title: 'Apocalypse Z : Nouveau Monde',
@@ -63,11 +63,11 @@ test('official Prime debut belongs to its real world premiere month despite a de
   const streaming = s.query({ ...options, view: 'streaming' });
   assert.deepEqual(worldwide.map(m => m.name), ['Apocalypse Z : Nouveau Monde']);
   assert.equal(worldwide[0].originalReleaseDate, '2026-10-09');
-  assert.equal(worldwide[0].released.slice(0,10), '2026-10-09');
+  assert.equal(worldwide[0].released.slice(0,10), '2026-10-30');
   assert.deepEqual(streaming[0].providersByKind.streaming, ['Prime Video']);
   assert.match(worldwide[0].description, /2026-10-30/);
   assert.equal(s.query({ ...options, period: 'today', view: 'all' }).length, 0);
-  assert.equal(s.query({ ...options, period: 'yesterday', view: 'all' }).length, 0);
+  assert.equal(s.query({ ...options, period: 'yesterday', view: 'all' }).length, 1);
   // Official positive distribution evidence must survive TMDB provider lag.
   s.setFranceOffers(1507696, []);
   assert.equal(s.query({ ...options, view: 'all' }).length, 1);
@@ -83,11 +83,11 @@ test('Films Monde visibly includes an officially verified world premiere when th
   assert.equal(fallback.length, 1);
   assert.equal(fallback[0].name, 'Apocalypse Z : Nouveau Monde');
   assert.equal(fallback[0].originalReleaseDate, '2026-10-09');
-  assert.equal(fallback[0].released.slice(0,10), '2026-10-09');
+  assert.equal(fallback[0].released.slice(0,10), '2026-10-30');
   assert.match(fallback[0].description, /Sortie Prime Video France : 2026-10-30/);
   assert(fallback[0].links.some(l=>l.category==='Regarder' && l.url.includes('primevideo.com')));
   assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,period:'today'},date,0,'',[]).length,0);
-  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,period:'yesterday'},date,0,'',[]).length,0);
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,period:'yesterday'},date,0,'',[]).length,1);
   assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,view:'vod'},date,0,'',[]).length,0);
   assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,genre:'27'},date,0,'',[]).length,0,
     'genre should not be invented before metadata arrives');
@@ -108,10 +108,45 @@ test('Films Monde visibly includes an officially verified world premiere when th
   // original release. The response must correct that stale card immediately.
   s.db.prepare("UPDATE shows SET first_air_date='2026-10-30' WHERE id='tmdb:1507696'").run();
   const stale = s.query({...catalog,now:date,curated:true});
-  assert.equal(stale[0].originalReleaseDate,'2026-10-30');
+  assert.equal(stale[0].originalReleaseDate,'2026-10-09');
   const repaired = addon._internals.verifiedWorldCatalogMetas(s,catalog,date,0,'',stale);
   assert.equal(repaired[0].originalReleaseDate,'2026-10-09');
-  assert.equal(repaired[0].released.slice(0,10),'2026-10-09');
+  assert.equal(repaired[0].released.slice(0,10),'2026-10-30');
+});
+test('Films Monde rollover keeps daily automated updates and 2030 archive calendar intact', (t) => {
+  const s = memory(t);
+  s.upsert(record(1507696,{
+    title:'Apocalypse Z : Nouveau Monde', release_date:'2026-10-30',
+    'watch/providers':{results:{}},release_dates:regional([4,'2026-10-30'])
+  }));
+  const friday = new Date('2026-10-30T12:00:00Z');
+  const saturday = new Date('2026-10-31T12:00:00Z');
+  const sunday = new Date('2026-11-01T12:00:00Z');
+  const search = {view:'streaming',genre:'all',curated:true};
+  assert.equal(s.query({...search,now:friday,period:'today'}).length,1);
+  assert.equal(s.query({...search,now:friday,period:'yesterday'}).length,0);
+  assert.equal(s.query({...search,now:saturday,period:'today'}).length,0);
+  assert.equal(s.query({...search,now:saturday,period:'yesterday'}).length,1);
+  assert.equal(s.query({...search,now:sunday,period:'yesterday'}).length,0);
+  assert.equal(s.query({...search,now:sunday,period:'2026-10'}).length,1);
+  assert.equal(s.query({...search,now:sunday,period:'2026-11'}).length,0);
+  const oldRelease = {worldPremiereDate:'1975-04-02',platformDate:'2026-10-30'};
+  assert.equal(displayDateForPremiere(oldRelease),'1975-04-02',
+    '1975 reissues must not become new films');
+  const genuineRemake = {worldPremiereDate:'2026-10-09',platformDate:'2026-10-30'};
+  assert.equal(displayDateForPremiere(genuineRemake),'2026-10-30');
+  const near2030 = new Date('2030-12-31T13:00:00Z');
+  const next2030 = new Date('2031-01-01T13:00:00Z');
+  assert(periods(near2030).some(p=>p.key==='2030-12'));
+  assert(periods(next2030).some(p=>p.key==='2031-01'));
+  assert(!periods(friday).some(p=>p.key==='2030-01'),
+    'future months must remain dynamic, not preloaded as historical archives');
+  assert.equal(windowFor('today',near2030).start,'2030-12-31');
+  assert.equal(windowFor('yesterday',next2030).start,'2030-12-31');
+  assert.equal(windowFor('2030-12',near2030).end,'2030-12-31');
+  assert.equal(windowFor('2030-12',new Date('2030-12-05T12:00:00Z')).end,'2030-12-05');
+  const manifest = addon._internals.buildManifest('https://example.test/movies',near2030);
+  assert(manifest.catalogs.some(c=>c.id==='movies-fr-all-all-2030-12'));
 });
 test('streaming, rental/purchase and cinema are independently gated by French evidence', (t) => {
   const s = memory(t);
