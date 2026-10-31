@@ -2,7 +2,7 @@
 
 const { SeriesStore } = require('../../series/src/store.cjs');
 const { AVAILABILITY_TTL } = require('../../series/src/france.cjs');
-const { GENRES, VIEWS, catalogWindowFor } = require('./model.cjs');
+const { GENRES, VIEWS, catalogWindowFor, displayDateForPremiere } = require('./model.cjs');
 const content = require('./content-policy.cjs');
 const policy = require('../../series/src/catalog-policy.cjs');
 const { RECORDS: PREMIERES } = require('../../../runtime/verified-streaming-premieres.cjs');
@@ -107,6 +107,19 @@ class MovieStore extends SeriesStore {
       (SELECT tmdb_id FROM movie_seen WHERE scan_id=? AND lane=?)`).run(kind, scanId, kind);
     this.db.prepare('DELETE FROM movie_seen WHERE lane=? AND scan_id!=?').run(kind, scanId);
   }
+  calendarDisplaySql(alias = 's') {
+    // SQL keeps the real original premiere in first_air_date, but uses the
+    // official new-production platform debut for calendar placement.
+    // No old movie is shifted to a new year merely because it was reissued.
+    const recent = VERIFIED_FR.filter(p => p.worldPremiereDate &&
+      displayDateForPremiere(p) === p.platformDate);
+    if (!recent.length) return `${alias}.first_air_date`;
+    const cases = recent.map(p =>
+      `WHEN EXISTS (SELECT 1 FROM sources dated_src WHERE dated_src.show_id=${alias}.id
+        AND dated_src.source='tmdb' AND CAST(dated_src.source_id AS INTEGER)=${p.tmdbId})
+        THEN '${p.platformDate}'`).join(' ');
+    return `(CASE ${cases} ELSE ${alias}.first_air_date END)`;
+  }
   query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false } = {}) {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
@@ -123,18 +136,21 @@ class MovieStore extends SeriesStore {
       where.push("(s.title LIKE ? ESCAPE '\\' OR s.original_title LIKE ? ESCAPE '\\')");
       const value = `%${search.replace(/[\\%_]/g, '\\$&')}%`; args.push(value, value);
     }
-    // All views use the first worldwide release. Regional reissues and later
-    // streaming/VOD availability never move an old film into a new calendar.
-    if (window.undated) where.push('s.first_air_date IS NULL');
-    else if (window.start) { where.push('s.first_air_date BETWEEN ? AND ?'); args.push(window.start, window.end); }
-    else { where.push('(s.first_air_date<=? OR s.first_air_date IS NULL)'); args.push(window.end); }
+    // Calendar periods, including daily rollover and future years, are
+    // calculated afresh on every request. Only proven new-production
+    // platform premieres use their streaming date instead of festival date.
+    const eventDate = this.calendarDisplaySql('s');
+    if (window.undated) where.push(`${eventDate} IS NULL`);
+    else if (window.start) { where.push(`${eventDate} BETWEEN ? AND ?`); args.push(window.start, window.end); }
+    else { where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`); args.push(window.end); }
     // Ensure a verified world premiere cannot be pushed off the first page by
     // hundreds of later releases. Sorting happens before LIMIT/OFFSET so pages
     // remain mutually exclusive.
     const priority = curated && ['all','streaming'].includes(view)
       ? `CASE WHEN ${this.verifiedStreamingClause('s',now)} THEN 0 ELSE 1 END,` : '';
-    const rows = this.db.prepare(`SELECT s.*,${content.sqlKind()} AS content_kind,s.first_air_date AS event_date,'original' AS event_kind
-      FROM shows s WHERE ${where.join(' AND ')} ORDER BY ${priority}s.first_air_date DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
+    const rows = this.db.prepare(`SELECT s.*, ${content.sqlKind()} AS content_kind,
+      ${eventDate} AS event_date,'original' AS event_kind
+      FROM shows s WHERE ${where.join(' AND ')} ORDER BY ${priority}${eventDate} DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
     return rows.map((row) => this.meta(row, { curated, genre, view, now }));
   }
   contentKind(row) {
@@ -156,12 +172,15 @@ class MovieStore extends SeriesStore {
     };
     const date = row.event_date || row.first_air_date;
     const releases = this.db.prepare('SELECT kind,date FROM movie_releases WHERE show_id=? ORDER BY date DESC').all(row.id);
-    const dateLabel = row.event_kind === 'cinema' ? 'Sortie cinéma France' : row.event_kind === 'digital' ? 'Sortie numérique France' : 'Première sortie du film';
+    const dateLabel = official && displayDateForPremiere(official) === official.platformDate
+      ? `Sortie ${official.providerLabel} France`
+      : row.event_kind === 'cinema' ? 'Sortie cinéma France'
+        : row.event_kind === 'digital' ? 'Sortie numérique France' : 'Première sortie du film';
     return {
       id, type: 'movie', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
       background: row.background || row.poster || undefined, streamingProviders: providers, providersByKind,
       movieContentKind: row.content_kind || this.contentKind(row),
-      movieReleaseKind: 'original', originalReleaseDate: row.first_air_date || null,
+      movieReleaseKind: 'original', originalReleaseDate: official?.worldPremiereDate || row.first_air_date || null,
       description: [date ? `${dateLabel} : ${date}` : 'Date de sortie inconnue',
         providers.length ? `Plateformes / offres France confirmées : ${providers.join(', ')}.` : 'Dates de sorties référencées ; disponibilité actuelle du film à vérifier.',
         'Dates : TMDB et preuves officielles de festival quand disponibles · Disponibilités : annonces officielles et JustWatch via TMDB. La date de sortie ne constitue pas une date d’arrivée sur chaque plateforme.',
