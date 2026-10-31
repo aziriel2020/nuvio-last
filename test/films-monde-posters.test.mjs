@@ -34,9 +34,13 @@ test('Films Monde versioned genre posters and backdrops stay in Oracle disk cach
     '/movies/backdrop.jpg?v=movies-premium-20261025-v2'
   ];
   for (const path of paths) assert.equal(edgeTtl(prefix + path), 604800, path);
+  assert.equal(edgeTtl(prefix + '/movies/catalog/movie/movies-fr-all-all-today.json'), 60);
+  assert.equal(edgeTtl(prefix + '/movies/catalog/movie/movies-fr-all-all-2026-09/skip=24.json'), 300);
+  assert.equal(edgeTtl(prefix + '/movies/collections-only/catalog/movie/movies-fr-all-all-today.json'), 60);
+  assert.equal(edgeTtl(prefix + '/movies/mobile-desktop-collections/catalog/movie/movies-fr-all-all-2026-09.json'), 300);
+
   for (const path of [
     '/movies/artwork/genre/28.webp',
-    '/movies/catalog/movie/movies-fr-all-action-today.json',
     '/movies/meta/movie/tt123.json',
     '/movies/manifest.json',
     '/movies/status.json',

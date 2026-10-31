@@ -55,6 +55,13 @@ export function edgeTtl(input) {
     return GENERATED_ART_TTL;
   }
 
+  // Films Monde alone opts into short CDN/disk caching for successful,
+  // nonempty catalog pages. Daily periods refresh quickly; old months can
+  // refresh independently after late indexing (5 minutes maximum).
+  // Existing /movies meta, status, artworks and other series bypasses remain.
+  if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections)\/)?catalog\/movie\/[^/]+(?:\/[^/]+)?\.json$/.test(path)) {
+    return /-(?:today|tomorrow|yesterday|lastweek|nextweek)(?:\/|\.|$)/i.test(path) ? 60 : 300;
+  }
   // Empty/error series responses must not become a cached successful catalog.
   if (/^\/(?:series(?:-v2)?|movies)\//.test(path)) return 0;
 
@@ -547,6 +554,16 @@ function cacheKeyFor(request, timeZone) {
   // Internal-only cache revision: keeps public URLs/IDs unchanged while
   // invalidating stale empty anime responses after runtime fixes.
   url.searchParams.set('__nuvio_edge_rev', EDGE_CACHE_REV);
+  // Midnight changes the cache identity even before the TTL expires. Film
+  // Monde uses Europe/Brussels civil dates for Today/Yesterday in all apps.
+  if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections)\/)?catalog\/movie\//.test(url.pathname)) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const get = kind => parts.find(x => x.type === kind)?.value;
+    url.searchParams.set('__nuvio_movie_day', `${get('year')}-${get('month')}-${get('day')}`);
+  }
+
   if (
     timeZone &&
     (url.pathname.startsWith('/us/catalog/') || url.pathname.startsWith('/global/catalog/'))

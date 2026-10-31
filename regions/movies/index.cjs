@@ -13,6 +13,8 @@ const { decorateMovieMetas } = require('./src/presentation.cjs');
 const { RECORDS: VERIFIED_PREMIERES } = require('../../runtime/verified-streaming-premieres.cjs');
 const VERIFIED_WORLD = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie'
   && p.worldPremiereDate && p.worldPremiereSource);
+const WORLD_PAGE_SIZE = 24; // One immediate row + pagination, rather than 100 posters per period.
+
 
 function officialWorldMeta(p, row = null) {
   const date = displayDateForPremiere(p);
@@ -73,6 +75,31 @@ function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) 
   return [...additions, ...metas].slice(0, 100);
 }
 
+// Keep pinned, provenance-confirmed debuts on page one, without losing the
+// final regular title when that pin is inserted ahead of a 24-item page.
+// The client's "skip" counts visible items, including injected pins.
+function pagedMovieCatalog(store, descriptor, now, skip, search, pageSize = WORLD_PAGE_SIZE) {
+  if (!store) return verifiedWorldCatalogMetas(null, descriptor, now, skip, search, [])
+    .slice(0, pageSize);
+  const query = (offset) => store.query({
+    ...descriptor, skip: offset, search, now, curated: true, limit: pageSize
+  });
+  if (skip === 0) {
+    return verifiedWorldCatalogMetas(store, descriptor, now, 0, search, query(0))
+      .slice(0, pageSize);
+  }
+  // This correction matters only for views with pinned verified releases.
+  // Cache-free on purpose: every new request reflects updated movie indexes.
+  const needsPins = ['all', 'streaming'].includes(descriptor.view);
+  let inserted = 0;
+  if (needsPins) {
+    const originalFirst = query(0);
+    const withPins = verifiedWorldCatalogMetas(store, descriptor, now, 0, search, originalFirst);
+    inserted = Math.max(0, withPins.length - originalFirst.length);
+  }
+  return query(Math.max(0, skip - inserted));
+}
+
 let cachedStore, cachedPath;
 const imageCache = new Map();
 const GENRE_BACKDROP_DIR = path.resolve(__dirname, '../../assets/movie-backdrops');
@@ -97,7 +124,7 @@ function buildManifest(origin, now = new Date()) {
     resources: [{ name: 'catalog', types: ['movie'] }, { name: 'meta', types: ['movie'], idPrefixes: ['tt', 'tmdb:movie:'] }],
     catalogs: VIEWS.flatMap((view) => VISIBLE_GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
       id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
-      pageSize: 100, extraSupported: ['skip', 'search'], extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
+      pageSize: WORLD_PAGE_SIZE, extraSupported: ['skip', 'search'], extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     })))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
     background: `${origin}/backdrop.jpg?v=${art.REVISION}`, behaviorHints: { configurable: false, configurationRequired: false }
@@ -119,9 +146,10 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
     })
   })), origin);
 }
-function send(res, code, data) {
+function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', 'no-store'); res.end(JSON.stringify(data));
+  res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', cacheControl);
+  res.end(JSON.stringify(data));
 }
 function image(res, bytes, type = 'image/webp') {
   res.statusCode = 200; res.setHeader('Content-Type', type); res.setHeader('Access-Control-Allow-Origin', '*');
@@ -170,10 +198,12 @@ async function handler(req, res) {
     const skip = Number(extra.get('skip') || url.searchParams.get('skip') || 0);
     const search = String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200);
     try {
-      const indexed = store ? store.query({ ...descriptor, skip, search, now, curated: true }) : [];
-      const metas = verifiedWorldCatalogMetas(store, descriptor, now, skip, search, indexed);
+      const metas = pagedMovieCatalog(store, descriptor, now, skip, search);
       if (!store && !metas.length) return send(res, 503, { metas: [], error: 'Index en préparation' });
-      return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) });
+      // Cache only nonempty, successful catalog pages. Never cache a missing
+      // DB index or an empty page: fresh imports must appear immediately.
+      const cachePolicy = metas.length ? 'public, max-age=15, s-maxage=60' : 'no-store';
+      return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) }, cachePolicy);
     }
     catch (e) { if (/Invalid/.test(e.message)) return send(res, 400, { metas: [], error: e.message }); throw e; }
   }
@@ -194,4 +224,4 @@ async function handler(req, res) {
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas };
+module.exports._internals = { buildManifest, buildCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
