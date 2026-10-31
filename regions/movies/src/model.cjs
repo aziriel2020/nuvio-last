@@ -3,6 +3,7 @@
 const { isoDate, unique, classify, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods } = require('../../series/src/model.cjs');
 const { offersInFrance } = require('../../series/src/france.cjs');
 const { contentKind } = require('./content-policy.cjs');
+const { RECORDS: VERIFIED_PREMIERES } = require('../../../runtime/verified-streaming-premieres.cjs');
 const ADDON_ID = 'com.nuvio.movies.france.world.v1';
 const VERSION = '1.0.3';
 const GENRES = Object.freeze([
@@ -42,6 +43,8 @@ function fromTmdb(data) {
   const originalDates = [primaryDate,
     ...(primaryDate || corroboratedCountries.size >= 2 ? candidateDates : [])]
     .filter(Boolean).sort();
+  // Official first-showing evidence outranks distributor and TMDB digital arrival dates.
+  const verifiedWorldDate = VERIFIED_PREMIERES.find(p => p.tmdbId === data.id && p.worldPremiereDate)?.worldPremiereDate;
   const releases = (regional?.release_dates || []).flatMap((r) => {
     const kind = [2, 3].includes(Number(r.type)) ? 'cinema' : Number(r.type) === 4 ? 'digital' : null;
     const date = isoDate(String(r.release_date || '').slice(0, 10));
@@ -51,7 +54,7 @@ function fromTmdb(data) {
     key: `tmdb:${data.id}`, source: 'tmdb', sourceId: data.id,
     imdbId: /^tt\d+$/.test(data.imdb_id || data.external_ids?.imdb_id || '') ? (data.imdb_id || data.external_ids.imdb_id) : null,
     title: data.title || data.original_title || `Film ${data.id}`, originalTitle: data.original_title || null,
-    description: data.overview || null, firstAirDate: originalDates[0] || null,
+    description: data.overview || null, firstAirDate: verifiedWorldDate || originalDates[0] || null,
     poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
     background: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : null,
     movieContentKind: contentKind({ genres, title: data.title, originalTitle: data.original_title, description: data.overview, keywords, cast: data.credits?.cast, video: data.video }),
