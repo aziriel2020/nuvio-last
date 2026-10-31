@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, releasedDayForMarket, duplicateCatalogCards } from '../scripts/check-premiere-coverage.mjs';
+import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, releasedDayForMarket, duplicateCatalogCards, localDay, previousDay, calendarTimeZone } from '../scripts/check-premiere-coverage.mjs';
 const require = createRequire(import.meta.url);
 const { RECORDS, verifiedForCatalog, retainVerifiedMetas, verifiedMeta } = require('../runtime/verified-streaming-premieres.cjs');
 const { sortAndDedupeMetas } = require('../regions/fr/src/calendar.js');
@@ -128,4 +128,56 @@ test('all four regional catalogs dedupe one episode but preserve different episo
     assert.equal(cards.length,2,market);
     assert.deepEqual(cards.map(c=>c.releaseInfo.slice(0,6)).sort(),['S02E01','S02E02'],market);
   }
+});
+
+test('Anime Japon + Corée rolls at Tokyo midnight while Global VOD stays in UTC', () => {
+  const atTokyoMidnight = new Date('2026-10-31T15:47:00.000Z');
+  const anime = {
+    id: 'archives-global-v1-series-anime-asia-today',
+    type: 'series', period: 'today'
+  };
+  const animeMovies = {
+    id: 'archives-global-v1-movie-anime-asia-yesterday',
+    type: 'movie', period: 'yesterday'
+  };
+  const vod = {
+    id: 'archives-global-v1-movie-vod-global-today',
+    type: 'movie', period: 'today'
+  };
+
+  assert.equal(calendarTimeZone('GLOBAL',anime), 'Asia/Tokyo');
+  assert.equal(calendarTimeZone('GLOBAL',animeMovies), 'Asia/Tokyo');
+  assert.equal(calendarTimeZone('GLOBAL',vod), 'UTC');
+  assert.equal(calendarTimeZone('FR',anime), 'Europe/Paris',
+    'do not remap other regions just because the catalog ID resembles anime');
+  assert.equal(localDay('GLOBAL',atTokyoMidnight,anime), '2026-11-01');
+  assert.equal(previousDay(localDay('GLOBAL',atTokyoMidnight,animeMovies)), '2026-10-31');
+  assert.equal(localDay('GLOBAL',atTokyoMidnight,vod), '2026-10-31');
+  assert.equal(localDay('GLOBAL',atTokyoMidnight), '2026-10-31',
+    'existing GLOBAL UTC audit semantics remain unchanged');
+
+  const tokyoToday = [
+    { id:'anilist:209872', name:'Ranma 1/2', released:'2026-11-01' },
+    { id:'tt41296506', name:'Magical Explorer', released:'2026-11-01T00:00:00.000Z' },
+    { id:'anilist:200', name:'Native 00:30 JST', released:'2026-10-31T15:30:00.000Z' }
+  ];
+  assert.deepEqual(invalidCalendarDates(tokyoToday,'2026-11-01','GLOBAL',anime), []);
+  assert.deepEqual(invalidCalendarDates([
+    {id:'anilist:yesterday',released:'2026-10-31'}
+  ],'2026-10-31','GLOBAL',animeMovies),[]);
+  assert.deepEqual(invalidCalendarDates(tokyoToday,'2026-10-31','GLOBAL',vod).map(x=>x.id),
+    ['anilist:209872','tt41296506'],
+    'ordinary Global VOD still checks UTC dates');
+});
+
+test('Calendar date-only strings retain their civil date across Tokyo midnight and Europe DST', () => {
+  const anime = 'archives-global-v1-series-anime-asia-today';
+  assert.equal(releasedDayForMarket('2026-11-01', 'GLOBAL', anime),'2026-11-01');
+  assert.equal(releasedDayForMarket('2026-10-31T15:00:00Z','GLOBAL',anime),'2026-11-01');
+  assert.equal(releasedDayForMarket('2026-10-31T14:59:59Z','GLOBAL',anime),'2026-10-31');
+  assert.equal(releasedDayForMarket('2026-10-31T15:00:00Z','GLOBAL'),'2026-10-31');
+  assert.equal(releasedDayForMarket('2026-10-31T21:00:00Z','GLOBAL',anime),'2026-11-01');
+  assert.equal(releasedDayForMarket('2026-10-31T21:00:00Z','TR'),'2026-11-01');
+  assert.deepEqual(invalidCalendarDates([{id:'x',released:null}],'2026-11-01','GLOBAL',anime)
+    .map(x=>x.id),['x'],'missing dates remain failures');
 });
