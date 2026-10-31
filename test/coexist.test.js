@@ -667,7 +667,7 @@ test('USA and France Paramount+ remain distinct and both expose Series and Films
   assert(fr.folders[0].sources.every((s) => s.catalogId.startsWith('archives-fr-v1-series-paramount-plus-')));
 });
 
-test('dynamic calendar data is CDN cached briefly while historical data stays cached longer', () => {
+test('civil-day catalogs are never cached across midnight while monthly and historical data remain cached', () => {
   const apis = [
     handler._internals.frHandler._internals,
     handler._internals.globalHandler._internals,
@@ -676,10 +676,13 @@ test('dynamic calendar data is CDN cached briefly while historical data stays ca
   ];
   const window = { today: '2026-09-07', empty: false };
   for (const api of apis) {
-    assert.equal(
-      api.catalogResponseCacheControl({ period: 'today', archivePeriodKey: 'today' }, window),
-      'public, max-age=60, s-maxage=300, stale-while-revalidate=900'
-    );
+    for (const period of ['today', 'yesterday', 'tomorrow']) {
+      assert.equal(
+        api.catalogResponseCacheControl({ period, archivePeriodKey: period }, window),
+        'no-store',
+        `${period} must not return yesterday's data after midnight`
+      );
+    }
     assert.equal(
       api.catalogResponseCacheControl({ period: 'archive-2026-09' }, window),
       'public, max-age=60, s-maxage=300, stale-while-revalidate=900'
