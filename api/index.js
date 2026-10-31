@@ -98,6 +98,42 @@ async function collectionsOnlyAddon(req, res, region, handler, pathname) {
   return delegate(req, res, prefix, handler);
 }
 
+// Mobile/Desktop currently require collection catalogs to remain declared.
+// Their shared clients exclude catalogs with a required *non-search* extra
+// from Home, Discovery, and regular search. Collection source resolution still
+// uses addonId/type/catalogId, without validating manifest extras.
+// This opt-in compatibility profile prevents artwork prefetch for these rows
+// without mutating any source IDs, catalog URL, metadata, or calendar payload.
+const PRIVATE_COLLECTION_EXTRA_NAME = 'nuvio_collection_only';
+
+function privateCollectionManifest(manifest) {
+  return {
+    ...manifest,
+    catalogs: (manifest.catalogs || []).map((catalog) => ({
+      ...catalog,
+      showInHome: false,
+      extra: [
+        ...(Array.isArray(catalog.extra)
+          ? catalog.extra.filter((entry) => entry.name !== PRIVATE_COLLECTION_EXTRA_NAME)
+          : []),
+        { name: PRIVATE_COLLECTION_EXTRA_NAME, isRequired: true }
+      ]
+    }))
+  };
+}
+
+async function privateCollectionAddon(req, res, region, handler, pathname) {
+  const prefix = `/${region}/collections-private`;
+  if (pathname === `${prefix}/manifest.json`) {
+    const canonicalOrigin = `${originFromRequest(req)}/${region}`;
+    const now = handler._internals.runtimeNow?.() || new Date();
+    const timeZone = handler._internals.requestTimeZone?.(req);
+    const manifest = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
+    return sendJson(res, 200, privateCollectionManifest(manifest), 'no-store');
+  }
+  return delegate(req, res, prefix, handler);
+}
+
 const GENERATED_COVER_REV = 'generated-v11-genre-photo-frames-period-labels';
 const GENERATED_COVER_ROOT = path.resolve(__dirname, '../assets/generated-covers');
 
@@ -527,6 +563,12 @@ module.exports = async function handler(req, res) {
   if (collectionsOnlyRoute) {
     const region = collectionsOnlyRoute[1];
     return collectionsOnlyAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
+  }
+  // Opt-in manifest for Nuvio Mobile and Desktop (not the TV profile).
+  const privateCollectionRoute = path.match(new RegExp('^/(fr|us|tr|global|movies|series(?:-v2)?)/collections-private(?:/|$)'));
+  if (privateCollectionRoute) {
+    const region = privateCollectionRoute[1];
+    return privateCollectionAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
   }
   if (path === '/movies' || path.startsWith('/movies/')) return delegate(req, res, '/movies', moviesHandler);
   if (path === '/series-v2' || path.startsWith('/series-v2/')) return delegate(req, res, '/series-v2', seriesHandler);
