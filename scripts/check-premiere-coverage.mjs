@@ -13,10 +13,18 @@ const ORIGIN = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip
 const DATE = process.env.NUVIO_CHECK_DATE || new Date().toISOString().slice(0,10);
 const FULL_SCAN = process.env.AUDIT_ALL_PLATFORMS === '1';
 const ZONES = { FR:'Europe/Paris', US:'America/New_York', TR:'Europe/Istanbul', GLOBAL:'UTC' };
-function localDay(market, clock = new Date()) {
+const ANIME_JP_KR_SOURCE = /^archives-global-v1-(?:movie|series)-anime-asia-(?:today|yesterday)$/;
+// The Anime Japon + Corée addon schedules ORIGINAL releases in Asia/Tokyo,
+// not UTC. Other Global sources (such as VOD Mondiale) still use GLOBAL UTC.
+function calendarTimeZone(market, source = null) {
+  const id = typeof source === 'string' ? source : source?.id || source?.catalogId || '';
+  return market === 'GLOBAL' && ANIME_JP_KR_SOURCE.test(id)
+    ? 'Asia/Tokyo' : ZONES[market];
+}
+function localDay(market, clock = new Date(), source = null) {
   if (process.env.NUVIO_CHECK_DATE) return process.env.NUVIO_CHECK_DATE;
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: ZONES[market], year:'numeric', month:'2-digit', day:'2-digit'
+    timeZone: calendarTimeZone(market, source), year:'numeric', month:'2-digit', day:'2-digit'
   }).formatToParts(clock);
   const get = k => parts.find(p => p.type === k)?.value;
   return `${get('year')}-${get('month')}-${get('day')}`;
@@ -61,7 +69,7 @@ function allPlatformDaySources(collections, region) {
       ...source, period, id: source.id.replace(/-today$/, '-'+period)
     })));
 }
-function releasedDayForMarket(released, market) {
+function releasedDayForMarket(released, market, source = null) {
   const value = String(released || '');
   // Pure civil dates have no time zone; genuine instants must be converted
   // to the viewer's market before comparing with Today/Yesterday folders.
@@ -70,13 +78,13 @@ function releasedDayForMarket(released, market) {
   const instant = new Date(value);
   if (!Number.isFinite(+instant)) return null;
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: ZONES[market], year:'numeric', month:'2-digit', day:'2-digit'
+    timeZone: calendarTimeZone(market, source), year:'numeric', month:'2-digit', day:'2-digit'
   }).formatToParts(instant);
   const get = name => parts.find(part => part.type === name)?.value;
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
-function invalidCalendarDates(metas, expectedDate, market='FR') {
-  return (metas || []).filter(meta => releasedDayForMarket(meta?.released, market) !== expectedDate)
+function invalidCalendarDates(metas, expectedDate, market='FR', source = null) {
+  return (metas || []).filter(meta => releasedDayForMarket(meta?.released, market, source) !== expectedDate)
     .map(meta => ({ id: meta?.id, name: meta?.name, released: meta?.released || null }));
 }
 
@@ -226,8 +234,11 @@ async function checkMovieFolders(region) {
         const duplicates=duplicateCatalogCards(data.metas);
         if (duplicates.length) throw Error('Duplicate catalog cards: '+JSON.stringify(duplicates.slice(0, 5)));
         if (data.metas.some(m=>m.type!==source.type || !m.id || !m.name)) throw Error('Malformed catalog card');
-        const expected = source.period === 'today' ? localDay(region) : previousDay(localDay(region));
-        const invalid = invalidCalendarDates(data.metas, expected, region);
+        // Compare with the same calendar as the catalog itself: anime-asia
+        // rolls at Tokyo midnight, not at UTC midnight like Global VOD.
+        const sourceToday = localDay(region, new Date(), source);
+        const expected = source.period === 'today' ? sourceToday : previousDay(sourceToday);
+        const invalid = invalidCalendarDates(data.metas, expected, region, source);
         if (invalid.length) throw Error('Incorrect daily release dates: '+JSON.stringify(invalid.slice(0,5)));
         observations.push({status:'healthy',market:region,provider:source.provider,
           period:source.period,catalog:source.id,count:data.metas.length});
@@ -235,7 +246,7 @@ async function checkMovieFolders(region) {
     }));
   }
 }
-export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, releasedDayForMarket, duplicateCatalogCards, localDay, previousDay };
+export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, releasedDayForMarket, duplicateCatalogCards, localDay, previousDay, calendarTimeZone };
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   if (FULL_SCAN) for (const region of Object.keys(REGION)) await checkMovieFolders(region);
   for (const p of RECORDS) { await verifyRecord(p); await verifyLivePremiere(p); await verifyWorldPremiere(p); }
