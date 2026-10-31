@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, duplicateCatalogCards } from '../scripts/check-premiere-coverage.mjs';
+import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, releasedDayForMarket, duplicateCatalogCards } from '../scripts/check-premiere-coverage.mjs';
 const require = createRequire(import.meta.url);
 const { RECORDS, verifiedForCatalog, retainVerifiedMetas, verifiedMeta } = require('../runtime/verified-streaming-premieres.cjs');
+const { sortAndDedupeMetas } = require('../regions/fr/src/calendar.js');
 
 test('provenance registry routes any provider to its own market and archive folder', () => {
   const p=RECORDS.find(entry=>entry.market==='FR');
@@ -78,4 +79,38 @@ test('episode-aware duplicate detection preserves distinct episodes but rejects 
   assert.deepEqual(duplicateCatalogCards([episode('S01E01'),episode('S01E01','2026-10-31')]), []);
   assert.equal(duplicateCatalogCards([{type:'movie',id:'tt500',released:'2026-10-10'},
     {type:'movie',id:'tt500',released:'2026-10-30'}]).length, 1);
+});
+
+test('series duplicates from different source keys collapse by episode and date', () => {
+  const card = (episode, src, released='2026-10-30') => ({
+    type:'series', id:'tt32625029', name:'Example series',
+    released, releaseInfo: episode+' • Date de diffusion',
+    _dedupeKey:src, _eventInstantMs: Date.parse(released+'T10:00:00Z')
+  });
+  const cards = sortAndDedupeMetas([
+    card('S02E01','tmdb:season:2:episode:1'),
+    card('S02E01','tvmaze:another-source'),
+    card('S02E02','tmdb:season:2:episode:2'),
+    card('S02E01','tmdb:season:2:episode:1','2026-10-31')
+  ]);
+  assert.equal(cards.length,3);
+  assert.deepEqual(cards.map(x=>x.releaseInfo.slice(0,6)).sort(),
+    ['S02E01','S02E01','S02E02']);
+  const films = sortAndDedupeMetas([
+    {type:'movie',id:'ttfilm',_dedupeKey:'film:a',released:'2026-10-30'},
+    {type:'movie',id:'ttfilm',_dedupeKey:'film:b',released:'2026-10-30'}
+  ]);
+  assert.equal(films.length,2, 'movie event dedupe rules stay unchanged');
+});
+
+test('calendar audit honors the Turkey midnight UTC boundary', () => {
+  assert.equal(releasedDayForMarket('2026-10-30T21:00:00.000Z','TR'),'2026-10-31');
+  assert.deepEqual(invalidCalendarDates([
+    {id:'dsmart:891961',released:'2026-10-30T21:00:00.000Z'}
+  ],'2026-10-31','TR'), []);
+  assert.equal(releasedDayForMarket('2026-10-30','FR'),'2026-10-30');
+  assert.equal(releasedDayForMarket('invalid','FR'),null);
+  assert.deepEqual(invalidCalendarDates([
+    {id:'dsmart:891961',released:'2026-10-30T21:00:00.000Z'}
+  ],'2026-10-31','FR').map(x=>x.id), ['dsmart:891961']);
 });
