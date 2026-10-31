@@ -152,7 +152,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
 // are presented in 24-source-or-smaller folders so Nuvio doesn't fire 120+
 // network requests at once when opening a single genre. This is necessary
 // because stock NuvioTV's FolderDetailViewModel loads EVERY source eagerly.
-const FAST_LIVE_MONTHS = 18;
+const FAST_LIVE_MONTHS = 12;
 const FAST_MAX_SOURCES_PER_FOLDER = 24;
 function sourcePeriod(source) {
   return parseCatalog(source?.catalogId)?.period || '';
