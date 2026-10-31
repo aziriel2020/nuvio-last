@@ -33,9 +33,9 @@ const RECORDS = Object.freeze([
     market: 'FR', type: 'movie', providerSlug: 'prime-video',
     providerLabel: 'Prime Video', tmdbId: 1507696, imdbId: 'tt37522541',
     title: 'Apocalypse Z : Nouveau Monde',
-    // Sitges' official 2026 announcement dates the first festival screening to 10 October.
-    worldPremiereDate: '2026-10-10',
-    worldPremiereSource: 'https://sitgesfilmfestival.com/es/noticies/kevin-bacon-kyra-sedgwick-meiko-kaji-adrienne-barbeau-nuevos-premios-sitges-2026',
+    // First public Sitges screening: 9 October 23:00 (Tramuntana); the gala with cast was 10 October.
+    worldPremiereDate: '2026-10-09',
+    worldPremiereSource: 'https://embed.letterboxd.com/film/apocalypse-z-new-world/releases/',
     originalTitle: 'Apocalipsis Z: Nuevo mundo',
     platformDate: '2026-10-30',
     overview: 'Aux Canaries, une équipe part chercher des provisions sur le continent, au milieu des infectés.',
