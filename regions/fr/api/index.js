@@ -5404,6 +5404,8 @@ async function buildCatalog(options) {
 }
 
 function catalogResponseCacheControl(catalog, window) {
+  // Civil-day folders must never be reused across midnight by clients or proxies.
+  if (['today', 'yesterday', 'tomorrow'].includes(catalog.period)) return 'no-store';
   if (window.empty) return EMPTY_CATALOG_CACHE;
   if (catalog.source === 'torrentio-theatrical' || String(catalog.source || '').startsWith('editorial-')) return DYNAMIC_CATALOG_CACHE;
   const currentMonth = catalog.period === `archive-${window.today.slice(0, 7)}`;
