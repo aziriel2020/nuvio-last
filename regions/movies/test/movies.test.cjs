@@ -54,16 +54,16 @@ test('official Prime debut belongs to its real world premiere month despite a de
     'watch/providers': { results: {} },
     release_dates: regional([4, '2026-10-30'])
   });
-  // Sitges first screening and Prime arrival are different proven events.
-  assert.equal(movie.firstAirDate, '2026-10-10');
+  // First Sitges public screening: Friday 9 October; Saturday 10 was the gala.
+  assert.equal(movie.firstAirDate, '2026-10-09');
   s.upsert(movie);
   const halloween = new Date('2026-10-31T12:00:00Z');
   const options = { period: '2026-10', now: halloween, curated: true };
   const worldwide = s.query({ ...options, view: 'all' });
   const streaming = s.query({ ...options, view: 'streaming' });
   assert.deepEqual(worldwide.map(m => m.name), ['Apocalypse Z : Nouveau Monde']);
-  assert.equal(worldwide[0].originalReleaseDate, '2026-10-10');
-  assert.equal(worldwide[0].released.slice(0,10), '2026-10-10');
+  assert.equal(worldwide[0].originalReleaseDate, '2026-10-09');
+  assert.equal(worldwide[0].released.slice(0,10), '2026-10-09');
   assert.deepEqual(streaming[0].providersByKind.streaming, ['Prime Video']);
   assert.match(worldwide[0].description, /2026-10-30/);
   assert.equal(s.query({ ...options, period: 'today', view: 'all' }).length, 0);
