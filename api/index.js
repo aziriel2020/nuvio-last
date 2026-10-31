@@ -102,20 +102,21 @@ async function collectionsOnlyAddon(req, res, region, handler, pathname) {
 // Both clients (HomeCatalogDefinitions.kt) create Home rows for every
 // manifest catalog with no required extras, ignoring showInHome=false.
 // Their collection resolver, however, requires the catalog to be declared.
-// A required "genre" extra is the only required extra their collection
-// editor permits. It keeps collection IDs registered, suppresses automatic
-// Home row loads, and allows existing collections to keep requesting their
-// canonical catalog IDs without a genre (our regional handlers allow this).
+// A required "genre" extra with no options is the only required extra their
+// collection editor permits and both SearchRepository implementations exclude
+// from Discover. It keeps collection IDs registered but suppresses Home,
+// Search and Discover loads; existing folders keep requesting canonical IDs
+// without genre (all regional handlers accept this).
 // Do not enable globally until Nuvio UI behavior is validated on devices.
 function mobileDesktopCollectionManifest(manifest) {
   return {
     ...manifest,
     catalogs: manifest.catalogs.map((catalog) => {
       const originalExtra = Array.isArray(catalog.extra) ? catalog.extra : [];
-      const originalGenre = originalExtra.find((extra) => extra.name === 'genre');
-      const requiredGenre = originalGenre
-        ? { ...originalGenre, isRequired: true }
-        : { name: 'genre', isRequired: true };
+      // SearchRepository.kt#supportsDiscover excludes required genre
+      // descriptors with no options; #supportsSearch excludes required
+      // non-search extras. CollectionCatalogResolver still finds the ID.
+      const requiredGenre = { name: 'genre', isRequired: true, options: [] };
       const extra = [
         requiredGenre,
         ...originalExtra.filter((extra) => extra.name !== 'genre' && extra.name !== 'search')
