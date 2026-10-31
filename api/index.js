@@ -523,7 +523,7 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 200, moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), 'no-store');
   }
   // Opt-in Android TV install endpoints (no changes to existing addon URLs).
-  const collectionsOnlyRoute = path.match(/^\\/(fr|us|tr|global|movies|series(?:-v2)?)\\/collections-only(?:\\/|$)/);
+  const collectionsOnlyRoute = path.match(new RegExp('^/(fr|us|tr|global|movies|series(?:-v2)?)/collections-only(?:/|$)'));
   if (collectionsOnlyRoute) {
     const region = collectionsOnlyRoute[1];
     return collectionsOnlyAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
