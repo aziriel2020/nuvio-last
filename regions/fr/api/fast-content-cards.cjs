@@ -1,11 +1,15 @@
 'use strict';
 
-const REVISION = 'fast-artwork-v2';
+const REVISION = 'fast-artwork-v3';
 function fastContentCards(origin, meta, decorated) {
   const old = decorated.background || decorated.landscapePoster;
   const wide = old?.includes('/calendar-card.svg?') ? new URL(old) : new URL(`${origin}/calendar-card.jpg`);
   wide.pathname = wide.pathname.replace(/calendar-card\.svg$/, 'calendar-card.jpg');
   wide.searchParams.set('layout', 'landscape');
+  // Films Monde native rows only need a responsive 16:9 poster, not a 960px
+  // card generated for the large home carousel. The distinct profile is
+  // intentionally opt-in; other FR/US/TV calendar cards remain unchanged.
+  wide.searchParams.set('world', '1');
   wide.searchParams.set('v', REVISION);
   if (!wide.searchParams.has('title')) wide.searchParams.set('title', meta.name || '');
   if (!wide.searchParams.has('type')) wide.searchParams.set('type', meta.type || 'series');
