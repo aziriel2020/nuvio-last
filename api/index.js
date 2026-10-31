@@ -69,18 +69,35 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
-// Nuvio TV resolves collection sources by addonId/type/catalogId even when the
-// catalog is not advertised in the addon manifest. Keep canonical manifests
-// unchanged for Mobile/Desktop, where unlisted source support differs.
-// This opt-in manifest prevents internal calendar catalogs from flooding Home
-// and Discovery, while retaining their direct /catalog endpoints.
+// TV can resolve collection catalogs even if the manifest advertises none.
+// Desktop/Mobile currently resolve collection sources against manifest catalogs,
+// so they need a separate profile rather than the TV catalogs: [] variant.
 const COLLECTIONS_ONLY_HANDLERS = Object.freeze({
   fr: frHandler, us: usHandler, tr: trHandler, global: globalHandler,
   movies: moviesHandler, series: seriesHandler, 'series-v2': seriesHandler
 });
 
-async function collectionsOnlyAddon(req, res, region, handler, pathname) {
-  const prefix = `/${region}/collections-only`;
+// Nuvio Mobile/Desktop (CMP builds) rules verified against upstream:
+//   HomeCatalogDefinitions: rejects any required extra.
+//   SearchRepository supportsSearch: rejects required non-search extras.
+//   SearchRepository supportsDiscover: rejects required genre without options.
+//   CollectionRepository: still accepts catalogs whose only required extra is genre.
+//   CollectionCatalogResolver: matches addonId/type/catalogId from the manifest.
+// The server continues serving these catalogs with or without a genre query;
+// the required genre marker is only a client-side display exclusion.
+function mobileDesktopCollectionOnlyCatalog(catalog) {
+  return {
+    ...catalog,
+    showInHome: false,
+    extra: [
+      ...(Array.isArray(catalog.extra) ? catalog.extra : []).filter((item) => item.name !== 'genre'),
+      { name: 'genre', isRequired: true, options: [] }
+    ]
+  };
+}
+
+async function collectionsOnlyAddon(req, res, region, handler, pathname, profile) {
+  const prefix = `/${region}/${profile}`;
   if (pathname === `${prefix}/manifest.json`) {
     const canonicalOrigin = `${originFromRequest(req)}/${region}`;
     const now = handler._internals.runtimeNow?.() || new Date();
@@ -88,61 +105,13 @@ async function collectionsOnlyAddon(req, res, region, handler, pathname) {
     const manifest = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
     return sendJson(res, 200, {
       ...manifest,
-      // Source catalog URLs still work: they are simply absent from Home/Discover.
-      catalogs: []
+      catalogs: profile === 'collections-only'
+        ? []
+        : manifest.catalogs.map(mobileDesktopCollectionOnlyCatalog)
     }, 'no-store');
   }
-  // Installed addon base URL is /REGION/collections-only; Nuvio therefore
-  // sends collection catalog and metadata requests under this same prefix.
-  // Delegate to the *same* handler and IDs used by the canonical addon.
-  return delegate(req, res, prefix, handler);
-}
-
-// Opt-in compatibility profile for Nuvio Mobile / Desktop.
-// Both clients (HomeCatalogDefinitions.kt) create Home rows for every
-// manifest catalog with no required extras, ignoring showInHome=false.
-// Their collection resolver, however, requires the catalog to be declared.
-// A required "genre" extra with no options is the only required extra their
-// collection editor permits and both SearchRepository implementations exclude
-// from Discover. It keeps collection IDs registered but suppresses Home,
-// Search and Discover loads; existing folders keep requesting canonical IDs
-// without genre (all regional handlers accept this).
-// Do not enable globally until Nuvio UI behavior is validated on devices.
-function mobileDesktopCollectionManifest(manifest) {
-  return {
-    ...manifest,
-    catalogs: manifest.catalogs.map((catalog) => {
-      const originalExtra = Array.isArray(catalog.extra) ? catalog.extra : [];
-      // SearchRepository.kt#supportsDiscover excludes required genre
-      // descriptors with no options; #supportsSearch excludes required
-      // non-search extras. CollectionCatalogResolver still finds the ID.
-      const requiredGenre = { name: 'genre', isRequired: true, options: [] };
-      const extra = [
-        requiredGenre,
-        ...originalExtra.filter((extra) => extra.name !== 'genre' && extra.name !== 'search')
-      ];
-      return {
-        ...catalog,
-        showInHome: false,
-        extra,
-        extraSupported: [...new Set([
-          ...(Array.isArray(catalog.extraSupported) ? catalog.extraSupported : []),
-          'genre'
-        ])].filter((name) => name !== 'search')
-      };
-    })
-  };
-}
-
-async function mobileDesktopCollectionsAddon(req, res, region, handler, pathname) {
-  const prefix = `/${region}/mobile-desktop-collections`;
-  if (pathname === `${prefix}/manifest.json`) {
-    const canonicalOrigin = `${originFromRequest(req)}/${region}`;
-    const now = handler._internals.runtimeNow?.() || new Date();
-    const timeZone = handler._internals.requestTimeZone?.(req);
-    const manifest = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
-    return sendJson(res, 200, mobileDesktopCollectionManifest(manifest), 'no-store');
-  }
+  // Both opt-in addon base URLs preserve the same native catalog/meta routes
+  // and canonical addon IDs. Original manifests/imports stay unchanged.
   return delegate(req, res, prefix, handler);
 }
 
@@ -577,11 +546,12 @@ module.exports = async function handler(req, res) {
     const region = mobileDesktopRoute[1];
     return mobileDesktopCollectionsAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
   }
-  // Opt-in Android TV install endpoints (no changes to existing addon URLs).
-  const collectionsOnlyRoute = path.match(new RegExp('^/(fr|us|tr|global|movies|series(?:-v2)?)/collections-only(?:/|$)'));
+  // Opt-in per-client manifests: TV and Mobile/Desktop have different catalog resolution rules.
+  const collectionsOnlyRoute = path.match(/^\/(fr|us|tr|global|movies|series(?:-v2)?)\/(collections-only-mobile-desktop|collections-only)(?:\/|$)/);
   if (collectionsOnlyRoute) {
     const region = collectionsOnlyRoute[1];
-    return collectionsOnlyAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
+    const profile = collectionsOnlyRoute[2];
+    return collectionsOnlyAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path, profile);
   }
   if (path === '/movies' || path.startsWith('/movies/')) return delegate(req, res, '/movies', moviesHandler);
   if (path === '/series-v2' || path.startsWith('/series-v2/')) return delegate(req, res, '/series-v2', seriesHandler);
