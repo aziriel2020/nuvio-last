@@ -159,6 +159,38 @@ test('streaming, rental/purchase and cinema are independently gated by French ev
   assert.equal(s.query({ now: NOW }).length, 3); assert.equal(s.visible('tmdb:4'), false);
 });
 
+test('all sourced new French digital movie dates roll into Hier without a hardcoded premiere entry', (t) => {
+  const s = memory(t);
+  const newId = 1700101, archiveId = 1700102;
+  s.upsert(record(newId, {
+    title: 'Nouvelle production numérique',
+    release_date: '2026-10-09',
+    release_dates: regional([3, '2026-10-09'], [4, '2026-10-30'])
+  }));
+  s.upsert(record(archiveId, {
+    title: 'Film ancien restauré',
+    release_date: '1975-04-01',
+    release_dates: regional([4, '2026-10-30'])
+  }));
+  const now = new Date('2026-10-31T12:00:00Z');
+  const query = {view:'streaming',period:'yesterday',now,curated:true};
+  const yesterday = s.query(query);
+  assert.deepEqual(yesterday.map(m => m.name), ['Nouvelle production numérique']);
+  assert.equal(yesterday[0].released.slice(0,10),'2026-10-30');
+  assert.equal(yesterday[0].originalReleaseDate,'2026-10-09');
+  assert.match(yesterday[0].description, /Sortie numérique France : 2026-10-30/);
+  assert.equal(s.query({...query,period:'today'}).length,0);
+  assert.equal(s.query({...query,period:'2026-10'}).length,1);
+  const cinema = s.query({view:'cinema',now,curated:true});
+  assert.equal(cinema.find(m=>m.name==='Nouvelle production numérique').released.slice(0,10),'2026-10-09');
+  const old = s.meta(s.row(`tmdb:${archiveId}`));
+  assert.equal(old.originalReleaseDate,'1975-04-01');
+  assert.equal(old.released.slice(0,10),'1975-04-01');
+  // These dates remain attached to individual works, so a genuine remake
+  // using a distinct TMDB movie ID is not merged into the 1975 film.
+  assert.notEqual(s.row(`tmdb:${newId}`).id,s.row(`tmdb:${archiveId}`).id);
+});
+
 test('all free/ad-supported/subscription and transactional offer types are indexed', (t) => {
   const s = memory(t);
   for (const [index, kind] of ['flatrate', 'free', 'ads', 'rent', 'buy'].entries()) s.upsert(record(index + 1, { 'watch/providers': FR(kind) }));
