@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const { RECORDS } = require('../runtime/verified-streaming-premieres.cjs');
+const { displayDateForPremiere } = require('../regions/movies/src/model.cjs');
 const PREFIX = { FR:'archives-fr-v1', US:'archives-v3', TR:'archives-tr-v1', GLOBAL:'archives-global-v1' };
 const REGION = { FR:'fr', US:'us', TR:'tr', GLOBAL:'global' };
 const ORIGIN = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip.io').origin;
@@ -115,26 +116,49 @@ async function verifyLivePremiere(p) {
 }
 async function verifyWorldPremiere(p) {
   if (p.market !== 'FR' || !p.worldPremiereDate || p.platformDate > localDay(p.market)) return;
+  const displayDate = displayDateForPremiere(p);
+  const current = localDay(p.market);
+  const yesterday = previousDay(current);
   for (const view of ['all','streaming']) {
-    const path = `/movies/catalog/movie/movies-fr-${view}-all-${p.worldPremiereDate.slice(0,7)}.json`;
+    const path = `/movies/catalog/movie/movies-fr-${view}-all-${displayDate.slice(0,7)}.json`;
     try {
       const data = await getJson(path);
       if (!Array.isArray(data?.metas)) throw Error('metas[] missing');
       const meta = data.metas.find(m => m.type === 'movie' &&
         (m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`));
       if (!meta) throw Error(`MISSING ${p.title} in first page of Films Monde ${view}`);
-      if (String(meta.released || '').slice(0,10) !== p.worldPremiereDate)
-        throw Error(`WRONG WORLD DATE ${meta.released}, expected ${p.worldPremiereDate}`);
-      observations.push({status:'verified',market:'WORLD',view,title:p.title,worldDate:p.worldPremiereDate});
+      if (String(meta.released || '').slice(0,10) !== displayDate)
+        throw Error(`WRONG DISPLAY DATE ${meta.released}, expected ${displayDate}`);
+      if (meta.originalReleaseDate !== p.worldPremiereDate)
+        throw Error(`WRONG ORIGINAL DATE ${meta.originalReleaseDate}, expected ${p.worldPremiereDate}`);
+      observations.push({status:'verified',market:'WORLD',view,title:p.title,displayDate,originalDate:p.worldPremiereDate});
     } catch(error) { failures.push({status:'missing',market:'WORLD',view,title:p.title,error:error.message}); }
+  }
+  // Daily collections must roll over automatically; the archive remains.
+  for (const period of ['today','yesterday']) {
+    const expected = period === 'today' ? current : yesterday;
+    const path = `/movies/catalog/movie/movies-fr-all-all-${period}.json`;
+    try {
+      const data = await getJson(path);
+      if (!Array.isArray(data?.metas)) throw Error('metas[] missing');
+      const found = data.metas.find(m => m.type === 'movie' &&
+        (m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`));
+      if (Boolean(found) !== (displayDate === expected))
+        throw Error(`${period} expected ${displayDate === expected ? 'present' : 'absent'}, got ${Boolean(found)}`);
+      if (found && String(found.released || '').slice(0,10) !== displayDate)
+        throw Error(`${period} wrong date ${found.released}`);
+      observations.push({status:'verified',market:'WORLD',period,title:p.title,visible:Boolean(found)});
+    } catch(error) { failures.push({status:'missing',market:'WORLD',period,title:p.title,error:error.message}); }
   }
   // The film must resolve when the user opens its detail card.
   const path = `/movies/meta/movie/${encodeURIComponent(p.imdbId || `tmdb:movie:${p.tmdbId}`)}.json`;
   try {
     const data = await getJson(path);
-    if (String(data?.meta?.released || '').slice(0,10) !== p.worldPremiereDate)
-      throw Error(`Original-release metadata missing or wrong: ${data?.meta?.released}`);
-    observations.push({status:'verified',market:'WORLD',view:'meta',title:p.title,worldDate:p.worldPremiereDate});
+    if (String(data?.meta?.released || '').slice(0,10) !== displayDate)
+      throw Error(`Display-release metadata missing or wrong: ${data?.meta?.released}`);
+    if (data?.meta?.originalReleaseDate !== p.worldPremiereDate)
+      throw Error(`Original-release provenance wrong: ${data?.meta?.originalReleaseDate}`);
+    observations.push({status:'verified',market:'WORLD',view:'meta',title:p.title,displayDate,originalDate:p.worldPremiereDate});
   } catch(error) { failures.push({status:'missing',market:'WORLD',view:'meta',title:p.title,error:error.message}); }
 }
 async function verifyRecord(p) {
