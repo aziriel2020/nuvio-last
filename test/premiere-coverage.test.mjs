@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, duplicateCatalogCards } from '../scripts/check-premiere-coverage.mjs';
+import { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, allPlatformDaySources, invalidCalendarDates, duplicateCatalogCards } from '../scripts/check-premiere-coverage.mjs';
 const require = createRequire(import.meta.url);
 const { RECORDS, verifiedForCatalog, retainVerifiedMetas, verifiedMeta } = require('../runtime/verified-streaming-premieres.cjs');
 
@@ -38,6 +38,28 @@ test('platform scan covers every dated movie platform folder and ignores editori
     'archives-fr-v1-movie-netflix-today','archives-fr-v1-movie-prime-video-today'
   ]);
 });
+test('platform coverage tests today and yesterday for every movie and series source',()=>{
+  const collections = [{
+    title: 'Prime Video', folders:[{sources:[
+      {type:'movie',catalogId:'archives-fr-v1-movie-prime-video-today'},
+      {type:'series',catalogId:'archives-fr-v1-series-prime-video-today'}
+    ]}]
+  }];
+  const ids=allPlatformDaySources(collections,'FR').map(source=>source.id);
+  assert.deepEqual(ids,[
+    'archives-fr-v1-movie-prime-video-today',
+    'archives-fr-v1-movie-prime-video-yesterday',
+    'archives-fr-v1-series-prime-video-today',
+    'archives-fr-v1-series-prime-video-yesterday'
+  ]);
+  assert.deepEqual(invalidCalendarDates([
+    {id:'tt1',released:'2026-10-30T00:00:00Z'},
+    {id:'tt2',released:'2026-10-29T00:00:00Z'},
+    {id:'tt3',released:null}
+  ],'2026-10-30').map(x=>x.id),['tt2','tt3']);
+  assert.deepEqual(invalidCalendarDates([{id:'tt1',released:'2026-10-30'}],'2026-10-30'),[]);
+});
+
 test('verified premieres survive maxItems cap without dupes or changing historical order',()=>{
   const raw=[{id:'a',_dedupeKey:'movie:1',released:'2026-10-01'},
     {id:'b',_dedupeKey:'movie:2',released:'2026-10-05'},
