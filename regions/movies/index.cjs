@@ -22,6 +22,7 @@ function officialWorldMeta(p, row = null) {
     id: p.imdbId || `tmdb:movie:${p.tmdbId}`,
     type: 'movie', name: p.title, poster: row?.poster || undefined,
     background: row?.background || row?.poster || undefined, posterShape: 'poster',
+    logo: row?.logo || undefined,
     movieContentKind: 'fiction', movieReleaseKind: 'original', originalReleaseDate: p.worldPremiereDate || date,
     released: `${date}T00:00:00.000Z`, releaseInfo: date.slice(0,4), imdb_id: p.imdbId,
     streamingProviders: [p.providerLabel], providersByKind: { streaming: [p.providerLabel], vod: [] },
