@@ -114,3 +114,18 @@ test('calendar audit honors the Turkey midnight UTC boundary', () => {
     {id:'dsmart:891961',released:'2026-10-30T21:00:00.000Z'}
   ],'2026-10-31','FR').map(x=>x.id), ['dsmart:891961']);
 });
+
+test('all four regional catalogs dedupe one episode but preserve different episodes',()=>{
+  for (const market of ['fr','us','tr','global']) {
+    const {sortAndDedupeMetas} = require(`../regions/${market}/src/calendar.js`);
+    const mk=(ep,source)=>({
+      type:'series',id:'tt32625029',released:'2026-10-30',
+      releaseInfo:ep+' • Friday',_dedupeKey:source
+    });
+    const cards=sortAndDedupeMetas([
+      mk('S02E01','tmdb'),mk('S02E01','tvmaze'),mk('S02E02','tmdb')
+    ]);
+    assert.equal(cards.length,2,market);
+    assert.deepEqual(cards.map(c=>c.releaseInfo.slice(0,6)).sort(),['S02E01','S02E02'],market);
+  }
+});
