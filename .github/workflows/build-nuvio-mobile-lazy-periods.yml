@@ -1,0 +1,106 @@
+name: Build Nuvio Mobile Lazy Periods Test APK
+
+on:
+  push:
+    branches:
+      - feature/mobile-period-tabs-20261031
+    paths:
+      - 'builder/apply_nuvio_mobile_lazy_periods.py'
+      - '.github/workflows/build-nuvio-mobile-lazy-periods.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Compile isolated Nuvio Mobile fullDebug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Nuvio calendar patch
+        uses: actions/checkout@v4
+
+      - name: Fetch upstream Nuvio Mobile exact source revision
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/NuvioMedia/NuvioMobile.git NuvioMobile
+          git -C NuvioMobile checkout --detach 38295004e4d4002f5520fe4120230253b64af63d
+          git -C NuvioMobile rev-parse HEAD
+          git -C NuvioMobile lfs pull || true
+
+      - name: Apply selective lazy period patch
+        run: |
+          python3 builder/apply_nuvio_mobile_lazy_periods.py NuvioMobile
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("NuvioMobile/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt").read_text()
+          for marker in ("isNuvioPeriodFolder", "hasLoaded", "FolderViewMode.TABBED_GRID",
+                         "return@forEachIndexed", "loadTabPage(index, reset = true)"):
+              assert marker in s, marker
+          print("Lazy loading patch source contracts OK.")
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Ubuntu GitHub runners already include Android SDK and accepted licenses.
+      # A redundant setup-android action is avoided here because it failed
+      # before the compilation stage on the first beta build.
+      - name: Verify Android SDK on runner
+        shell: bash
+        run: |
+          test -d "${ANDROID_HOME}"
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          ls "${ANDROID_HOME}/platforms" | tail -n 5
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve public Nuvio runtime discovery
+        shell: bash
+        working-directory: NuvioMobile
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          req=Request("https://api.nuvio.tv/.well-known/nuvio",headers={"User-Agent":"Nuvio-Mobile-Lazy-Periods-Test"})
+          with urlopen(req,timeout=20) as response:
+              data=json.load(response)
+          backend=str(data.get("backend_url","")).strip().rstrip("/")
+          key=str(data.get("publishable_key","")).strip()
+          if str(data.get("service","")).lower()!="nuvio" or backend!="https://api.nuvio.tv" or not key:
+              raise SystemExit("Official Nuvio public runtime discovery failed")
+          Path("local.properties").write_text("\n".join([
+              f"NUVIO_SUPABASE_URL={backend}",
+              f"NUVIO_SUPABASE_ANON_KEY={key}",
+              "NUVIO_SUPABASE_FALLBACK_URL=",
+              "TRAKT_CLIENT_ID=",
+              "TRAKT_CLIENT_SECRET=",
+              "SENTRY_DSN=",
+              "",
+          ]), encoding="utf-8")
+          print("Official Nuvio public runtime configured.")
+          PY
+
+      - name: Compile mobile APK
+        working-directory: NuvioMobile
+        run: ./gradlew :androidApp:assembleFullDebug --no-daemon --stacktrace
+
+      - name: Verify separate package identity and debug artifact
+        shell: bash
+        run: |
+          grep -F 'variant.applicationId.set("com.nuviodebug.com")' NuvioMobile/androidApp/build.gradle.kts
+          find NuvioMobile/androidApp/build/outputs/apk/full/debug -name '*.apk' -type f -print
+
+      - name: Upload installable test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-mobile-lazy-periods-full-debug
+          path: NuvioMobile/androidApp/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -317,6 +317,23 @@ function combinedCollections(req) {
   return combinedRawCollections(req).map(shieldizeCollectionArt);
 }
 
+function mobileizeCollectionArt(collection) {
+  const base = shieldizeCollectionArt(collection);
+  return {
+    ...base,
+    // Mobile FOLLOW_LAYOUT renders one poster row per period at the same time.
+    // A tabbed grid exposes the period names and paints posters for only the
+    // selected tab; source IDs, ordering and date range are unchanged.
+    viewMode: 'TABBED_GRID',
+    showAllTab: false,
+    folders: base.folders.map((folder) => ({ ...folder, hideTitle: false }))
+  };
+}
+
+function combinedMobileCollections(req) {
+  return combinedRawCollections(req).map(mobileizeCollectionArt);
+}
+
 async function cinemaAvailableKeys(req) {
   try {
     const now = frHandler._internals.runtimeNow();
@@ -507,6 +524,20 @@ module.exports = async function handler(req, res) {
   if (path === '/nuvio-collections-desktop.json') {
     return sendJson(res, 200, await combinedDesktopCollectionsLive(req), CINEMA_COLLECTION_CACHE);
   }
+  if (path === '/nuvio-collections-mobile.json') {
+    return sendJson(res, 200, combinedMobileCollections(req), CINEMA_COLLECTION_CACHE);
+  }
+  if (path === '/nuvio-collections-movies-mobile.json' ||
+      path === '/nuvio-collections-series-mobile.json' ||
+      path === '/nuvio-collections-series-v2-mobile.json') {
+    const origin = originFromRequest(req);
+    const movies = path.includes('movies');
+    const seriesRoute = path.includes('series-v2') ? 'series-v2' : 'series';
+    const collections = movies
+      ? moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), 'shield')
+      : seriesHandler._internals.buildCollections(`${origin}/${seriesRoute}`, new Date(), 'shield');
+    return sendJson(res, 200, collections.map(mobileizeCollectionArt), CINEMA_COLLECTION_CACHE);
+  }
   if (path === '/nuvio-collections-global.json') {
     const origin = originFromRequest(req);
     return sendJson(
@@ -599,6 +630,8 @@ module.exports._internals = {
   publicOriginFromRequest,
   combinedCollections,
   combinedRawCollections,
+  combinedMobileCollections,
+  mobileizeCollectionArt,
   combinedDesktopCollections,
   combinedRawCollectionsLive,
   combinedCollectionsLive,
