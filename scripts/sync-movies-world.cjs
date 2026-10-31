@@ -4,6 +4,8 @@
 const { MovieStore, defaultPath } = require('../regions/movies/src/store.cjs');
 const { fromTmdb, candidateRecord, isoDate, localDay, shiftDay, windowFor } = require('../regions/movies/src/model.cjs');
 const { providerDirectory } = require('../regions/series/src/france.cjs');
+const { RECORDS: VERIFIED_PREMIERES } = require('../runtime/verified-streaming-premieres.cjs');
+const VERIFIED_FR = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie');
 const { tmdb, pause, mapLimit } = require('../regions/series/src/upstream.cjs');
 const { splitDateTask } = require('./sync-series-world.cjs');
 const REFRESH = 6 * 3600000;
@@ -170,6 +172,15 @@ async function syncCycle(store, options = {}) {
       store.setFranceProviders(providerDirectory(await api('/watch/providers/movie', { watch_region: 'FR', language: 'fr-FR' })));
       store.state('providersAt', Date.now());
     } catch (error) { errors.push(`providers: ${error.message}`); }
+  }
+  // Officially announced releases must be fetched even if TMDB discover
+  // pagination / French watch-provider listings have not indexed them yet.
+  // Seed only once per evidence revision to avoid hammering TMDB on each cycle.
+  const verifiedRevision = VERIFIED_FR.map(p =>
+    [p.tmdbId, p.platformDate, p.worldPremiereDate || ''].join(':')).join('|');
+  if (store.state('verifiedMovieSeedRevision') !== verifiedRevision) {
+    store.enqueue('movie-detail', VERIFIED_FR.map(p => p.tmdbId), 1, { refresh: true });
+    store.state('verifiedMovieSeedRevision', verifiedRevision);
   }
   // Give existing ambiguous formats a bounded refresh before discovery work.
   await runDetailJobs(store, { ...options, api });
