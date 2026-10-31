@@ -1,0 +1,86 @@
+name: Build Nuvio TV Films Monde Logos Test APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'builder/apply_nuvio_tv_films_monde_logos.py'
+      - '.github/workflows/build-nuvio-tv-films-monde-logos.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android-tv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Films Monde patch
+        uses: actions/checkout@v4
+
+      - name: Fetch exact upstream NuvioTV revision
+        run: |
+          git clone --filter=blob:none https://github.com/NuvioMedia/NuvioTV.git NuvioTV
+          git -C NuvioTV checkout --detach fa194b008e331780d2391491879e4a0a343641ef
+          git -C NuvioTV lfs pull || true
+
+      - name: Patch an isolated debug APK, never the official Nuvio app
+        run: |
+          python3 builder/apply_nuvio_tv_films_monde_logos.py NuvioTV
+          python3 - <<'PY'
+          from pathlib import Path
+          card = Path("NuvioTV/app/src/main/java/com/nuvio/tv/ui/components/GridContentCard.kt").read_text()
+          gradle = Path("NuvioTV/app/build.gradle.kts").read_text()
+          for marker in ["isFilmsMondeNativeCard", "movieLogoFailed", "sourceAddonBaseUrl",
+                         "fillMaxWidth(0.76f)", "ContentScale.Fit"]:
+              assert marker in card, marker
+          assert 'applicationIdSuffix = ".filmsmonde.logos"' in gradle
+          print("Shield title-logo overlay and isolated package contracts OK.")
+          PY
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Check Android SDK
+        run: test -d "${ANDROID_HOME}"
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set public official Nuvio runtime configuration
+        working-directory: NuvioTV
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          req=Request("https://api.nuvio.tv/.well-known/nuvio",headers={"User-Agent":"NuvioTV-FilmsMonde-Logos"})
+          with urlopen(req,timeout=20) as r: data=json.load(r)
+          backend=str(data.get("backend_url","")).rstrip("/")
+          anon=str(data.get("publishable_key","")).strip()
+          if data.get("service")!="nuvio" or backend!="https://api.nuvio.tv" or not anon:
+              raise SystemExit("Unexpected official Nuvio runtime discovery")
+          Path("local.properties").write_text(
+              "NUVIO_SUPABASE_URL="+backend+"\nNUVIO_SUPABASE_ANON_KEY="+anon+"\n")
+          print("Official runtime configured (no account sign-in).")
+          PY
+
+      - name: Build Android TV APK
+        working-directory: NuvioTV
+        run: ./gradlew :app:assembleFullDebug --no-daemon --stacktrace
+
+      - name: Verify test APK exists
+        run: |
+          find NuvioTV/app/build/outputs/apk/full/debug -type f -name '*.apk' -print
+          test -n "$(find NuvioTV/app/build/outputs/apk/full/debug -name '*.apk' -type f -print -quit)"
+
+      - name: Upload opt-in Shield APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-tv-films-monde-native-logos-test-apk
+          path: NuvioTV/app/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

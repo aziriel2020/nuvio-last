@@ -3,6 +3,7 @@
 const { isoDate, unique, classify, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods } = require('../../series/src/model.cjs');
 const { offersInFrance } = require('../../series/src/france.cjs');
 const { contentKind } = require('./content-policy.cjs');
+const { selectMovieLogo } = require('./logos.cjs');
 const { RECORDS: VERIFIED_PREMIERES } = require('../../../runtime/verified-streaming-premieres.cjs');
 const ADDON_ID = 'com.nuvio.movies.france.world.v1';
 const VERSION = '1.0.3';
@@ -69,6 +70,9 @@ function fromTmdb(data) {
     description: data.overview || null, firstAirDate: verifiedWorldDate || originalDates[0] || null,
     poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
     background: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : null,
+    // Only detail responses with appended images may set/clear a logo.
+    // Discover previews must never erase a previously enriched title logo.
+    ...(Object.hasOwn(data, 'images') ? { logo: selectMovieLogo(data.images, data.original_language)?.url || null } : {}),
     movieContentKind: contentKind({ genres, title: data.title, originalTitle: data.original_title, description: data.overview, keywords, cast: data.credits?.cast, video: data.video }),
     genres, classification: classify({ genres, keywords }), countries: (data.production_countries || []).map((c) => c.iso_3166_1),
     languages: unique([data.original_language]), status: data.status || null, runtime: Number(data.runtime) || null,

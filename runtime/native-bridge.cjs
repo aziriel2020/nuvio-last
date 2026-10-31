@@ -57,7 +57,7 @@ function resolveNativeImage(value, role, origin) {
   return null;
 }
 
-function rewriteArtwork(meta, origin) {
+function rewriteArtwork(meta, origin, options = {}) {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return meta;
   const result = { ...meta };
   const poster = resolveNativeImage(meta.poster, 'poster', origin)
@@ -69,6 +69,17 @@ function rewriteArtwork(meta, origin) {
     || (poster && sizedImage(new URL(poster), 'background'));
   if (poster) result.poster = poster;
   if (background) result.background = background;
+  // Films Monde's catalog entries declare a 16:9 card shape. A portrait
+  // movie poster placed in that landscape slot causes a destructive crop.
+  // Prefer the direct TMDB landscape image for cards, keeping the original
+  // portrait as a Coil fallback and untouched on /meta detail requests.
+  if (options.landscapeCatalog && meta.type === 'movie' && meta.posterShape === 'landscape' && background) {
+    const wide = resolveNativeImage(meta.landscapePoster, 'landscapePoster', origin)
+      || resolveNativeImage(meta.background, 'landscapePoster', origin)
+      || background;
+    result.poster = wide;
+    if (poster && poster !== wide) result._rawPosterUrl = poster;
+  }
   if (meta.landscapePoster !== undefined) {
     const wide = resolveNativeImage(meta.landscapePoster, 'landscapePoster', origin)
       || background || poster;
@@ -88,10 +99,10 @@ function rewriteArtwork(meta, origin) {
   return result;
 }
 
-function nativeBridgePayload(payload, origin) {
+function nativeBridgePayload(payload, origin, options = {}) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
   if (Array.isArray(payload.metas)) {
-    return { ...payload, metas: payload.metas.map(meta => rewriteArtwork(meta, origin)) };
+    return { ...payload, metas: payload.metas.map(meta => rewriteArtwork(meta, origin, options)) };
   }
   if (payload.meta && typeof payload.meta === 'object') {
     return { ...payload, meta: rewriteArtwork(payload.meta, origin) };

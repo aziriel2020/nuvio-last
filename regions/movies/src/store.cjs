@@ -19,6 +19,10 @@ const parse = (value) => { try { return JSON.parse(value); } catch { return []; 
 class MovieStore extends SeriesStore {
   constructor(filename = defaultPath(), options = {}) {
     super(filename, options);
+    // Movie-only migration; the shared series database remains untouched.
+    if (!options.readonly && !this.db.prepare("PRAGMA table_info(shows)").all().some(col => col.name === 'logo')) {
+      this.db.exec('ALTER TABLE shows ADD COLUMN logo TEXT');
+    }
     this.db.function('nuvio_movie_content_kind', { deterministic: true }, (genres,title,originalTitle,description) =>
       content.contentKind({ genres: parse(genres), title, originalTitle, description }));
     if (!options.readonly) this.db.exec(`
@@ -46,6 +50,9 @@ class MovieStore extends SeriesStore {
   upsert(record) {
     return this.transaction(() => {
       const id = super.upsert(record);
+      if (Object.hasOwn(record, 'logo')) {
+        this.db.prepare('UPDATE shows SET logo=? WHERE id=?').run(record.logo, id);
+      }
       if (record.releasesComplete) this.db.prepare('DELETE FROM movie_releases WHERE show_id=?').run(id);
       for (const event of record.releases || []) this.addRelease(id, event.kind, event.date, event.proof);
       return id;
@@ -190,7 +197,8 @@ class MovieStore extends SeriesStore {
         : row.event_kind === 'digital' || datedFromFranceDigital ? 'Sortie numérique France' : 'Première sortie du film';
     return {
       id, type: 'movie', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
-      background: row.background || row.poster || undefined, streamingProviders: providers, providersByKind,
+      background: row.background || row.poster || undefined, logo: row.logo || undefined,
+      streamingProviders: providers, providersByKind,
       movieContentKind: row.content_kind || this.contentKind(row),
       movieReleaseKind: 'original', originalReleaseDate: official?.worldPremiereDate || row.first_air_date || null,
       description: [date ? `${dateLabel} : ${date}` : 'Date de sortie inconnue',

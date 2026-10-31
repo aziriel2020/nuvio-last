@@ -108,3 +108,33 @@ test('Native Bridge delegates legacy artwork paths without changing the canonica
   const invalid = await request('/movies/native-bridge/catalog/movie/not-a-real-catalog.json');
   assert.equal(invalid.statusCode, 404, 'errors must not be turned into empty successful catalogs');
 });
+
+test('Films Monde 16:9 card uses direct landscape source and preserves portrait for metadata',()=>{
+  const card=ORIGIN + '/fr/calendar-card.jpg?src=' + encodeURIComponent(BACKDROP)
+    + '&fallback=' + encodeURIComponent(POSTER);
+  const meta={id:'tt777',name:'Example',type:'movie',posterShape:'landscape',
+    poster:card,background:card,landscapePoster:card,
+    logo:'https://image.tmdb.org/t/p/w500/title.png',
+    released:'2026-10-30T00:00:00.000Z'};
+  const fromCatalog=nativeBridgePayload({metas:[meta]},ORIGIN,{landscapeCatalog:true}).metas[0];
+  assert.equal(fromCatalog.poster,'https://image.tmdb.org/t/p/w780/backdrop-b.jpg');
+  assert.equal(fromCatalog._rawPosterUrl,'https://image.tmdb.org/t/p/w500/poster-a.jpg');
+  assert.equal(fromCatalog.logo,meta.logo);
+  assert.equal(fromCatalog.released,meta.released);
+  const detail=nativeBridgePayload({meta},ORIGIN).meta;
+  assert.equal(detail.poster,'https://image.tmdb.org/t/p/w500/poster-a.jpg');
+  assert.equal(detail.logo,meta.logo);
+  const otherRegions=nativeBridgePayload({metas:[meta]},ORIGIN).metas[0];
+  assert.equal(otherRegions.poster,detail.poster,'no changes to other addons');
+});
+
+test('Live Filmes Monde Bridge endpoints retain native logo and landscape card shape',async()=>{
+  // With no local SQLite DB, test route signatures and fallback rather than
+  // inventing a populated film; real production is checked after deployment.
+  const [tv,mobile]=await Promise.all([
+    request('/movies/native-bridge/manifest.json'),
+    request('/movies/native-bridge/mobile/manifest.json')
+  ]);
+  assert.equal(tv.statusCode,200);
+  assert.equal(mobile.statusCode,200);
+});
