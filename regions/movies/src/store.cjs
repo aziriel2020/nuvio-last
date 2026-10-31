@@ -5,6 +5,14 @@ const { AVAILABILITY_TTL } = require('../../series/src/france.cjs');
 const { GENRES, VIEWS, catalogWindowFor } = require('./model.cjs');
 const content = require('./content-policy.cjs');
 const policy = require('../../series/src/catalog-policy.cjs');
+const { RECORDS: PREMIERES } = require('../../../runtime/verified-streaming-premieres.cjs');
+// Official positive evidence temporarily bridges delayed third-party FR provider indexes.
+const VERIFIED_FR = PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie');
+const VERIFIED_GRACE_MS = 45 * 24 * 3600000;
+const premiereActive = (p, now = Date.now()) => {
+  const launch = Date.parse(p.platformDate + 'T00:00:00Z');
+  return now >= launch && now < launch + VERIFIED_GRACE_MS;
+};
 const defaultPath = () => process.env.NUVIO_MOVIES_DB || '/var/lib/nuvio-movies/index.sqlite';
 const parse = (value) => { try { return JSON.parse(value); } catch { return []; } };
 
@@ -73,9 +81,16 @@ class MovieStore extends SeriesStore {
       WHERE src.source='tmdb' AND src.show_id=${alias}.id AND ml.kind='${kind}' AND ml.available=1 AND ml.checked_at>${Date.now() - AVAILABILITY_TTL})
       ${curated ? `AND ${policy.offerClause(kind === 'vod' ? 'vod' : 'streaming',alias)}` : ''}`;
   }
-  admissionClause(view = 'all', genre = 'all', curated = false, alias = 's') {
+  verifiedStreamingClause(alias = 's', now = new Date()) {
+    const ids = VERIFIED_FR.filter(p => premiereActive(p, +new Date(now))).map(p => p.tmdbId);
+    // This list contains only formally verified providers, never unproven discovery hits.
+    return ids.length ? `EXISTS (SELECT 1 FROM sources verified_src
+      WHERE verified_src.source='tmdb' AND verified_src.show_id=${alias}.id
+      AND CAST(verified_src.source_id AS INTEGER) IN (${ids.join(',')}))` : '0';
+  }
+  admissionClause(view = 'all', genre = 'all', curated = false, alias = 's', now = new Date()) {
     const specialist = ['99','standup'].includes(genre);
-    const streaming = `(${this.laneClause('streaming',alias,curated && !specialist)})`;
+    const streaming = `(${this.laneClause('streaming',alias,curated && !specialist)} OR ${curated ? this.verifiedStreamingClause(alias, now) : '0'})`;
     const vod = `(${this.laneClause('vod',alias,curated)})`;
     const cinema = `EXISTS (SELECT 1 FROM movie_releases r WHERE r.show_id=${alias}.id AND r.kind='cinema')`;
     const digital = `EXISTS (SELECT 1 FROM movie_releases r WHERE r.show_id=${alias}.id AND r.kind='digital')`;
@@ -100,7 +115,7 @@ class MovieStore extends SeriesStore {
     const window = catalogWindowFor(period, genre, now);
     if (!window) return [];
     if (curated && genre === 'unclassified') return [];
-    const where = ["s.classification='eligible'", this.admissionClause(view,genre,curated)];
+    const where = ["s.classification='eligible'", this.admissionClause(view,genre,curated,'s',now)];
     if (curated || genre === 'standup') where.push(content.clause(genre));
     if (curated && !['99','standup'].includes(genre)) where.push(`NOT ${policy.broadcastClause()}`);
     const args = [];
@@ -117,22 +132,23 @@ class MovieStore extends SeriesStore {
     else { where.push('(s.first_air_date<=? OR s.first_air_date IS NULL)'); args.push(window.end); }
     const rows = this.db.prepare(`SELECT s.*,${content.sqlKind()} AS content_kind,s.first_air_date AS event_date,'original' AS event_kind
       FROM shows s WHERE ${where.join(' AND ')} ORDER BY s.first_air_date DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
-    return rows.map((row) => this.meta(row, { curated, genre, view }));
+    return rows.map((row) => this.meta(row, { curated, genre, view, now }));
   }
   contentKind(row) {
     return this.db.prepare(`SELECT ${content.sqlKind()} AS kind FROM shows s WHERE s.id=?`).get(row.id)?.kind || 'review';
   }
-  meta(row, { curated = false, genre = 'all', view = 'all' } = {}) {
+  meta(row, { curated = false, genre = 'all', view = 'all', now = new Date() } = {}) {
     const source = this.sources(row.id).find((s) => s.source === 'tmdb');
     const imdb = source?.imdb_id;
+    const official = VERIFIED_FR.find(p => p.tmdbId === Number(source?.source_id) && premiereActive(p, +new Date(now)));
     const id = imdb || `tmdb:movie:${source?.source_id || row.id.split(':')[1]}`;
     const offers = this.franceOffers(row.id).filter((o) => (!curated || ['99','standup'].includes(genre)
       || (view !== 'vod' && policy.allowedOffer(o)) || (view !== 'streaming' && policy.allowedOffer(o,'vod')))
       && this.db.prepare(`SELECT 1 FROM movie_lanes WHERE tmdb_id=?
       AND kind=? AND available=1 AND checked_at>?`).get(o.tmdb_id, ['rent', 'buy'].includes(o.kind) ? 'vod' : 'streaming', Date.now() - AVAILABILITY_TTL));
-    const providers = [...new Set(offers.map((o) => o.name))];
+    const providers = [...new Set([...offers.map((o) => o.name), ...(official && view !== 'vod' ? [official.providerLabel] : [])])];
     const providersByKind = {
-      streaming: [...new Set(offers.filter((o) => ['flatrate', 'free', 'ads'].includes(o.kind)).map((o) => o.name))],
+      streaming: [...new Set([...offers.filter((o) => ['flatrate', 'free', 'ads'].includes(o.kind)).map((o) => o.name), ...(official ? [official.providerLabel] : [])])],
       vod: [...new Set(offers.filter((o) => ['rent', 'buy'].includes(o.kind)).map((o) => o.name))]
     };
     const date = row.event_date || row.first_air_date;
@@ -144,13 +160,17 @@ class MovieStore extends SeriesStore {
       movieContentKind: row.content_kind || this.contentKind(row),
       movieReleaseKind: 'original', originalReleaseDate: row.first_air_date || null,
       description: [date ? `${dateLabel} : ${date}` : 'Date de sortie inconnue',
-        providers.length ? `Offres France : ${providers.join(', ')}.` : 'Dates de sorties référencées ; disponibilité actuelle du film à vérifier.',
-        'Dates : TMDB · Disponibilités : JustWatch via TMDB. La date de sortie ne constitue pas une date d’arrivée sur chaque plateforme.',
+        providers.length ? `Plateformes / offres France confirmées : ${providers.join(', ')}.` : 'Dates de sorties référencées ; disponibilité actuelle du film à vérifier.',
+        'Dates : TMDB et preuves officielles de festival quand disponibles · Disponibilités : annonces officielles et JustWatch via TMDB. La date de sortie ne constitue pas une date d’arrivée sur chaque plateforme.',
+        ...(official ? [`Sortie ${official.providerLabel} France : ${official.platformDate} (annonce officielle, distincte de la première mondiale).`] : []),
         ...releases.slice(0, 8).map((r) => `${r.kind === 'cinema' ? 'Cinéma France' : 'Numérique France'} : ${r.date}`), row.description].filter(Boolean).join('\n\n'),
       genres: genre === 'standup' ? ['Stand-up'] : GENRES.filter((g) => parse(row.genres).includes(g.id)).map((g) => g.name),
       releaseInfo: row.first_air_date?.slice(0, 4) || 'Date inconnue', released: date ? `${date}T00:00:00.000Z` : undefined,
       imdb_id: imdb || undefined, links: [
         { name: 'TMDB', category: 'Sources', url: `https://www.themoviedb.org/movie/${source?.source_id}` },
+        ...(official ? [{ name: `Regarder sur ${official.providerLabel}`, category: 'Regarder', url: official.watchUrl },
+          { name: 'Sortie streaming vérifiée', category: 'Sources', url: official.officialSource },
+          ...(official.worldPremiereSource ? [{ name: 'Première mondiale vérifiée', category: 'Sources', url: official.worldPremiereSource }] : [])] : []),
         ...[...new Set(offers.map((o) => o.url).filter(Boolean))].map((url) => ({ name: 'France · JustWatch', category: 'Regarder', url }))
       ]
     };
