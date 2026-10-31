@@ -22,6 +22,18 @@ const VIEWS = Object.freeze([
   { id: 'cinema', name: 'Films Monde · Cinéma' }
 ]);
 
+// Display the actual new-release event in streaming calendars, while preserving
+// an older work's original date when a platform merely republishes it.
+// A verified first showing and platform launch within one year are the same
+// new production; a decades-old rerelease never becomes a 2026 film.
+function displayDateForPremiere(p) {
+  const first = isoDate(p?.worldPremiereDate);
+  const streaming = isoDate(p?.platformDate);
+  if (!first || !streaming) return first || streaming || null;
+  const days = (Date.parse(streaming + 'T00:00:00Z') - Date.parse(first + 'T00:00:00Z')) / 86400000;
+  return days >= 0 && days <= 366 ? streaming : first;
+}
+
 function fromTmdb(data) {
   if (!Number.isSafeInteger(data?.id) || data.id < 1) throw new Error('Invalid TMDB movie ID');
   const genres = unique((data.genres || []).map((g) => g.id));
@@ -70,4 +82,4 @@ function parseCatalog(id) {
   const m = String(id).match(/^movies-fr-(all|streaming|vod|cinema)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|\d{4}(?:-\d{2})?)$/);
   return m && GENRES.some((g) => g.id === m[2]) ? { view: m[1], genre: m[2], period: m[3] } : null;
 }
-module.exports = { ADDON_ID, VERSION, GENRES, VIEWS, fromTmdb, candidateRecord, catalogId, parseCatalog, isoDate, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods };
+module.exports = { ADDON_ID, VERSION, GENRES, VIEWS, fromTmdb, candidateRecord, displayDateForPremiere, catalogId, parseCatalog, isoDate, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods };
