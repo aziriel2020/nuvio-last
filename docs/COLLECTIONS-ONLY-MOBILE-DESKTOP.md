@@ -21,9 +21,15 @@ Vérifiée dans les sources publiques NuvioMedia/NuvioMobile (branche
 - `features/collection/CollectionRepository.kt` autorise les catalogues
   avec `genre` obligatoire dans l'éditeur des Collections ; les autres
   extras obligatoires y rendent les catalogues indisponibles.
+- `features/search/SearchRepository.kt` : un catalogue est exclu de
+  **Découverte** si `genre` est obligatoire et a **zéro option** ;
+  un catalogue est exclu de la recherche globale s'il ne possède aucun
+  extra `search`.
 
 Le manifeste de ce profil préserve donc **tous les catalogues d'origine**,
-mais déclare `genre` obligatoire, sans changer les ID ni les routes.
+mais déclare `genre` obligatoire **sans options** (`options: []`),
+sans changer les ID ni les routes. Cela retire les catalogues de Home,
+Recherche et Découverte selon les conditions vérifiées dans les clients.
 Les endpoints Nuvio Calendar eux-mêmes acceptent toujours les requêtes
 sans ce paramètre, comme les dossiers existants les émettent.
 Le profil retire aussi le support annoncé de `search` dans les catalogues
@@ -59,12 +65,10 @@ Le domaine public reste `https://141-145-215-202.nip.io`.
 5. Vérifier l'éditeur de Collections : l'app peut présenter la sélection de
    genre comme obligatoire alors qu'une source déjà importée sans genre
    continue d'être valide côté serveur.
-6. Vérifier le sélecteur Découverte/Recherche : il n'existe **aucun**
-   mécanisme connu dans ces clients pour masquer entièrement les catalogues
-   déclarés du sélecteur Découverte tout en les conservant dans leur
-   manifeste. Le profil supprime le support search annoncé pour les
-   catalogues internes, mais cela ne garantit pas leur absence dans le
-   sélecteur Découverte.
+6. Vérifier le sélecteur Découverte/Recherche : les catalogues internes
+   doivent être absents selon le code source actuel des clients
+   (`supportsDiscover()` et `supportsSearch()`). Tester réellement sur
+   Mobile et Desktop car une autre version du logiciel peut diverger.
 7. Après validation, répéter sur les autres régions. En cas de régression,
    réinstaller l'URL canonique `/REGION/manifest.json`.
 
@@ -80,8 +84,12 @@ inchangés. Tests de non-régression :
 
 ## Limite technique restante
 
-La suppression *complète* de catalogues déclarés de l'interface Découverte
-requiert une évolution côté application Nuvio Mobile/Desktop (séparer
-`enabled`, `showInHome` et `showInDiscover`, et accepter les IDs
-non déclarés dans les Collections). Ne pas revendiquer ce point comme
-corrigé côté addon uniquement.
+La solution exploite les filtres **actuels** des clients pour masquer les
+catalogues des trois écrans, sans supprimer les descripteurs requis par les
+Collections. Ce n'est **pas une option officielle** `showInDiscover`.
+Si Nuvio modifie `supportsDiscover`, `supportsSearch`, la liste des
+extras ou sa validation de catalogues dans une future version, le résultat
+peut changer. Les catalogues auront `genre` obligatoire sans options :
+l'éditeur peut afficher un champ Genre indisponible pour les nouveaux
+catalogues ; les dossiers importés existants restent accessibles.
+Ne pas généraliser sans tests sur appareils.
