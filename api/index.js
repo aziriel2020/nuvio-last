@@ -11,6 +11,7 @@ const trHandler = require('../regions/tr/api/index');
 const seriesHandler = require('../regions/series/index.cjs');
 const moviesHandler = require('../regions/movies/index.cjs');
 const { handleOriginalImage } = require('../regions/fr/api/original-images.cjs');
+const { nativeBridgePayload } = require('../runtime/native-bridge.cjs');
 const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
 const VERSION = '1.4.0';
@@ -169,6 +170,52 @@ async function mobileDesktopCollectionsAddon(req, res, region, handler, pathname
     return sendJson(res, 200, mobileDesktopCollectionManifest(manifest), 'no-store');
   }
   return delegate(req, res, prefix, handler);
+}
+
+// Native Bridge V1 is opt-in. It reuses the original addon ID and catalog
+// IDs, so existing Collections resolve without import or calendar changes.
+// /native-bridge/manifest.json is for Shield; /native-bridge/mobile/manifest.json
+// keeps Mobile/Desktop's collection registry without flooding Home/Discover.
+// No image bytes are fetched by this layer: cards resolve to upstream artwork.
+async function nativeBridgeAddon(req, res, region, handler, pathname) {
+  const mobile = pathname.startsWith(`/${region}/native-bridge/mobile/`);
+  const prefix = `/${region}/native-bridge${mobile ? '/mobile' : ''}`;
+  const suffix = pathname.slice(prefix.length);
+  if (suffix === '/manifest.json') {
+    const canonicalOrigin = `${originFromRequest(req)}/${region}`;
+    const now = handler._internals.runtimeNow?.() || new Date();
+    const timeZone = handler._internals.requestTimeZone?.(req);
+    const original = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
+    const manifest = mobile
+      ? mobileDesktopCollectionManifest(original)
+      : { ...original, catalogs: original.catalogs.map(shieldCollectionOnlyCatalog) };
+    return sendJson(res, 200, manifest, 'no-store');
+  }
+  if (!/^\/(?:catalog|meta)\//.test(suffix)) return delegate(req, res, prefix, handler);
+
+  const publicOrigin = originFromRequest(req);
+  const nativeResponse = {
+    get statusCode() { return res.statusCode; },
+    set statusCode(value) { res.statusCode = value; },
+    setHeader(name, value) { return res.setHeader(name, value); },
+    getHeader(name) { return res.getHeader?.(name); },
+    end(body = '') {
+      if (res.statusCode !== 200) return res.end(body);
+      try {
+        // Transform only Stremio catalog and meta JSON. Preserve identity,
+        // period, provider and release metadata byte-for-byte as values.
+        const data = JSON.parse(Buffer.isBuffer(body) ? body.toString('utf8') : String(body));
+        const normalized = nativeBridgePayload(data, publicOrigin);
+        res.removeHeader?.('Content-Length');
+        res.setHeader('X-Nuvio-Native-Bridge', 'direct-upstream-art-v1');
+        return res.end(JSON.stringify(normalized));
+      } catch (_) {
+        // Never turn a healthy upstream response into a blank catalog.
+        return res.end(body);
+      }
+    }
+  };
+  return delegate(req, nativeResponse, prefix, handler);
 }
 
 const GENERATED_COVER_REV = 'generated-v11-genre-photo-frames-period-labels';
@@ -625,6 +672,12 @@ module.exports = async function handler(req, res) {
   if (path === '/nuvio-collections-movies.json' || path === '/nuvio-collections-movies-desktop.json') {
     const origin = originFromRequest(req);
     return sendJson(res, 200, moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), 'no-store');
+  }
+  // Private opt-in native-artwork profiles. Canonical URLs remain untouched.
+  const nativeRoute = path.match(/^\/(fr|us|tr|global|movies|series(?:-v2)?)\/native-bridge(?:\/|$)/);
+  if (nativeRoute) {
+    const region = nativeRoute[1];
+    return nativeBridgeAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
   }
   // Mobile and Desktop: preserve catalog registration for collection lookup
   // while suppressing automatic Home fetching in both client repositories.
