@@ -5,7 +5,7 @@ const { withHeroTitles } = require('../../runtime/collection-titles.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
-const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowFor, WESTERN_GENRE } = require('./src/model.cjs');
+const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowFor, displayDateForPremiere, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const catalogPolicy = require('../series/src/catalog-policy.cjs');
 const art = require('./src/artwork.cjs');
@@ -15,17 +15,17 @@ const VERIFIED_WORLD = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.typ
   && p.worldPremiereDate && p.worldPremiereSource);
 
 function officialWorldMeta(p, row = null) {
-  const date = p.worldPremiereDate;
+  const date = displayDateForPremiere(p);
   return {
     id: p.imdbId || `tmdb:movie:${p.tmdbId}`,
     type: 'movie', name: p.title, poster: row?.poster || undefined,
     background: row?.background || row?.poster || undefined, posterShape: 'poster',
-    movieContentKind: 'fiction', movieReleaseKind: 'original', originalReleaseDate: date,
+    movieContentKind: 'fiction', movieReleaseKind: 'original', originalReleaseDate: p.worldPremiereDate || date,
     released: `${date}T00:00:00.000Z`, releaseInfo: date.slice(0,4), imdb_id: p.imdbId,
     streamingProviders: [p.providerLabel], providersByKind: { streaming: [p.providerLabel], vod: [] },
     genres: [], description: [
-      `Première projection mondiale vérifiée : ${date}.`,
-      `Sortie ${p.providerLabel} France : ${p.platformDate}. Cette date de streaming est distincte de la première mondiale.`,
+      `Sortie ${p.providerLabel} France : ${p.platformDate}.`,
+      `Première projection mondiale : ${p.worldPremiereDate} (provenance conservée séparément).`,
       p.overview
     ].filter(Boolean).join('\n\n'),
     links: [
@@ -44,8 +44,9 @@ function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) 
   const additions = [];
   for (const p of VERIFIED_WORLD) {
     if (nowMs < Date.parse(`${p.platformDate}T00:00:00Z`)) continue;
-    if (window.start && p.worldPremiereDate < window.start) continue;
-    if (window.end && p.worldPremiereDate > window.end) continue;
+    const releaseDay = displayDateForPremiere(p);
+    if (window.start && releaseDay < window.start) continue;
+    if (window.end && releaseDay > window.end) continue;
     if (normalizedSearch && ![p.title, p.originalTitle].some(v =>
       String(v || '').toLocaleLowerCase('fr').includes(normalizedSearch))) continue;
     const row = store?.row(`tmdb:${p.tmdbId}`) || null;
@@ -58,9 +59,10 @@ function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) 
     if (row?.classification === 'animation') continue;
     const existing = metas.findIndex(m => m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`);
     if (existing >= 0) {
-      // The index may still carry the later digital date from an older crawl.
-      // Correct the actual card rather than merely avoiding duplicates.
-      if (metas[existing].originalReleaseDate !== p.worldPremiereDate)
+      // A previous crawl could still show the festival date as the event.
+      // Preserve the original separately; display the verified platform debut.
+      if (String(metas[existing].released || '').slice(0, 10) !== releaseDay ||
+          metas[existing].originalReleaseDate !== p.worldPremiereDate)
         metas[existing] = officialWorldMeta(p, row);
       continue;
     }
