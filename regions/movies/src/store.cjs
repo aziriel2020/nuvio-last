@@ -130,9 +130,10 @@ class MovieStore extends SeriesStore {
       : `COALESCE(${digital},${original})`;
     return cases.length ? `(CASE ${cases} ELSE ${eligibleDigital} END)` : eligibleDigital;
   }
-  query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false } = {}) {
+  query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false, limit = 100 } = {}) {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid limit');
     const window = catalogWindowFor(period, genre, now);
     if (!window) return [];
     if (curated && genre === 'unclassified') return [];
@@ -160,7 +161,7 @@ class MovieStore extends SeriesStore {
       ? `CASE WHEN ${this.verifiedStreamingClause('s',now)} THEN 0 ELSE 1 END,` : '';
     const rows = this.db.prepare(`SELECT s.*, ${content.sqlKind()} AS content_kind,
       ${eventDate} AS event_date,'original' AS event_kind
-      FROM shows s WHERE ${where.join(' AND ')} ORDER BY ${priority}${eventDate} DESC,s.id ASC LIMIT 100 OFFSET ?`).all(...args, skip);
+      FROM shows s WHERE ${where.join(' AND ')} ORDER BY ${priority}${eventDate} DESC,s.id ASC LIMIT ? OFFSET ?`).all(...args, limit, skip);
     return rows.map((row) => this.meta(row, { curated, genre, view, now }));
   }
   contentKind(row) {
