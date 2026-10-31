@@ -77,6 +77,9 @@ jobs:
           AUDIT_REPORT: audit-collections-history.json
         run: |
           AUDIT_SHARD_INDEX="$(( ($(date -u +%s) / 14400) % 256 ))" node scripts/audit-production-catalogs.mjs
+      - name: Verify Films Monde live catalog and performance import
+        if: success() || failure()
+        run: node scripts/verify-films-monde-production.mjs
       - name: Verify approved France streaming-service artwork
         if: success() || failure()
         run: node scripts/verify-fr-service-production.mjs
