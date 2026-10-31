@@ -69,6 +69,35 @@ async function delegate(req, res, prefix, handler) {
 }
 
 
+// Nuvio TV resolves collection sources by addonId/type/catalogId even when the
+// catalog is not advertised in the addon manifest. Keep canonical manifests
+// unchanged for Mobile/Desktop, where unlisted source support differs.
+// This opt-in manifest prevents internal calendar catalogs from flooding Home
+// and Discovery, while retaining their direct /catalog endpoints.
+const COLLECTIONS_ONLY_HANDLERS = Object.freeze({
+  fr: frHandler, us: usHandler, tr: trHandler, global: globalHandler,
+  movies: moviesHandler, series: seriesHandler, 'series-v2': seriesHandler
+});
+
+async function collectionsOnlyAddon(req, res, region, handler, pathname) {
+  const prefix = `/${region}/collections-only`;
+  if (pathname === `${prefix}/manifest.json`) {
+    const canonicalOrigin = `${originFromRequest(req)}/${region}`;
+    const now = handler._internals.runtimeNow?.() || new Date();
+    const timeZone = handler._internals.requestTimeZone?.(req);
+    const manifest = handler._internals.buildManifest(canonicalOrigin, now, timeZone);
+    return sendJson(res, 200, {
+      ...manifest,
+      // Source catalog URLs still work: they are simply absent from Home/Discover.
+      catalogs: []
+    }, 'no-store');
+  }
+  // Installed addon base URL is /REGION/collections-only; Nuvio therefore
+  // sends collection catalog and metadata requests under this same prefix.
+  // Delegate to the *same* handler and IDs used by the canonical addon.
+  return delegate(req, res, prefix, handler);
+}
+
 const GENERATED_COVER_REV = 'generated-v11-genre-photo-frames-period-labels';
 const GENERATED_COVER_ROOT = path.resolve(__dirname, '../assets/generated-covers');
 
@@ -492,6 +521,12 @@ module.exports = async function handler(req, res) {
   if (path === '/nuvio-collections-movies.json' || path === '/nuvio-collections-movies-desktop.json') {
     const origin = originFromRequest(req);
     return sendJson(res, 200, moviesHandler._internals.buildCollections(`${origin}/movies`, new Date(), path.includes('desktop') ? 'desktop' : 'shield'), 'no-store');
+  }
+  // Opt-in Android TV install endpoints (no changes to existing addon URLs).
+  const collectionsOnlyRoute = path.match(new RegExp('^/(fr|us|tr|global|movies|series(?:-v2)?)/collections-only(?:/|$)'));
+  if (collectionsOnlyRoute) {
+    const region = collectionsOnlyRoute[1];
+    return collectionsOnlyAddon(req, res, region, COLLECTIONS_ONLY_HANDLERS[region], path);
   }
   if (path === '/movies' || path.startsWith('/movies/')) return delegate(req, res, '/movies', moviesHandler);
   if (path === '/series-v2' || path.startsWith('/series-v2/')) return delegate(req, res, '/series-v2', seriesHandler);
