@@ -182,12 +182,12 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
       for (const source of folder.sources) {
         const period = sourcePeriod(source);
         if (!period || ['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek'].includes(period) ||
-            (/^\\d{4}-\\d{2}$/.test(period) && period >= cutoff)) {
+            (/^\d{4}-\d{2}$/.test(period) && period >= cutoff)) {
           recent.push(source);
           continue;
         }
         // Pair years to get at most 24 monthly sources in each archive.
-        if (/^\\d{4}-\\d{2}$/.test(period)) {
+        if (/^\d{4}-\d{2}$/.test(period)) {
           const year = Number(period.slice(0, 4));
           const from = Math.floor(year / 2) * 2;
           const key = `months-${from}`;
