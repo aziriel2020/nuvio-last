@@ -104,6 +104,14 @@ test('Films Monde visibly includes an officially verified world premiere when th
   const merged=addon._internals.verifiedWorldCatalogMetas(s,catalog,date,0,'',page);
   assert.equal(merged.filter(m=>m.name==='Apocalypse Z : Nouveau Monde').length,1);
   assert.equal(new Set(merged.map(m=>m.id)).size,merged.length);
+  // The old DB might still list the Prime streaming date as the world's
+  // original release. The response must correct that stale card immediately.
+  s.db.prepare("UPDATE shows SET first_air_date='2026-10-30' WHERE id='tmdb:1507696'").run();
+  const stale = s.query({...catalog,now:date,curated:true});
+  assert.equal(stale[0].originalReleaseDate,'2026-10-30');
+  const repaired = addon._internals.verifiedWorldCatalogMetas(s,catalog,date,0,'',stale);
+  assert.equal(repaired[0].originalReleaseDate,'2026-10-09');
+  assert.equal(repaired[0].released.slice(0,10),'2026-10-09');
 });
 test('streaming, rental/purchase and cinema are independently gated by French evidence', (t) => {
   const s = memory(t);
