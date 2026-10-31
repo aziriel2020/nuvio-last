@@ -7,11 +7,11 @@ __PUBLIC_HOST__ {
     Referrer-Policy "no-referrer"
   }
 
-  reverse_proxy 127.0.0.1:3000 {
-    health_uri /_oracle/health
-    health_interval 30s
-    health_timeout 5s
-  }
+  # One upstream only. An active health-check failure previously marked the
+  # sole backend unavailable until the next 30-second probe, creating 503s
+  # even after Nuvio recovered. The deployment workflow already checks local
+  # and public health, with rollback on failure. Proxy requests directly.
+  reverse_proxy 127.0.0.1:3000
 
   log {
     output file /var/log/caddy/nuvio-access.log {
