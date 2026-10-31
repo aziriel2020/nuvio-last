@@ -40,8 +40,10 @@ jobs:
         env:
           AUDIT_INVENTORY_REPORT: audit-collection-inventory.json
         run: node scripts/audit-collection-inventory.mjs
-      - name: Verify all officially confirmed streaming premieres
+      - name: Verify premieres and every platform's Today/Yesterday dates (films and series)
         if: success() || failure()
+        env:
+          AUDIT_ALL_PLATFORMS: '1'
         run: node scripts/check-premiere-coverage.mjs
       - name: Audit bounded sample across all active collection families
         if: (success() || failure()) && github.event_name == 'schedule'
