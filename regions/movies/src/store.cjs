@@ -107,18 +107,28 @@ class MovieStore extends SeriesStore {
       (SELECT tmdb_id FROM movie_seen WHERE scan_id=? AND lane=?)`).run(kind, scanId, kind);
     this.db.prepare('DELETE FROM movie_seen WHERE lane=? AND scan_id!=?').run(kind, scanId);
   }
-  calendarDisplaySql(alias = 's') {
-    // SQL keeps the real original premiere in first_air_date, but uses the
-    // official new-production platform debut for calendar placement.
-    // No old movie is shifted to a new year merely because it was reissued.
+  calendarDisplaySql(alias = 's', view = 'all') {
+    // Festival/original dates stay on the work. For current new productions,
+    // a per-title FR digital release (type 4) within 366 days is a separately
+    // sourced event. Never turn a decades-old restoration into a new movie.
+    // An explicit verified platform premiere overrides generic digital dates.
     const recent = VERIFIED_FR.filter(p => p.worldPremiereDate &&
       displayDateForPremiere(p) === p.platformDate);
-    if (!recent.length) return `${alias}.first_air_date`;
     const cases = recent.map(p =>
       `WHEN EXISTS (SELECT 1 FROM sources dated_src WHERE dated_src.show_id=${alias}.id
         AND dated_src.source='tmdb' AND CAST(dated_src.source_id AS INTEGER)=${p.tmdbId})
         THEN '${p.platformDate}'`).join(' ');
-    return `(CASE ${cases} ELSE ${alias}.first_air_date END)`;
+    const original = `${alias}.first_air_date`;
+    const digital = `(SELECT MIN(digital_release.date) FROM movie_releases digital_release
+      WHERE digital_release.show_id=${alias}.id
+        AND digital_release.kind='digital'
+        AND digital_release.proof='release_dates.FR'
+        AND ${original} IS NOT NULL
+        AND digital_release.date >= ${original}
+        AND digital_release.date <= date(${original}, '+366 days'))`;
+    const eligibleDigital = view === 'cinema' ? original
+      : `COALESCE(${digital},${original})`;
+    return cases.length ? `(CASE ${cases} ELSE ${eligibleDigital} END)` : eligibleDigital;
   }
   query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false } = {}) {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
@@ -139,7 +149,7 @@ class MovieStore extends SeriesStore {
     // Calendar periods, including daily rollover and future years, are
     // calculated afresh on every request. Only proven new-production
     // platform premieres use their streaming date instead of festival date.
-    const eventDate = this.calendarDisplaySql('s');
+    const eventDate = this.calendarDisplaySql('s',view);
     if (window.undated) where.push(`${eventDate} IS NULL`);
     else if (window.start) { where.push(`${eventDate} BETWEEN ? AND ?`); args.push(window.start, window.end); }
     else { where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`); args.push(window.end); }
@@ -172,10 +182,11 @@ class MovieStore extends SeriesStore {
     };
     const date = row.event_date || row.first_air_date;
     const releases = this.db.prepare('SELECT kind,date FROM movie_releases WHERE show_id=? ORDER BY date DESC').all(row.id);
+    const datedFromFranceDigital = date && date !== row.first_air_date && releases.some(r => r.kind === 'digital' && r.date === date);
     const dateLabel = official && displayDateForPremiere(official) === official.platformDate
       ? `Sortie ${official.providerLabel} France`
       : row.event_kind === 'cinema' ? 'Sortie cinéma France'
-        : row.event_kind === 'digital' ? 'Sortie numérique France' : 'Première sortie du film';
+        : row.event_kind === 'digital' || datedFromFranceDigital ? 'Sortie numérique France' : 'Première sortie du film';
     return {
       id, type: 'movie', name: row.title, poster: row.poster || undefined, posterShape: 'poster',
       background: row.background || row.poster || undefined, streamingProviders: providers, providersByKind,
