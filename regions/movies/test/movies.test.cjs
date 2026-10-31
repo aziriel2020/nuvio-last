@@ -76,6 +76,35 @@ test('official Prime debut belongs to its real world premiere month despite a de
   assert.equal(s.query({ ...options, now: new Date('2026-10-29T12:00:00Z'), view: 'streaming' }).length, 0);
 });
 
+test('Films Monde visibly includes an officially verified world premiere when the index is empty or delayed', (t) => {
+  const date = new Date('2026-10-31T12:00:00Z');
+  const catalog = { view:'all', genre:'all', period:'2026-10' };
+  const fallback = addon._internals.verifiedWorldCatalogMetas(null, catalog, date, 0, '', []);
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].name, 'Apocalypse Z : Nouveau Monde');
+  assert.equal(fallback[0].originalReleaseDate, '2026-10-09');
+  assert.equal(fallback[0].released.slice(0,10), '2026-10-09');
+  assert.match(fallback[0].description, /Sortie Prime Video France : 2026-10-30/);
+  assert(fallback[0].links.some(l=>l.category==='Regarder' && l.url.includes('primevideo.com')));
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,period:'today'},date,0,'',[]).length,0);
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,period:'yesterday'},date,0,'',[]).length,0);
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,view:'vod'},date,0,'',[]).length,0);
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,{...catalog,genre:'27'},date,0,'',[]).length,0,
+    'genre should not be invented before metadata arrives');
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,catalog,date,100,'',[]).length,0);
+  assert.equal(addon._internals.verifiedWorldCatalogMetas(null,catalog,new Date('2026-10-29T12:00:00Z'),0,'',[]).length,0);
+  const s=memory(t);
+  // A premiere must still make page one despite 115 later movies.
+  for(let id=1;id<=115;id++) s.upsert(record(id,{release_date:'2026-10-24'}));
+  s.upsert(record(1507696,{ title:'Apocalypse Z : Nouveau Monde',
+    release_date:'2026-10-30','watch/providers':{results:{}},
+    release_dates:regional([4,'2026-10-30']) }));
+  const page=s.query({...catalog,now:date,curated:true});
+  assert.equal(page[0].name,'Apocalypse Z : Nouveau Monde');
+  const merged=addon._internals.verifiedWorldCatalogMetas(s,catalog,date,0,'',page);
+  assert.equal(merged.filter(m=>m.name==='Apocalypse Z : Nouveau Monde').length,1);
+  assert.equal(new Set(merged.map(m=>m.id)).size,merged.length);
+});
 test('streaming, rental/purchase and cinema are independently gated by French evidence', (t) => {
   const s = memory(t);
   s.upsert(record(1)); s.upsert(record(2, { 'watch/providers': FR('rent') }));
