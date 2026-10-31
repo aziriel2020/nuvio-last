@@ -422,3 +422,61 @@ test('2018 cutoff covers all four movie views while Western retains every histor
   }
   assert(s.row('tmdb:801'));
 });
+
+test('Films Monde manifests return compact pages on every view and period without changing IDs', () => {
+  const manifest = addon._internals.buildManifest('https://nuvio.example/movies',new Date('2026-10-31T12:00:00Z'));
+  const { WORLD_PAGE_SIZE } = addon._internals;
+  assert.equal(WORLD_PAGE_SIZE,24);
+  assert(manifest.catalogs.length > 100);
+  assert(manifest.catalogs.every(c => c.pageSize === WORLD_PAGE_SIZE));
+  assert(manifest.catalogs.every(c => c.showInHome === false));
+  assert(manifest.catalogs.every(c => c.extra.some(e => e.name === 'skip')));
+  assert(manifest.catalogs.some(c => c.id === 'movies-fr-all-28-2026-10'));
+  assert(manifest.catalogs.some(c => c.id === 'movies-fr-all-all-2026-10'));
+  assert(manifest.catalogs.some(c => c.id === 'movies-fr-all-all-today'));
+  assert(manifest.catalogs.some(c => c.id === 'movies-fr-all-all-nextweek'));
+  assert(manifest.catalogs.some(c => c.id === 'movies-fr-all-all-yesterday'));
+});
+
+test('24-item Films Monde page queries are contiguous across all 237 rows', t => {
+  const s = memory(t);
+  for (let id = 1; id <= 237; id++) s.upsert(record(id, {
+    imdb_id: `tt${1000 + id}`,
+    release_dates: regional([3, '2026-10-23'], [4, '2026-10-24'])
+  }));
+  const pageSize = addon._internals.WORLD_PAGE_SIZE;
+  const all = [];
+  for (let skip=0;skip<237;skip+=pageSize) {
+    const page=s.query({ skip, now:NOW, limit:pageSize });
+    assert(page.length > 0 && page.length <= pageSize);
+    all.push(...page);
+  }
+  assert.equal(all.length,237);
+  assert.equal(new Set(all.map(x=>x.id)).size,237);
+  assert.deepEqual(s.query({skip:237,now:NOW,limit:pageSize}),[]);
+  assert.throws(()=>s.query({now:NOW,limit:101}),/Invalid limit/);
+  assert.throws(()=>s.query({now:NOW,limit:0}),/Invalid limit/);
+});
+
+test('Films Monde paginated collection retains all indexed movies alongside first-page verified world premiere', t => {
+  const s=memory(t);
+  for (let id=1;id<=67;id++) s.upsert(record(id,{
+    imdb_id: `tt${7000+id}`, release_dates:regional([3,'2026-10-23'],[4,'2026-10-24'])
+  }));
+  const descriptor={view:'all',genre:'all',period:'2026-10'};
+  const now=new Date('2026-10-31T12:00:00Z');
+  const pageSize=addon._internals.WORLD_PAGE_SIZE;
+  const all=[];
+  for(let skip=0;skip<100;skip+=pageSize){
+    const page=addon._internals.pagedMovieCatalog(s,descriptor,now,skip,'');
+    assert(page.length<=pageSize,`skip ${skip} exceeds page`);
+    if(!page.length)break;
+    all.push(...page);
+  }
+  const unique=new Set(all.map(meta=>meta.id));
+  assert.equal(all[0].name,'Apocalypse Z : Nouveau Monde');
+  assert.equal(unique.size,68,'67 indexed movies plus official verified premiere retained');
+  assert.equal(all.length,68,'no duplicate or missing records between pages');
+  assert.equal(all[0].released.slice(0,10),'2026-10-30');
+  assert.equal(all[0].originalReleaseDate,'2026-10-09');
+});
