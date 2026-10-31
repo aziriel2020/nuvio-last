@@ -36,7 +36,8 @@ function signature(collections) {
 for (const [original, mobile] of [
   ['/nuvio-collections-fr-global-tr-usa.json', '/nuvio-collections-mobile.json'],
   ['/nuvio-collections-movies.json', '/nuvio-collections-movies-mobile.json'],
-  ['/nuvio-collections-series.json', '/nuvio-collections-series-mobile.json']
+  ['/nuvio-collections-series.json', '/nuvio-collections-series-mobile.json'],
+  ['/series-v2/nuvio-collections.json', '/nuvio-collections-series-v2-mobile.json']
 ]) {
   test(`Mobile tabs preserve all source folders and periods: ${mobile}`, async () => {
     const [baseline, optimized] = await Promise.all([fetchJson(original), fetchJson(mobile)]);
