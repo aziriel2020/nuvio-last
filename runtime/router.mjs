@@ -609,6 +609,19 @@ async function invokeNodeHandler(request, timeZone) {
   });
 }
 
+// Deduplicate concurrent cold artwork requests. The disk cache already keeps
+// successful posters across Oracle deployments; however, during a cold scan the
+// same title can be requested simultaneously for several UI surfaces before a
+// cache entry exists. Without coalescing each request renders/fetches again.
+const artworkInFlight = new Map();
+const MAX_INFLIGHT_ARTWORK = 96;
+
+function canCoalesceArtwork(request) {
+  if (request.method !== 'GET' || request.headers.has('authorization')) return false;
+  const pathname = new URL(request.url).pathname;
+  return /(?:^|\\/)(?:calendar-card\\.(?:svg|jpg)|desktop-content-card\\.jpg|shield-content-card\\.jpg|genre-folder-art\\.svg|platform-category-card\\.svg|platform-backdrop\\.svg|original\\.(?:jpg|png))$/.test(pathname);
+}
+
 async function dynamicResponse(request, env, ctx) {
   copyStringBindingsToProcessEnv(env);
   const url = new URL(request.url);
@@ -622,34 +635,55 @@ async function dynamicResponse(request, env, ctx) {
     if (hit) return withHeaders(hit, { 'X-Nuvio-Cache': 'HIT' });
   }
 
-  let response;
-  if (/^\/(fr|global|tr|us)\/(?:platform-category-card\.svg|platform-backdrop\.svg)$/.test(url.pathname)) {
-    response = await servePlatformVisual(request, env, url);
-  } else if (/^\/(fr|tr|us)\/genre-folder-art\.svg$/.test(url.pathname)) {
-    response = await serveGenreFolderArt(request, env, url);
-  } else if (url.pathname.startsWith('/internal/')) {
-    response = new Response('Not found', { status: 404 });
-  } else {
-    response = await invokeNodeHandler(request, timeZone);
+  // Cache misses for the same public image must share one upstream fetch
+  // and one render. Every caller receives an independent Response clone.
+  const singleflightKey = canCoalesceArtwork(request) ? key?.url || request.url : null;
+  const inFlight = singleflightKey ? artworkInFlight.get(singleflightKey) : null;
+  if (inFlight) {
+    const shared = await inFlight;
+    return withHeaders(shared.clone(), { 'X-Nuvio-Cache': 'COALESCED' });
   }
 
-  let finalResponse = withHeaders(response, { 'X-Nuvio-Cache': 'MISS' });
+  const render = async () => {
+      let response;
+      if (/^\/(fr|global|tr|us)\/(?:platform-category-card\.svg|platform-backdrop\.svg)$/.test(url.pathname)) {
+        response = await servePlatformVisual(request, env, url);
+      } else if (/^\/(fr|tr|us)\/genre-folder-art\.svg$/.test(url.pathname)) {
+        response = await serveGenreFolderArt(request, env, url);
+      } else if (url.pathname.startsWith('/internal/')) {
+        response = new Response('Not found', { status: 404 });
+      } else {
+        response = await invokeNodeHandler(request, timeZone);
+      }
+    
+      let finalResponse = withHeaders(response, { 'X-Nuvio-Cache': 'MISS' });
+    
+      if (key && cache && finalResponse.ok && ttl > 0
+        && !/(?:no-store|private|max-age=0)(?:\b|,)/i.test(finalResponse.headers.get('cache-control') || '')) {
+        const headers = new Headers(finalResponse.headers);
+        headers.set('Cache-Control', `public, max-age=${ttl}, stale-while-revalidate=${Math.max(ttl, 900)}`);
+        finalResponse = new Response(finalResponse.body, {
+          status: finalResponse.status,
+          statusText: finalResponse.statusText,
+          headers
+        });
+        const clone = finalResponse.clone();
+        if (ctx?.waitUntil) ctx.waitUntil(cache.put(key, clone));
+        else await cache.put(key, clone);
+      }
+    
+      return finalResponse;
+  };
 
-  if (key && cache && finalResponse.ok && ttl > 0
-    && !/(?:no-store|private|max-age=0)(?:\b|,)/i.test(finalResponse.headers.get('cache-control') || '')) {
-    const headers = new Headers(finalResponse.headers);
-    headers.set('Cache-Control', `public, max-age=${ttl}, stale-while-revalidate=${Math.max(ttl, 900)}`);
-    finalResponse = new Response(finalResponse.body, {
-      status: finalResponse.status,
-      statusText: finalResponse.statusText,
-      headers
-    });
-    const clone = finalResponse.clone();
-    if (ctx?.waitUntil) ctx.waitUntil(cache.put(key, clone));
-    else await cache.put(key, clone);
+  if (!singleflightKey || artworkInFlight.size >= MAX_INFLIGHT_ARTWORK) return render();
+  const task = Promise.resolve().then(render);
+  artworkInFlight.set(singleflightKey, task);
+  try {
+    const result = await task;
+    return result.clone();
+  } finally {
+    if (artworkInFlight.get(singleflightKey) === task) artworkInFlight.delete(singleflightKey);
   }
-
-  return finalResponse;
 }
 
 export default {
