@@ -11,6 +11,19 @@ const REGION = { FR:'fr', US:'us', TR:'tr', GLOBAL:'global' };
 const ORIGIN = new URL(process.env.PUBLIC_ORIGIN || 'https://141-145-215-202.nip.io').origin;
 const DATE = process.env.NUVIO_CHECK_DATE || new Date().toISOString().slice(0,10);
 const FULL_SCAN = process.env.AUDIT_ALL_PLATFORMS === '1';
+const ZONES = { FR:'Europe/Paris', US:'America/New_York', TR:'Europe/Istanbul', GLOBAL:'UTC' };
+function localDay(market, clock = new Date()) {
+  if (process.env.NUVIO_CHECK_DATE) return process.env.NUVIO_CHECK_DATE;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ZONES[market], year:'numeric', month:'2-digit', day:'2-digit'
+  }).formatToParts(clock);
+  const get = k => parts.find(p => p.type === k)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function previousDay(date) {
+  return new Date(Date.parse(date + 'T00:00:00Z') - 86400000).toISOString().slice(0,10);
+}
+
 const failures = [], observations = [];
 function pathFor(p, period = p.platformDate.slice(0,7)) {
   if (!PREFIX[p.market] || !REGION[p.market]) throw Error('Unknown streaming market');
@@ -80,6 +93,50 @@ async function getJson(path, { retries = 2 } = {}) {
   }
   throw lastError;
 }
+async function verifyLivePremiere(p) {
+  const current = localDay(p.market);
+  if (p.platformDate > current) return;
+  const yesterday = previousDay(current);
+  for (const period of ['today','yesterday']) {
+    const path = pathFor(p, period);
+    const shouldExist = p.platformDate === (period === 'today' ? current : yesterday);
+    try {
+      const data = await getJson(path);
+      if (!Array.isArray(data?.metas)) throw Error('metas[] missing');
+      const found = matchPremiere(data.metas, p);
+      if (Boolean(found) !== shouldExist) throw Error(
+        `${p.title}: ${period} expected ${shouldExist ? 'present' : 'absent'}, found ${Boolean(found)}`);
+      if (found && String(found.released || '').slice(0,10) !== p.platformDate)
+        throw Error(`${p.title}: ${period} contains wrong platform date ${found.released}`);
+      observations.push({status:'verified',market:p.market,provider:p.providerSlug,period,
+        title:p.title,visible:shouldExist});
+    } catch(error) { failures.push({status:'missing',market:p.market,period,title:p.title,error:error.message}); }
+  }
+}
+async function verifyWorldPremiere(p) {
+  if (p.market !== 'FR' || !p.worldPremiereDate || p.platformDate > localDay(p.market)) return;
+  for (const view of ['all','streaming']) {
+    const path = `/movies/catalog/movie/movies-fr-${view}-all-${p.worldPremiereDate.slice(0,7)}.json`;
+    try {
+      const data = await getJson(path);
+      if (!Array.isArray(data?.metas)) throw Error('metas[] missing');
+      const meta = data.metas.find(m => m.type === 'movie' &&
+        (m.id === p.imdbId || m.id === `tmdb:movie:${p.tmdbId}`));
+      if (!meta) throw Error(`MISSING ${p.title} in first page of Films Monde ${view}`);
+      if (String(meta.released || '').slice(0,10) !== p.worldPremiereDate)
+        throw Error(`WRONG WORLD DATE ${meta.released}, expected ${p.worldPremiereDate}`);
+      observations.push({status:'verified',market:'WORLD',view,title:p.title,worldDate:p.worldPremiereDate});
+    } catch(error) { failures.push({status:'missing',market:'WORLD',view,title:p.title,error:error.message}); }
+  }
+  // The film must resolve when the user opens its detail card.
+  const path = `/movies/meta/movie/${encodeURIComponent(p.imdbId || `tmdb:movie:${p.tmdbId}`)}.json`;
+  try {
+    const data = await getJson(path);
+    if (String(data?.meta?.released || '').slice(0,10) !== p.worldPremiereDate)
+      throw Error(`Original-release metadata missing or wrong: ${data?.meta?.released}`);
+    observations.push({status:'verified',market:'WORLD',view:'meta',title:p.title,worldDate:p.worldPremiereDate});
+  } catch(error) { failures.push({status:'missing',market:'WORLD',view:'meta',title:p.title,error:error.message}); }
+}
 async function verifyRecord(p) {
   if (p.platformDate > DATE) return;
   const path = pathFor(p);
@@ -126,10 +183,10 @@ async function checkMovieFolders(region) {
     }));
   }
 }
-export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, duplicateCatalogCards };
+export { pathFor, matchPremiere, allMovieTodaySources, allPlatformTodaySources, duplicateCatalogCards, localDay, previousDay };
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   if (FULL_SCAN) for (const region of Object.keys(REGION)) await checkMovieFolders(region);
-  for (const p of RECORDS) await verifyRecord(p);
+  for (const p of RECORDS) { await verifyRecord(p); await verifyLivePremiere(p); await verifyWorldPremiere(p); }
   console.log(JSON.stringify({date:DATE,origin:ORIGIN,fullScan:FULL_SCAN,
     checks:observations.length,failures,observations},null,2));
   if(failures.length) process.exitCode=1;
