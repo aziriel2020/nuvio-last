@@ -25,12 +25,40 @@ assert(status.datePolicy==='first-release-worldwide','World premiere date policy
 const {data:regular}=await get('/movies/nuvio-collections.json');
 const {data:fast}=await get('/movies/nuvio-collections-fast.json');
 const {data:yearByYear}=await get('/movies/nuvio-collections-year-by-year.json');
+const {data:recentYears}=await get('/movies/nuvio-collections-recent-years.json');
 assert.equal(regular.length,4);
 assert.equal(fast.length,4);
 assert.equal(yearByYear.length,4);
+assert.equal(recentYears.length,4);
 for(let i=0;i<regular.length;i++){
   assert.equal(regular[i].id,fast[i].id,'collection ID changed');
   assert.equal(yearByYear[i].id,regular[i].id,'Year-by-year IDs changed');
+  assert.equal(recentYears[i].id,regular[i].id,'Recent-years collection ID changed');
+  assert.deepEqual(ids(recentYears[i]).sort(),ids(regular[i]).sort(),
+    'Recent-years import dropped or duplicated a period');
+  assert(recentYears[i].folders.every(f=>f.sources.length>0&&f.sources.length<=12),
+    'Recent-years archive triggers more than 12 catalog loads per folder');
+  const present = new Date();
+  const parts = new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Europe/Brussels',year:'numeric',month:'2-digit'
+  }).formatToParts(present);
+  const y = Number(parts.find(p=>p.type==='year').value);
+  const m = Number(parts.find(p=>p.type==='month').value);
+  const previousMonth = new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7);
+  const recentOrder = ['nextweek','tomorrow','today','yesterday','lastweek',previousMonth];
+  for (const genre of regular[i].folders) {
+    const live = recentYears[i].folders.find(f=>f.id===genre.id);
+    assert(live,'Original genre folder missing from recent-years import: '+genre.id);
+    assert.deepEqual(live.sources.map(s=>s.catalogId.split('-').slice(-2).join('-')===previousMonth
+      ? previousMonth
+      : s.catalogId.split('-').at(-1)),recentOrder,
+      'Recent-years folder must expose six recent sources in descending order');
+    const group = recentYears[i].folders.filter(f=>f.id===genre.id||f.id.startsWith(genre.id+'-year-')||
+      f.id.startsWith(genre.id+'-heritage-'));
+    for(const f of group) assert(f.coverImageUrl===genre.coverImageUrl&&
+      f.heroBackdropUrl===genre.heroBackdropUrl,'Approved genre artwork changed: '+f.id);
+  }
+
   assert.deepEqual(ids(yearByYear[i]).sort(),ids(regular[i]).sort(),
     'Year-by-year import dropped or duplicated a period');
   assert(yearByYear[i].folders.every(f => f.sources.length>0&&f.sources.length<=12),
@@ -79,6 +107,8 @@ const summary={ok:true,eligible:status.eligible,collections:regular.length,
   periodRefs:regular.reduce((s,c)=>s+ids(c).length,0),
   fastFolders:fast.map(c=>c.folders.length),
   yearByYearFolders:yearByYear.map(c=>c.folders.length),
+  recentYearsFolders:recentYears.map(c=>c.folders.length),
+  maxRecentYearsSourceLoad:Math.max(...recentYears.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxYearByYearSourceLoad:Math.max(...yearByYear.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxSourcesPerFolder:Math.max(...fast.flatMap(c=>c.folders.map(f=>f.sources.length))),
   sampleMovies:native.metas.length,directPosters:direct,sha:process.env.GITHUB_SHA||null};
