@@ -677,6 +677,8 @@ module.exports = async function handler(req, res) {
       collectionOnlyInstallNote: 'Replace standard addon manifests with the correct profile; keep existing custom collection imports. Reinstall the same ID if the client still caches the old manifest. No Native Bridge.',
       moviesCollections: `${origin}/movies/nuvio-collections.json`,
       moviesFastCollections: `${origin}/movies/nuvio-collections-fast.json`,
+      moviesYearByYearCollections: `${origin}/movies/nuvio-collections-year-by-year.json`,
+      moviesYearByYearDesktopCollections: `${origin}/movies/nuvio-collections-year-by-year-desktop.json`,
       moviesFastDesktopCollections: `${origin}/movies/nuvio-collections-fast-desktop.json`,
       moviesFastMobileCollections: `${origin}/nuvio-collections-movies-fast-mobile.json`,
       moviesDesktopCollections: `${origin}/movies/nuvio-collections-desktop.json`,
