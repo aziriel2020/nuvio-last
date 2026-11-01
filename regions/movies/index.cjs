@@ -240,7 +240,6 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
 // Each folder loads at most one calendar year (plus five live-day descriptors).
 // The original full and fast imports are kept intact and can be restored.
 function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
-  const currentYear = brusselsDayFormatter.format(now).slice(0, 4);
   const dynamic = new Set(['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
   return buildCollections(origin, now, mode).map(collection => ({
     ...collection,
@@ -251,7 +250,7 @@ function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
       const other = [];
       for (const source of folder.sources) {
         const period = sourcePeriod(source);
-        if (dynamic.has(period) || (period.length === 7 && period.startsWith(currentYear + '-'))) {
+        if (dynamic.has(period)) {
           current.push(source);
         } else if (/^\d{4}-\d{2}$/.test(period)) {
           const year = period.slice(0, 4);
@@ -260,6 +259,9 @@ function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
         } else if (/^\d{4}$/.test(period)) heritage.push(source);
         else other.push(source);
       }
+      // Only five dynamic periods are fetched from the main genre folder.
+      // Each calendar year, including the current year, is a clearly named
+      // shelf with up to 12 months, so no history is hidden or deleted.
       const result = [sourcesInFolder(folder, current, folder.id, folder.title)];
       const yearFolder = (sources, suffix, title) => ({
         ...sourcesInFolder(folder, sources, folder.id + '-' + suffix, title, true),
