@@ -1,0 +1,13 @@
+[Unit]
+Description=Warm first-view Films Monde artwork every 30 minutes on Oracle
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=30min
+RandomizedDelaySec=120
+AccuracySec=60
+Persistent=true
+Unit=nuvio-movies-warm.service
+
+[Install]
+WantedBy=timers.target

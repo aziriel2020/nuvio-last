@@ -1,0 +1,21 @@
+[Unit]
+Description=Warm exact approved Films Monde JPEG posters using Oracle localhost
+After=network-online.target nuvio.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nuvio
+Group=nuvio
+WorkingDirectory=/opt/nuvio/current
+ExecStart=/usr/bin/node /opt/nuvio/current/scripts/warm-films-monde-artwork.mjs
+Environment=NODE_ENV=production
+CPUQuota=15%
+MemoryMax=192M
+TimeoutStartSec=195
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StandardOutput=journal
+StandardError=journal
