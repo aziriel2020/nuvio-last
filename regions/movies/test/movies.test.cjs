@@ -469,6 +469,40 @@ test('streaming and VOD cards display a provider for that offer type', (t) => {
 });
 
 
+test('annual catalog previews all twelve months but pagination retains EVERY movie without duplicate', (t) => {
+  const s=memory(t);
+  const year=2025, now=new Date('2026-11-01T12:00:00Z');
+  // December contains enough movies to monopolize the former 24-item page.
+  // The new single annual catalog must visibly represent Jan through Dec.
+  for(let month=1;month<=12;month++) {
+    const count=month===12?48:4;
+    const day=String(month).padStart(2,'0');
+    for(let n=0;n<count;n++){
+      const id=year*100000+month*100+n;
+      const date=`${year}-${day}-${String(1+n%25).padStart(2,'0')}`;
+      s.upsert(record(id,{release_date:date,genres:[{id:18}],
+        release_dates:regional([3,date])}));
+    }
+  }
+  const d={view:'cinema',genre:'18',period:'annual-2025'};
+  const first=addon._internals.pagedMovieCatalog(s,d,now,0,'');
+  assert.equal(first.length,24);
+  const months=new Set(first.map(m=>m.released.slice(0,7)));
+  assert.equal(months.size,12,'annual opening page must represent EVERY month');
+  assert.deepEqual(first.map(m=>m.released),[...first.map(m=>m.released)].sort().reverse(),
+    'opening page should be newest first');
+  const all=[];
+  for(let skip=0;skip<160;skip+=24){
+    const page=addon._internals.pagedMovieCatalog(s,d,now,skip,'');
+    if(!page.length)break;
+    all.push(...page);
+  }
+  assert.equal(all.length,92,'full year must be paginable, including 48 December movies');
+  assert.equal(new Set(all.map(m=>m.id)).size,92,'no duplicates across pages');
+  assert.equal(new Set(all.map(m=>m.released.slice(0,7))).size,12);
+  assert.deepEqual(addon._internals.pagedMovieCatalog(s,d,now,92,'').map(m=>m.id),[]);
+});
+
 test('unified annual catalog retains this month, excludes last month, and Western undated remains queryable', (t) => {
   const s = memory(t);
   for (const [id, date] of [[9401,'2026-09-15'],[9402,'2026-10-20'],[9403,'2026-11-10']]) {

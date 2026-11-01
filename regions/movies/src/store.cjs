@@ -137,10 +137,12 @@ class MovieStore extends SeriesStore {
       : `COALESCE(${digital},${original})`;
     return cases.length ? `(CASE ${cases} ELSE ${eligibleDigital} END)` : eligibleDigital;
   }
-  query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false, limit = 100 } = {}) {
+  query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false, limit = 100, monthSample = 0, excludeIds = [] } = {}) {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid limit');
+    if (![0, 1, 2].includes(monthSample)) throw new Error('Invalid monthly sampling');
+    if (!Array.isArray(excludeIds) || excludeIds.length > 100) throw new Error('Invalid exclusion list');
     const window = catalogWindowForMovie(period, genre, now);
     if (!window) return [];
     if (curated && genre === 'unclassified') return [];
@@ -171,15 +173,36 @@ class MovieStore extends SeriesStore {
       where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`);
       args.push(window.end);
     }
-    // Ensure a verified world premiere cannot be pushed off the first page by
-    // hundreds of later releases. Sorting happens before LIMIT/OFFSET so pages
-    // remain mutually exclusive.
-    const priority = curated && ['all','streaming'].includes(view)
-      ? `CASE WHEN ${this.verifiedStreamingClause('s',now)} THEN 0 ELSE 1 END,` : '';
-    const rows = this.db.prepare(`SELECT s.*, ${content.sqlKind()} AS content_kind,
+    if (excludeIds.length) {
+      where.push(`s.id NOT IN (${excludeIds.map(() => '?').join(',')})`);
+      args.push(...excludeIds);
+    }
+    // Annual overview: at most two newest films from EACH calendar month,
+    // sampled in one SQL query. A 24-item year row previously showed only
+    // December because a whole month's films saturated the initial page.
+    const base = `SELECT s.*, ${content.sqlKind()} AS content_kind,
       ${eventDate} AS event_date,'original' AS event_kind
-      FROM shows s WHERE ${where.join(' AND ')} ORDER BY ${priority}${eventDate} DESC,s.id ASC LIMIT ? OFFSET ?`).all(...args, limit, skip);
-    return rows.map((row) => this.meta(row, { curated, genre, view, now }));
+      FROM shows s WHERE ${where.join(' AND ')}`;
+    let rows;
+    if (monthSample) {
+      rows = this.db.prepare(`SELECT * FROM (
+        SELECT candidate.*, ROW_NUMBER() OVER (
+          PARTITION BY substr(candidate.event_date,1,7)
+          ORDER BY candidate.event_date DESC,candidate.id ASC
+        ) AS month_rank FROM (${base}) candidate
+      ) WHERE month_rank<=? ORDER BY event_date DESC,id ASC LIMIT ?`)
+        .all(...args,monthSample,limit);
+    } else {
+      // Stable offset pagination across all remaining titles of the year.
+      const priority = curated && ['all','streaming'].includes(view)
+        ? `CASE WHEN ${this.verifiedStreamingClause('s',now)} THEN 0 ELSE 1 END,` : '';
+      rows = this.db.prepare(`${base} ORDER BY ${priority}${eventDate} DESC,s.id ASC LIMIT ? OFFSET ?`)
+        .all(...args,limit,skip);
+    }
+    return rows.map(row => {
+      const meta = this.meta(row, { curated, genre, view, now });
+      return monthSample ? { ...meta, _sourceId: row.id } : meta;
+    });
   }
   contentKind(row) {
     return this.db.prepare(`SELECT ${content.sqlKind()} AS kind FROM shows s WHERE s.id=?`).get(row.id)?.kind || 'review';
