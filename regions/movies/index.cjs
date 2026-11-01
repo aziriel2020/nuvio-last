@@ -9,7 +9,7 @@ const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, cata
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const catalogPolicy = require('../series/src/catalog-policy.cjs');
 const art = require('./src/artwork.cjs');
-const { decorateMovieMetas } = require('./src/presentation.cjs');
+const { decorateMovieMetas, withoutFilmTitleLogo } = require('./src/presentation.cjs');
 const { RECORDS: VERIFIED_PREMIERES } = require('../../runtime/verified-streaming-premieres.cjs');
 const VERIFIED_WORLD = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie'
   && p.worldPremiereDate && p.worldPremiereSource);
@@ -22,7 +22,6 @@ function officialWorldMeta(p, row = null) {
     id: p.imdbId || `tmdb:movie:${p.tmdbId}`,
     type: 'movie', name: p.title, poster: row?.poster || undefined,
     background: row?.background || row?.poster || undefined, posterShape: 'poster',
-    logo: row?.logo || undefined,
     movieContentKind: 'fiction', movieReleaseKind: 'original', originalReleaseDate: p.worldPremiereDate || date,
     released: `${date}T00:00:00.000Z`, releaseInfo: date.slice(0,4), imdb_id: p.imdbId,
     streamingProviders: [p.providerLabel], providersByKind: { streaming: [p.providerLabel], vod: [] },
@@ -309,10 +308,10 @@ async function handler(req, res) {
     // Verified premiere evidence is canonical for the date even when an old
     // SQLite row still contains the streaming date as its first release.
     if (verified && +now >= Date.parse(`${verified.platformDate}T00:00:00Z`)) {
-      return send(res, 200, { meta: { ...officialWorldMeta(verified, row), id: requested } });
+      return send(res, 200, { meta: withoutFilmTitleLogo({ ...officialWorldMeta(verified, row), id: requested }) });
     }
     if (!row || !store.visible(row.id, { curated: true })) return send(res, store ? 404 : 503, { meta: null });
-    return send(res, 200, { meta: { ...store.meta(row, { curated: true, genre: store.contentKind(row) === 'standup' ? 'standup' : JSON.parse(row.genres).includes('99') ? '99' : 'all' }), id: requested } });
+    return send(res, 200, { meta: withoutFilmTitleLogo({ ...store.meta(row, { curated: true, genre: store.contentKind(row) === 'standup' ? 'standup' : JSON.parse(row.genres).includes('99') ? '99' : 'all' }), id: requested }) });
   }
   return send(res, 404, { error: 'Route inconnue' });
 }
