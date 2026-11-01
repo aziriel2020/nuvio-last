@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -87,6 +88,13 @@ object FranceOverlayArtwork {
             return source.replace(tmdbSize, if (landscape) "/t/p/w780/" else "/t/p/w500/")
         }
         return source
+    }
+
+    /** Protect against double design: old France/Oracle bitmaps are already decorated. */
+    fun shouldPaint(url: String?): Boolean {
+        if (!FranceOverlaySettings.enabled || url.isNullOrBlank()) return false
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return true
+        return !(uri.lastPathSegment in rendererNames && uri.host?.lowercase(Locale.ROOT) !in allowedHosts)
     }
 
     fun image(url: String?, landscape: Boolean): String? {
@@ -169,25 +177,28 @@ fun FranceCalendarCardOverlay(item: MetaPreview, landscape: Boolean, modifier: M
             !parts[0].contains("DEMAIN", true) -> parts[0].uppercase(Locale.FRANCE)
         else -> fallbackProvider
     }.take(28)
-    val date = when {
+    // Use the exact release day when available; don't mistake a year for a provider.
+    val date = (dateLabel(item.released) ?: when {
         parts.size >= 2 -> parts.dropLast(1).joinToString(" • ")
         parts.size == 1 && provider == fallbackProvider -> parts[0]
-        else -> dateLabel(item.released).orEmpty()
-    }.take(62).uppercase(Locale.FRANCE)
+        else -> ""
+    }).take(62).uppercase(Locale.FRANCE)
+    val showSecondaryProvider = provider !in setOf("FILMS MONDE", "SÉRIES MONDE", "FRANCE", "MONDE", "USA", "TURQUIE")
     val accent = accentFor(provider)
     val type = if (item.apiType.equals("movie", ignoreCase = true)) "FILM" else "SÉRIE"
     val titleSize = if (landscape) {
         when {
-            item.name.length < 18 -> 24.sp
-            item.name.length < 33 -> 20.sp
-            else -> 17.sp
+            item.name.length < 18 -> 18.sp
+            item.name.length < 33 -> 15.sp
+            else -> 12.sp
         }
     } else {
-        if (item.name.length < 24) 20.sp else 17.sp
+        if (item.name.length < 24) 16.sp else 13.sp
     }
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val height = maxHeight
-        val overlayTop = height * if (landscape) 0.54f else 0.60f
+        val overlayTop = height * if (landscape) 0.61f else 0.65f
+        val compact = maxWidth < 245.dp || maxHeight < 135.dp
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
@@ -196,9 +207,9 @@ fun FranceCalendarCardOverlay(item: MetaPreview, landscape: Boolean, modifier: M
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xD903152F),
-                            Color(0xE5062B5C),
-                            Color(0xF00369A1)
+                            Color(0xA903152F),
+                            Color(0xC5062B5C),
+                            Color(0xD00369A1)
                         )
                     )
                 )
@@ -212,23 +223,25 @@ fun FranceCalendarCardOverlay(item: MetaPreview, landscape: Boolean, modifier: M
                 .background(Color(0xC638BDF8))
         )
         Row(
-            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+            modifier = Modifier.align(Alignment.TopEnd).padding(if (compact) 4.dp else 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            FranceDesignBadge(provider, accent, false)
+            Box(modifier = Modifier.widthIn(max = maxWidth * 0.58f)) {
+                FranceDesignBadge(provider, accent, false)
+            }
             FranceDesignBadge(type, accent, true)
         }
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 9.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+                .padding(horizontal = if (compact) 7.dp else 9.dp, vertical = if (compact) 5.dp else 8.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 1.dp else 2.dp)
         ) {
             Text(
                 text = item.name,
-                fontSize = titleSize,
-                lineHeight = titleSize * 1.02f,
+                fontSize = if (compact) titleSize * 0.90f else titleSize,
+                lineHeight = titleSize * 1.06f,
                 fontWeight = FontWeight.Black,
                 letterSpacing = (-0.45).sp,
                 color = Color.White,
@@ -245,14 +258,17 @@ fun FranceCalendarCardOverlay(item: MetaPreview, landscape: Boolean, modifier: M
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                text = provider,
-                color = accent,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Black,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Avoid the giant FILMS MONDE label repeated under the image.
+            if (showSecondaryProvider) {
+                Text(
+                    text = provider,
+                    color = accent,
+                    fontSize = if (compact) 8.sp else 10.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
