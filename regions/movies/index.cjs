@@ -158,24 +158,28 @@ const FAST_MAX_SOURCES_PER_FOLDER = 24;
 function sourcePeriod(source) {
   return parseCatalog(source?.catalogId)?.period || '';
 }
-function fastMonthCutoff(now) {
+function fastMonthCutoff(now, monthsBack = FAST_LIVE_MONTHS) {
   // Use the same Brussels calendar month as the movie source calendar.
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit'
   }).formatToParts(now);
   const year = Number(parts.find(p => p.type === 'year')?.value);
   const month = Number(parts.find(p => p.type === 'month')?.value);
-  return new Date(Date.UTC(year, month - FAST_LIVE_MONTHS, 1)).toISOString().slice(0, 7);
+  return new Date(Date.UTC(year, month - monthsBack, 1)).toISOString().slice(0, 7);
 }
-function sourcesInFolder(folder, sources, id, title, archive = false) {
+function sourcesInFolder(folder, sources, id, title, archive = false, compact = false) {
+  // The Shield client imports `sources` first; `catalogSources` is the same
+  // list duplicated solely for older importers. Omit only in opt-in Turbo mode.
+  const { catalogSources: redundantSources, ...base } = folder;
   return {
-    ...folder, id, title, hideTitle: archive ? false : folder.hideTitle,
+    ...base, id, title, hideTitle: archive ? false : folder.hideTitle,
     sources,
-    catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId }))
+    ...(compact ? {} : { catalogSources: sources.map(({ addonId, type, catalogId }) => ({ addonId, type, catalogId })) })
   };
 }
-function buildFastCollections(origin, now = new Date(), mode = 'shield') {
-  const cutoff = fastMonthCutoff(now);
+function buildFastCollections(origin, now = new Date(), mode = 'shield', options = {}) {
+  const cutoff = fastMonthCutoff(now, options.recentMonthsBack ?? FAST_LIVE_MONTHS);
+  const compact = options.compact === true && mode === 'shield';
   return buildCollections(origin, now, mode).map(collection => {
     const currentFolders = [], archiveFolders = [];
     for (const folder of collection.folders) {
@@ -202,7 +206,7 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
           buckets.get(key).sources.push(source);
         }
       }
-      currentFolders.push(sourcesInFolder(folder, recent, folder.id, folder.title));
+      currentFolders.push(sourcesInFolder(folder, recent, folder.id, folder.title, false, compact));
       for (const [key, group] of buckets) {
         for (let i = 0; i < group.sources.length; i += FAST_MAX_SOURCES_PER_FOLDER) {
           const slice = group.sources.slice(i, i + FAST_MAX_SOURCES_PER_FOLDER);
@@ -210,7 +214,7 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
           const subkey = `${key}-${part}`;
           const label = `${group.label}${part ? ` · ${part + 1}` : ''}`;
           archiveFolders.push(sourcesInFolder(
-            folder, slice, `${folder.id}-${subkey}`, `${folder.title} · ${label}`, true
+            folder, slice, `${folder.id}-${subkey}`, `${folder.title} · ${label}`, true, compact
           ));
         }
       }
@@ -218,6 +222,11 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
     // Keep the original genre grid first; place clearly labeled archives after it.
     return { ...collection, folders: [...currentFolders, ...archiveFolders] };
   });
+}
+// Turbo is deliberately separate: the existing Fast and original URLs remain
+// available for rollback, with all archive IDs, periods and covers untouched.
+function buildTurboCollections(origin, now = new Date(), mode = 'shield') {
+  return buildFastCollections(origin, now, mode, { recentMonthsBack: 1, compact: true });
 }
 function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -233,6 +242,8 @@ async function handler(req, res) {
   const url = new URL(req.url, base), origin = `${url.origin}/movies`;
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now));
+  if (url.pathname === '/nuvio-collections-turbo.json')
+    return send(res, 200, buildTurboCollections(origin, now, 'shield'), 'no-store, max-age=0, must-revalidate');
   if (url.pathname === '/nuvio-collections-fast.json' || url.pathname === '/nuvio-collections-fast-desktop.json')
     return send(res, 200, buildFastCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'));
   if (['/nuvio-collections.json', '/collections.json', '/nuvio-collections-desktop.json'].includes(url.pathname))
@@ -299,4 +310,4 @@ async function handler(req, res) {
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, buildFastCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
+module.exports._internals = { buildManifest, buildCollections, buildFastCollections, buildTurboCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
