@@ -65,7 +65,7 @@ replace("app/src/main/java/com/nuvio/tv/ui/components/GridContentCard.kt", [
     ("                } else if (showLogo && !item.logo.isNullOrBlank()) {",
      "                } else if (!franceOverlayEnabled && showLogo && !item.logo.isNullOrBlank()) {"),
     ("                if (isWatched) {\n                    WatchedMarker(",
-     """                if (franceOverlayEnabled) {
+     """                if (franceOverlayEnabled && FranceOverlayArtwork.shouldPaint(effectiveImageUrl)) {
                     FranceCalendarCardOverlay(
                         item = item,
                         landscape = effectivePosterShape == PosterShape.LANDSCAPE
@@ -100,7 +100,7 @@ replace("app/src/main/java/com/nuvio/tv/ui/components/ContentCard.kt", [
     ("                if (isBackdropExpanded && !globalLandscape && !(useLandscapeAsExpanded && !trailerFirstFrameRendered)) {",
      "                if (!franceOverlayEnabled && isBackdropExpanded && !globalLandscape && !(useLandscapeAsExpanded && !trailerFirstFrameRendered)) {"),
     ("                if (isWatched) {\n                    WatchedMarker(",
-     """                if (franceOverlayEnabled) {
+     """                if (franceOverlayEnabled && FranceOverlayArtwork.shouldPaint(imageUrl)) {
                     FranceCalendarCardOverlay(
                         item = item,
                         landscape = effectivePosterShape == PosterShape.LANDSCAPE
@@ -126,7 +126,7 @@ replace("app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRows.kt", [
     ("                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder",
      "                } else if (!franceOverlayEnabled && (useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder"),
     ("                if (isWatched) {\n                    WatchedMarker(",
-     """                if (franceOverlayEnabled && !isCollectionFolder) {
+     """                if (franceOverlayEnabled && !isCollectionFolder && FranceOverlayArtwork.shouldPaint(imageUrl)) {
                     item.metaPreview?.let { preview ->
                         FranceCalendarCardOverlay(
                             item = preview,
