@@ -2,6 +2,15 @@
 
 const { decorateCatalogMetas } = require('../../fr/api/index.js')._internals;
 const { fastContentCards } = require('../../fr/api/fast-content-cards.cjs');
+// Database can retain TMDB logo metadata for future optional use, but the
+// Films Monde public metadata endpoint must not make native clients draw it.
+function withoutFilmTitleLogo(meta) {
+  const clean = { ...meta };
+  delete clean.logo;
+  delete clean.titleLogoUrl;
+  return clean;
+}
+
 function decorateMovieMetas(origin, metas, descriptor) {
   const franceOrigin = new URL('../fr', `${origin}/`).href;
   const period = /^\d{4}-\d{2}$/.test(descriptor.period) ? `archive-${descriptor.period}` : descriptor.period;
@@ -12,10 +21,13 @@ function decorateMovieMetas(origin, metas, descriptor) {
         : meta.streamingProviders?.[0] || (meta.movieReleaseKind === 'digital' ? 'VOD FRANCE' : 'FILMS FRANCE'));
     const decorated = decorateCatalogMetas(franceOrigin, [meta], { type: 'movie', period, forceLandscapeCards: true, cardProvider: label }, 'Europe/Brussels')[0];
     const fast = fastContentCards(franceOrigin, meta, decorated);
-    // Films Monde overlays logos natively; the shared France calendar decorator
-    // intentionally inserts a transparent placeholder for precomposed cards.
-    // Restore the real TMDB title logo only for this standalone movie addon.
-    fast.logo = meta.logo || undefined;
+    // Never publish an official film title-logo over Films Monde cards.
+    // Keep ONLY the transparent Modern placeholder from the approved French
+    // calendar layout; it prevents Nuvio from overlaying a second native title
+    // over our existing precomposed cinematic artwork. No TMDB logo leaks.
+    if (!String(fast.logo || '').includes('/calendar-transparent-logo.svg')) {
+      delete fast.logo;
+    }
     if (!meta.poster && !meta.background) {
       const image = new URL(fast.background); image.searchParams.set('provider', label);
       for (const field of ['poster', 'background', 'landscapePoster', 'banner']) fast[field] = image.href;
@@ -23,4 +35,4 @@ function decorateMovieMetas(origin, metas, descriptor) {
     return fast;
   });
 }
-module.exports = { decorateMovieMetas };
+module.exports = { decorateMovieMetas, withoutFilmTitleLogo };

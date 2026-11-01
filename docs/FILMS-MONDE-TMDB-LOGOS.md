@@ -1,68 +1,41 @@
-# Films Monde — original TMDB title logos, no baked-in poster art
+# Films Monde — film title logos disabled (1 November 2026)
 
-## Objective
+## User-facing rule
 
-Use the official TMDB **image/logo** for each film with one clean, optional
-client-side title overlay. Keep film posters and horizontal backdrops loaded
-directly from TMDB CDN; do not generate a second Oracle image for every movie.
+The **standard Films Monde addon** (`/movies/manifest.json`) must never overlay
+an official TMDB film title logo on its posters, horizontal cards or detail pages.
+This applies to the four Films Monde views: All, Streaming, VOD and Cinéma.
+The existing approved premium photo, backdrop, date/provider typography, genre
+art, collection covers, calendar rules and fast cache pipeline stay unchanged.
 
-## Source and sync
+- On **catalog** cards: the existing Nuvio Modern transparent control logo
+  (`/fr/calendar-transparent-logo.svg`) may remain as an *invisible* layout
+  placeholder so the native client does not draw a duplicate title on top of
+  the approved precomposed cinematic card. It is not an actual movie logo.
+- On **details**: public movie metadata omits `logo` and `titleLogoUrl`.
+  The independent internal TMDB enrichment/database may retain logo metadata,
+  but the public Films Monde addon does not expose it to clients.
+- No change to `/fr`, `/us`, `/tr`, `/global` or `/series` addons.
+- No change to standard or fast collection IDs, sources, visual files or original
+  film dates; existing installed manifest URL stays the same.
 
-The existing `/movie/{id}` detail sync requests images in `append_to_response`
-and includes languages `fr,en,null`. No additional API request per card.
-`selectMovieLogo()` prefers French, the original language if included in the
-response, English, then untagged logos, ranking quality within a language.
-Only valid PNG/WebP bitmap logo paths are returned for Coil interoperability.
-TMDB SVG paths are intentionally skipped on the Shield unless the client adds
-an SVG decoder.
+## Existing poster images
 
-The movie-only SQLite `shows.logo` column is migrated on the writer, leaving
-Séries Monde intact. The `logo` string is stored with the movie; discovery
-candidates without appended image details **never erase** an enriched logo.
-The detail sync gradually refreshes older movies. New productions from the
-last 90 days are prioritized once, capped at 1200 IDs, to populate their logos.
-No full 38K-movie synchronous backfill.
+This policy disables **separate transparent title-logo overlays**. It does not
+remove lettering that is already permanently embedded in a source movie image
+or existing precomposed typography (date, text title, service), which would
+require changing image assets or the user's approved design.
 
-## Addon behavior
+## Legacy optional Shield APK
 
-`/movies/native-bridge/manifest.json` is unchanged. Film catalogue and
-detail JSON now contain `logo: https://image.tmdb.org/t/p/w500/....png`
-when one exists. The French calendar decorator's intentional transparent
-logo placeholder is overwritten **only for Films Monde**, never the France
-catalogues.
+The optional experimental debug APK
+`com.nuvio.tv.filmsmonde.logos` contains client code capable of drawing a
+TMDB logo when the addon provides one. New Films Monde catalog responses no
+longer send actual film logos, so this overlay should not be triggered.
+The standard Shield app remains unchanged and is the supported target.
 
-Native Bridge additionally fixes horizontal film cards: if
-`posterShape = landscape`, its **catalog** poster is the original TMDB
-horizontal backdrop (w780), with original portrait at `_rawPosterUrl`.
-The movie **detail** still receives the real portrait poster (w500).
-Other addon families are unchanged. This is 100% provider-CDN imagery.
+## Validation
 
-## On-screen overlay without burning artwork
-
-The stock official NuvioTV client honors logos in several layouts, but does
-not guarantee they appear on every 16:9 GridContentCard. The opt-in patched
-Shield client from `builder/apply_nuvio_tv_films_monde_logos.py` explicitly
-draws the logo over Films Monde horizontal cards in Compose, with a bottom
-gradient and the text title fallback when the image request fails.
-The patch is restricted to source addon URLs containing `/movies`.
-The rest of the collection design and approved covers remain untouched.
-
-An isolated NuvioTV debug package is built by
-`.github/workflows/build-nuvio-tv-films-monde-logos.yml` using a pinned
-public upstream revision. Its package is
-`com.nuvio.tv.filmsmonde.logos`. It **does not overwrite** an existing
-official Shield app, automatically modify the Shield or claim native support
-in the official APK. The GitHub Actions APK artifact can be installed
-manually for an optional test. It uses the official public Nuvio backend
-discovery, not a personal account.
-
-## Release and verification
-
-- `npm test` including new `regions/movies/test/logos.test.cjs` tests
-- `npm run test:movies`
-- `node scripts/verify-films-monde-production.mjs`
-- Existing production audit/rollback workflows remain intact.
-
-Test TMDB logo availability on multiple titles, especially recent releases.
-A missing/unsuitable logo must not prevent poster display. Always compare
-poster time-to-first-paint on a real Shield before promoting an APK.
+Run `npm run test:movies`, `npm test`, `node scripts/test-movies-runtime.mjs`
+and `node scripts/verify-films-monde-production.mjs`.
+Verify actual screen on Shield after client cache expiry.
