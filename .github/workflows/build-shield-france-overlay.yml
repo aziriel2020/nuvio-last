@@ -33,6 +33,9 @@ jobs:
           assert "Color(0xE5062B5C)" in component, "original France gradient"
           assert 'text = item.name' in component
           assert "FranceOverlayArtwork" in component
+          assert "fun shouldPaint(" in component, "must detect already rendered images"
+          assert "FILMS MONDE" in component and "showSecondaryProvider" in component
+          assert "val overlayTop = height * if (landscape) 0.61f else 0.65f" in component
           screen=(root/"ui/screens/settings/LayoutSettingsScreen.kt").read_text()
           assert "Design France — toutes les collections" in screen
           for path in ["ui/components/GridContentCard.kt",
@@ -41,6 +44,7 @@ jobs:
               code=(root/path).read_text()
               assert "FranceCalendarCardOverlay(" in code, path
               assert "FranceOverlayArtwork.image(" in code, path
+              assert "FranceOverlayArtwork.shouldPaint(" in code, "do not double-paint baked images: "+path
           gradle=Path("NuvioTV/app/build.gradle.kts").read_text()
           assert 'applicationIdSuffix = ".franceoverlay"' in gradle
           print("All layouts, preserved original France design, opt-in toggle and safe app ID OK")
