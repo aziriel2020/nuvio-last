@@ -126,6 +126,8 @@ install -d -m 0755 -o nuvio -g nuvio /var/lib/nuvio-movies
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
 install -m 0644 "$TARGET/oracle/nuvio-series-sync.service" /etc/systemd/system/nuvio-series-sync.service
 install -m 0644 "$TARGET/oracle/nuvio-movies-sync.service" /etc/systemd/system/nuvio-movies-sync.service
+install -m 0644 "$TARGET/oracle/nuvio-movies-warm.service" /etc/systemd/system/nuvio-movies-warm.service
+install -m 0644 "$TARGET/oracle/nuvio-movies-warm.timer" /etc/systemd/system/nuvio-movies-warm.timer
 install -d -m 0755 /etc/nuvio
 printf 'NUVIO_GIT_SHA=%s\n' "$SHA" > /etc/nuvio/release.env.new
 chmod 0644 /etc/nuvio/release.env.new
@@ -150,6 +152,10 @@ systemctl restart nuvio-series-sync.service
 systemctl enable nuvio-movies-sync.service
 systemctl restart nuvio-movies-sync.service
 systemctl restart nuvio
+# Optional background warmer runs after Oracle is healthy; never blocks boot
+# or restarts the primary movies/series indexers.
+systemctl enable nuvio-movies-warm.timer
+systemctl start nuvio-movies-warm.timer
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
 for _ in {1..30}; do
