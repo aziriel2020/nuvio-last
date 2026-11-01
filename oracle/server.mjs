@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import runtime from '../runtime/index.mjs';
+import { encodeJsonForClient } from './response-compression.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -307,8 +308,10 @@ async function handle(req, res) {
     };
 
     const response = await runtime.fetch(request, envBindings(), ctx);
-    const body = req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
-    const headers = Object.fromEntries(response.headers.entries());
+    const rawBody = req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
+    const transfer = await encodeJsonForClient(rawBody,
+      Object.fromEntries(response.headers.entries()), req.headers['accept-encoding'], req.method);
+    const { body, headers } = transfer;
 
     // The same renderer is reused, but the public runtime must be truthful.
     headers['x-nuvio-origin'] = 'oracle-vm';
