@@ -82,23 +82,23 @@ installer l'URL alternative dans Nuvio pour le sélectionner.
 
 **À installer sur Shield (6 addons, aucun Native Bridge)**, sur le même serveur :
 
-- France : \`https://141-145-215-202.nip.io/fr/collections-only/manifest.json\`
-- Global / VOD Mondiale / Anime : \`https://141-145-215-202.nip.io/global/collections-only/manifest.json\`
-- Türkiye : \`https://141-145-215-202.nip.io/tr/collections-only/manifest.json\`
-- USA : \`https://141-145-215-202.nip.io/us/collections-only/manifest.json\`
-- Films Monde : \`https://141-145-215-202.nip.io/movies/collections-only/manifest.json\`
-- Séries France **V2** : \`https://141-145-215-202.nip.io/series-v2/collections-only/manifest.json\`
+- France : `https://141-145-215-202.nip.io/fr/collections-only/manifest.json`
+- Global / VOD Mondiale / Anime : `https://141-145-215-202.nip.io/global/collections-only/manifest.json`
+- Türkiye : `https://141-145-215-202.nip.io/tr/collections-only/manifest.json`
+- USA : `https://141-145-215-202.nip.io/us/collections-only/manifest.json`
+- Films Monde : `https://141-145-215-202.nip.io/movies/collections-only/manifest.json`
+- Séries France **V2** : `https://141-145-215-202.nip.io/series-v2/collections-only/manifest.json`
 
-Pour Mobile/Desktop : remplacer \`collections-only\` par
-\`mobile-desktop-collections\` pour chaque ligne, car les filtres du client
-sont différents. Ces six URL sont publiées dans \`/install.json\` avec les
-clés \`collectionsOnlyShieldManifests\` et
-\`collectionsOnlyMobileDesktopManifests\`.
+Pour Mobile/Desktop : remplacer `collections-only` par
+`mobile-desktop-collections` pour chaque ligne, car les filtres du client
+sont différents. Ces six URL sont publiées dans `/install.json` avec les
+clés `collectionsOnlyShieldManifests` et
+`collectionsOnlyMobileDesktopManifests`.
 
 **Très important pour l'utilisateur qui a déjà importé les collections** :
 ne pas réimporter ni effacer les JSON (Films Monde :
-\`/movies/nuvio-collections-fast.json\` ; Séries V2 :
-\`/series-v2/nuvio-collections.json\`). Les nouveaux manifests réutilisent
+`/movies/nuvio-collections-fast.json` ; Séries V2 :
+`/series-v2/nuvio-collections.json`). Les nouveaux manifests réutilisent
 les mêmes addon IDs et catalog IDs. Remplacer/désinstaller uniquement les
 six anciens addons standards avec leurs versions ci-dessus, puis relancer
 l'application. Si des catalogues restent visibles dans Search/Discover,
@@ -109,8 +109,8 @@ collections Série V2.
 
 ### Correction importante du routage
 
-Les catalogues \`/series-v2/collections-only/catalog/series/...\` et leurs
-fiches sont délégués au moteur **V2** avec \`x-nuvio-base-path=/series-v2\`,
+Les catalogues `/series-v2/collections-only/catalog/series/...` et leurs
+fiches sont délégués au moteur **V2** avec `x-nuvio-base-path=/series-v2`,
 non à la V1. Cela conserve les exclusions d'émissions/replay, les critères
 de grandes plateformes, et les dates de diffusion. Le même principe assure
 les bons chemins de photos/affiches pour tous les addons régionaux.
