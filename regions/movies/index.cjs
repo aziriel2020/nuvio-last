@@ -140,6 +140,54 @@ const imageCache = new Map();
 // calendar day. Build and serialize once per day/origin/mode. Original URLs,
 // collection IDs, cover links, period names and daily rollover are unchanged.
 const jsonPayloadCache = new Map();
+
+/**
+ * Films Monde now follows the cached-catalog pipeline used by Séries Monde.
+ * Existing source IDs and approved 16:9 cards never change. A bounded memory
+ * cache stores the *final* JSON (including artwork URLs), not just the 24
+ * annual preview IDs. The original database remains authoritative.
+ *
+ * Brussels-day keys prevent Yesterday/Today and annual rollover leakage.
+ * Only nonempty successful pages are cached, so imports/index failures never
+ * become sticky. Historical data refreshes every 15 minutes; actively
+ * changing periods use much shorter lifetimes.
+ */
+const movieCatalogJsonCache = new Map();
+const MOVIE_CATALOG_CACHE_MAX = 480;
+function movieCatalogCachePolicy(period, now = new Date()) {
+  const { current, previous } = recentCalendarMonths(now);
+  const dynamic = ['today','yesterday','tomorrow','lastweek','nextweek'].includes(period);
+  if (['today','yesterday','tomorrow'].includes(period))
+    return { ttl: 15000, http: 'no-store', kind: 'live' };
+  if (dynamic) return { ttl: 30000, http: 'public, max-age=15, s-maxage=30', kind: 'rolling' };
+  if (period === current || period === 'all' || period === 'undated')
+    return { ttl: 30000, http: 'public, max-age=15, s-maxage=30', kind: 'current' };
+  if (period === previous)
+    return { ttl: 120000, http: 'public, max-age=60, s-maxage=120', kind: 'lastmonth' };
+  if (period === 'annual-' + current.slice(0,4))
+    return { ttl: 120000, http: 'public, max-age=60, s-maxage=120', kind: 'currentyear' };
+  // Like Séries Monde archives: 15-minute server cache, with CDN expiry
+  // shorter than the authoritative cache to permit timely corrections.
+  return { ttl: 900000, http: 'public, max-age=300, s-maxage=900, stale-while-revalidate=900', kind: 'archive' };
+}
+function cachedMovieCatalogJson(origin, descriptor, now, skip, search, create) {
+  const policy = movieCatalogCachePolicy(descriptor.period, now);
+  const key = JSON.stringify([origin,brusselsDayFormatter.format(now),
+    descriptor.view,descriptor.genre,descriptor.period,skip,search]);
+  const nowMs = Date.now();
+  const hit = movieCatalogJsonCache.get(key);
+  if (hit && hit.expires > nowMs) return { json: hit.json, hit: true, policy };
+  if (hit) movieCatalogJsonCache.delete(key);
+  const metas = create();
+  const json = JSON.stringify({ metas });
+  if (metas.length) {
+    movieCatalogJsonCache.set(key,{ json,expires:nowMs+policy.ttl });
+    while (movieCatalogJsonCache.size > MOVIE_CATALOG_CACHE_MAX)
+      movieCatalogJsonCache.delete(movieCatalogJsonCache.keys().next().value);
+  }
+  return { json,hit: false,policy };
+}
+
 const brusselsDayFormatter = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit'
 });
@@ -442,12 +490,19 @@ async function handler(req, res) {
     const skip = Number(extra.get('skip') || url.searchParams.get('skip') || 0);
     const search = String(extra.get('search') || url.searchParams.get('search') || '').slice(0, 200);
     try {
-      const metas = pagedMovieCatalog(store, descriptor, now, skip, search);
-      if (!store && !metas.length) return send(res, 503, { metas: [], error: 'Index en préparation' });
-      // Cache only nonempty, successful catalog pages. Never cache a missing
-      // DB index or an empty page: fresh imports must appear immediately.
-      const cachePolicy = metas.length ? 'public, max-age=15, s-maxage=60' : 'no-store';
-      return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) }, cachePolicy);
+      if (!store) {
+        const metas = pagedMovieCatalog(null, descriptor, now, skip, search);
+        if (!metas.length) return send(res, 503, { metas: [], error: 'Index en préparation' });
+        return send(res, 200, { metas: decorateMovieMetas(origin, metas, descriptor) }, 'no-store');
+      }
+      const started = Date.now();
+      const result = cachedMovieCatalogJson(origin,descriptor,now,skip,search,
+        () => decorateMovieMetas(origin,
+          pagedMovieCatalog(store, descriptor, now, skip, search),descriptor));
+      res.setHeader('X-Nuvio-Catalog-Cache',result.hit?'HIT':'MISS');
+      res.setHeader('Server-Timing',`moviecatalog;dur=${Date.now()-started}`);
+      return send(res,200,result.json,
+        result.json === '{"metas":[]}' ? 'no-store' : result.policy.http);
     }
     catch (e) { if (/Invalid/.test(e.message)) return send(res, 400, { metas: [], error: e.message }); throw e; }
   }
@@ -468,4 +523,4 @@ async function handler(req, res) {
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, buildFastCollections, buildYearByYearCollections, buildRecentYearsCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
+module.exports._internals = { buildManifest, buildCollections, buildFastCollections, buildYearByYearCollections, buildRecentYearsCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE, movieCatalogCachePolicy, cachedMovieCatalogJson };
