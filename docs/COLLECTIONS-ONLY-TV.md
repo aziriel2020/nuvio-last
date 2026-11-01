@@ -76,3 +76,51 @@ NuvioMobile #1455.
 
 Ce profil n'est pas activé à distance sur les appareils : l'utilisateur doit
 installer l'URL alternative dans Nuvio pour le sélectionner.
+
+
+## 1er novembre 2026 — toutes les extensions, sans catalogue dans la recherche
+
+**À installer sur Shield (6 addons, aucun Native Bridge)**, sur le même serveur :
+
+- France : \`https://141-145-215-202.nip.io/fr/collections-only/manifest.json\`
+- Global / VOD Mondiale / Anime : \`https://141-145-215-202.nip.io/global/collections-only/manifest.json\`
+- Türkiye : \`https://141-145-215-202.nip.io/tr/collections-only/manifest.json\`
+- USA : \`https://141-145-215-202.nip.io/us/collections-only/manifest.json\`
+- Films Monde : \`https://141-145-215-202.nip.io/movies/collections-only/manifest.json\`
+- Séries France **V2** : \`https://141-145-215-202.nip.io/series-v2/collections-only/manifest.json\`
+
+Pour Mobile/Desktop : remplacer \`collections-only\` par
+\`mobile-desktop-collections\` pour chaque ligne, car les filtres du client
+sont différents. Ces six URL sont publiées dans \`/install.json\` avec les
+clés \`collectionsOnlyShieldManifests\` et
+\`collectionsOnlyMobileDesktopManifests\`.
+
+**Très important pour l'utilisateur qui a déjà importé les collections** :
+ne pas réimporter ni effacer les JSON (Films Monde :
+\`/movies/nuvio-collections-fast.json\` ; Séries V2 :
+\`/series-v2/nuvio-collections.json\`). Les nouveaux manifests réutilisent
+les mêmes addon IDs et catalog IDs. Remplacer/désinstaller uniquement les
+six anciens addons standards avec leurs versions ci-dessus, puis relancer
+l'application. Si des catalogues restent visibles dans Search/Discover,
+l'application utilise probablement encore l'ancien manifeste mémorisé :
+supprimer uniquement ce vieux manifeste, réinstaller la bonne URL, puis
+relancer. Ne pas effacer les quatre collections Films Monde ni les deux
+collections Série V2.
+
+### Correction importante du routage
+
+Les catalogues \`/series-v2/collections-only/catalog/series/...\` et leurs
+fiches sont délégués au moteur **V2** avec \`x-nuvio-base-path=/series-v2\`,
+non à la V1. Cela conserve les exclusions d'émissions/replay, les critères
+de grandes plateformes, et les dates de diffusion. Le même principe assure
+les bons chemins de photos/affiches pour tous les addons régionaux.
+Un test vérifie les trois variantes de routes et la politique de statut V2.
+
+### Portée
+
+Ces manifestes retirent les catalogues de **Home / Découvrir / Recherche
+globale** des versions Nuvio dont les prédicats correspondent à ceux
+documentés ci-dessus. Ils laissent les dossiers de **Collections** accessibles,
+conservent les noms de période et leurs identifiants. Une recherche qui
+balaye elle-même les collections locales ou d'anciens résultats mis en cache
+par le client doit être traitée dans l'application, pas dans le manifest.
