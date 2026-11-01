@@ -160,6 +160,7 @@ class MovieStore extends SeriesStore {
     const eventDate = this.calendarDisplaySql('s',view);
     if (window.undated) where.push(`${eventDate} IS NULL`);
     else if (window.start) { where.push(`${eventDate} BETWEEN ? AND ?`); args.push(window.start, window.end); }
+    if (window.excludeStart) { where.push(`NOT (${eventDate} BETWEEN ? AND ?)`); args.push(window.excludeStart, window.excludeEnd); }
     else { where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`); args.push(window.end); }
     // Ensure a verified world premiere cannot be pushed off the first page by
     // hundreds of later releases. Sorting happens before LIMIT/OFFSET so pages
