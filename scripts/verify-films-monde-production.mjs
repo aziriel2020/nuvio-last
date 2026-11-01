@@ -49,6 +49,13 @@ for(const source of fast[0].folders[0].sources){
 const {data:raw}=await get('/movies/catalog/movie/movies-fr-all-all-all.json');
 const {data:native}=await get('/movies/native-bridge/catalog/movie/movies-fr-all-all-all.json');
 assert(raw.metas?.length>0,'original catalogue empty');
+// Protect the approved Films Monde no-film-logo policy in production.
+// An invisible Modern placeholder is permitted, an actual TMDB clearlogo is not.
+for (const [name, catalog] of [['canonical',raw],['native bridge',native]]) {
+  assert(catalog.metas.every(meta => !meta.logo ||
+    /\/fr\/calendar-transparent-logo\.svg\?/.test(meta.logo)),
+    name+' published visible film title logos');
+}
 assert(native.metas?.length===raw.metas.length,'Bridge changed film count');
 assert.deepEqual(native.metas.map(m=>[m.id,m.released,m.originalReleaseDate]),
   raw.metas.map(m=>[m.id,m.released,m.originalReleaseDate]),
