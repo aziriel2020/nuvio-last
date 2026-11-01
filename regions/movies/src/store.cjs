@@ -2,7 +2,7 @@
 
 const { SeriesStore } = require('../../series/src/store.cjs');
 const { AVAILABILITY_TTL } = require('../../series/src/france.cjs');
-const { GENRES, VIEWS, catalogWindowFor, displayDateForPremiere } = require('./model.cjs');
+const { GENRES, VIEWS, catalogWindowForMovie, displayDateForPremiere } = require('./model.cjs');
 const content = require('./content-policy.cjs');
 const policy = require('../../series/src/catalog-policy.cjs');
 const { RECORDS: PREMIERES } = require('../../../runtime/verified-streaming-premieres.cjs');
@@ -141,7 +141,7 @@ class MovieStore extends SeriesStore {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid limit');
-    const window = catalogWindowFor(period, genre, now);
+    const window = catalogWindowForMovie(period, genre, now);
     if (!window) return [];
     if (curated && genre === 'unclassified') return [];
     const where = ["s.classification='eligible'", this.admissionClause(view,genre,curated,'s',now)];
@@ -160,6 +160,7 @@ class MovieStore extends SeriesStore {
     const eventDate = this.calendarDisplaySql('s',view);
     if (window.undated) where.push(`${eventDate} IS NULL`);
     else if (window.start) { where.push(`${eventDate} BETWEEN ? AND ?`); args.push(window.start, window.end); }
+    if (window.excludeStart) { where.push(`NOT (${eventDate} BETWEEN ? AND ?)`); args.push(window.excludeStart, window.excludeEnd); }
     else { where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`); args.push(window.end); }
     // Ensure a verified world premiere cannot be pushed off the first page by
     // hundreds of later releases. Sorting happens before LIMIT/OFFSET so pages

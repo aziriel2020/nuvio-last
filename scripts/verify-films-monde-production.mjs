@@ -33,30 +33,45 @@ assert.equal(recentYears.length,4);
 for(let i=0;i<regular.length;i++){
   assert.equal(regular[i].id,fast[i].id,'collection ID changed');
   assert.equal(yearByYear[i].id,regular[i].id,'Year-by-year IDs changed');
-  assert.equal(recentYears[i].id,regular[i].id,'Recent-years collection ID changed');
-  assert.deepEqual(ids(recentYears[i]).sort(),ids(regular[i]).sort(),
-    'Recent-years import dropped or duplicated a period');
-  assert(recentYears[i].folders.every(f=>f.sources.length>0&&f.sources.length<=12),
-    'Recent-years archive triggers more than 12 catalog loads per folder');
+  assert.equal(recentYears[i].id,regular[i].id,'Unified collection ID changed');
+  assert.deepEqual(recentYears[i].folders.map(f=>f.id),regular[i].folders.map(f=>f.id),
+    'Unified import must NOT create extra year folders or change genre grid');
   const present = new Date();
   const parts = new Intl.DateTimeFormat('en-GB',{
     timeZone:'Europe/Brussels',year:'numeric',month:'2-digit'
   }).formatToParts(present);
   const y = Number(parts.find(p=>p.type==='year').value);
   const m = Number(parts.find(p=>p.type==='month').value);
+  const currentMonth = `${y}-${String(m).padStart(2,'0')}`;
   const previousMonth = new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7);
   const recentOrder = ['nextweek','tomorrow','today','yesterday','lastweek',previousMonth];
-  for (const genre of regular[i].folders) {
-    const live = recentYears[i].folders.find(f=>f.id===genre.id);
-    assert(live,'Original genre folder missing from recent-years import: '+genre.id);
-    assert.deepEqual(live.sources.map(s=>s.catalogId.split('-').slice(-2).join('-')===previousMonth
-      ? previousMonth
-      : s.catalogId.split('-').at(-1)),recentOrder,
-      'Recent-years folder must expose six recent sources in descending order');
-    const group = recentYears[i].folders.filter(f=>f.id===genre.id||f.id.startsWith(genre.id+'-year-')||
-      f.id.startsWith(genre.id+'-heritage-'));
-    for(const f of group) assert(f.coverImageUrl===genre.coverImageUrl&&
-      f.heroBackdropUrl===genre.heroBackdropUrl,'Approved genre artwork changed: '+f.id);
+  const catalogPeriod = id => {
+    const match=String(id).match(/-(annual-\d{4}|\d{4}-\d{2}|\d{4}|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated)$/);
+    assert(match,'unknown calendar source '+id);
+    return match[1];
+  };
+  for (let j=0;j<regular[i].folders.length;j++) {
+    const original=regular[i].folders[j], unified=recentYears[i].folders[j];
+    const sourcePeriods=unified.sources.map(s=>catalogPeriod(s.catalogId));
+    assert.deepEqual(sourcePeriods.slice(0,6),recentOrder,
+      'Unified folder must retain six recent periods and previous month');
+    const annual=sourcePeriods.filter(p=>p.startsWith('annual-'));
+    assert.deepEqual(annual,[...annual].sort().reverse(),'annual catalogs not descending');
+    const originalMonths=original.sources.map(s=>catalogPeriod(s.catalogId))
+      .filter(p=>/^\d{4}-\d{2}$/.test(p));
+    const oldMonths=originalMonths.filter(p=>p!==previousMonth);
+    const expectedYears=[...new Set(oldMonths.map(p=>p.slice(0,4)))].map(y=>'annual-'+y);
+    assert.deepEqual(annual,expectedYears,
+      'a year is missing or duplicated in the unified genre');
+    const originalHeritage=original.sources.map(s=>catalogPeriod(s.catalogId)).filter(p=>
+      /^\d{4}$/.test(p)||['before1900','undated'].includes(p));
+    assert.deepEqual(sourcePeriods.filter(p=>/^\d{4}$/.test(p)||['before1900','undated'].includes(p)),
+      originalHeritage,'Western historical years disappeared');
+    assert.equal(unified.coverImageUrl,original.coverImageUrl,'Approved cover changed');
+    assert.equal(unified.heroBackdropUrl,original.heroBackdropUrl,'Approved backdrop changed');
+    assert.equal(unified.tileShape,original.tileShape,'Original genre card shape changed');
+    assert.equal(unified.sources.length,6+annual.length+originalHeritage.length,
+      'Unified source count unexpected');
   }
 
   assert.deepEqual(ids(yearByYear[i]).sort(),ids(regular[i]).sort(),
@@ -107,8 +122,9 @@ const summary={ok:true,eligible:status.eligible,collections:regular.length,
   periodRefs:regular.reduce((s,c)=>s+ids(c).length,0),
   fastFolders:fast.map(c=>c.folders.length),
   yearByYearFolders:yearByYear.map(c=>c.folders.length),
+  unifiedFolders:recentYears.map(c=>c.folders.length),
   recentYearsFolders:recentYears.map(c=>c.folders.length),
-  maxRecentYearsSourceLoad:Math.max(...recentYears.flatMap(c=>c.folders.map(f=>f.sources.length))),
+  maxUnifiedGenreSources:Math.max(...recentYears.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxYearByYearSourceLoad:Math.max(...yearByYear.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxSourcesPerFolder:Math.max(...fast.flatMap(c=>c.folders.map(f=>f.sources.length))),
   sampleMovies:native.metas.length,directPosters:direct,sha:process.env.GITHUB_SHA||null};
