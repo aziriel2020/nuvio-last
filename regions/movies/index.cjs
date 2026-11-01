@@ -5,7 +5,7 @@ const { withHeroTitles } = require('../../runtime/collection-titles.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
-const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowFor, displayDateForPremiere, WESTERN_GENRE } = require('./src/model.cjs');
+const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowForMovie, displayDateForPremiere, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const catalogPolicy = require('../series/src/catalog-policy.cjs');
 const art = require('./src/artwork.cjs');
@@ -39,7 +39,7 @@ function officialWorldMeta(p, row = null) {
 }
 function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) {
   if (skip !== 0 || !['all', 'streaming'].includes(descriptor.view)) return metas;
-  const window = catalogWindowFor(descriptor.period, descriptor.genre, now);
+  const window = catalogWindowForMovie(descriptor.period, descriptor.genre, now);
   if (!window || window.undated) return metas;
   const nowMs = +new Date(now);
   const normalizedSearch = String(search || '').trim().toLocaleLowerCase('fr');
@@ -131,16 +131,38 @@ function reader() {
   }
   return cachedStore;
 }
+// Calendar-year catalogues are only for the opt-in compact genre import.
+// Unlike the older year-by-year layout, they stay *inside* each original genre.
+function recentCalendarMonths(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit'
+  }).formatToParts(now);
+  const year = Number(parts.find(p => p.type === 'year').value);
+  const month = Number(parts.find(p => p.type === 'month').value);
+  const current = `${year}-${String(month).padStart(2, '0')}`;
+  const previous = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7);
+  return { current, previous };
+}
+function annualPeriods(now, genre) {
+  const { previous } = recentCalendarMonths(now);
+  return [...new Set(periods(now, genre).filter(p =>
+    /^\d{4}-\d{2}$/.test(p.key) && p.key < previous
+  ).map(p => p.key.slice(0,4)))].map(year => ({
+    key: 'annual-' + year, name: year
+  }));
+}
 function buildManifest(origin, now = new Date()) {
   const dates = periods(now), westernDates = periods(now, WESTERN_GENRE);
   return {
     id: ADDON_ID, version: VERSION, name: `Nuvio Films Monde · ${VERSION}`, language: 'fr', types: ['movie'],
     description: 'Films de fiction de tous pays : grandes plateformes streaming, grandes boutiques VOD et cinéma France. Classés par première sortie mondiale ; les rééditions et ressorties ne changent pas leur date. Depuis 2018 (Western : historique complet). Documentaires uniquement dans leur rubrique. Stand-up uniquement dans sa rubrique ; spectacles et émissions exclus des films. Animation et anime exclus. Disponibilités JustWatch via TMDB.',
     resources: [{ name: 'catalog', types: ['movie'] }, { name: 'meta', types: ['movie'], idPrefixes: ['tt', 'tmdb:movie:'] }],
-    catalogs: VIEWS.flatMap((view) => VISIBLE_GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
-      id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
-      pageSize: WORLD_PAGE_SIZE, extraSupported: ['skip', 'search'], extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
-    })))),
+    catalogs: VIEWS.flatMap((view) => VISIBLE_GENRES.flatMap((genre) =>
+      [...(genre.id === WESTERN_GENRE ? westernDates : dates), ...annualPeriods(now, genre.id)].map((period) => ({
+        id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
+        pageSize: WORLD_PAGE_SIZE, extraSupported: ['skip', 'search'],
+        extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
+      })))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
     background: `${origin}/backdrop.jpg?v=${art.REVISION}`, behaviorHints: { configurable: false, configurationRequired: false }
   };
@@ -292,65 +314,32 @@ function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
 
 
 /**
- * Opt-in Shield layout: exactly six recent periods per genre, followed by
- * descending calendar-year shelves. The previous calendar month is the
- * EXISTING monthly catalog ID, so every original period is kept once.
- * JSON imports are snapshots: the layout must be re-imported after a month
- * boundary to move the newly finished month into its yearly archive.
+ * Compact option: keep the ORIGINAL four collections and original genre
+ * folders/cards. Inside each genre retain live periods, the current and
+ * previous calendar months, then one annual catalog per older year.
+ * Original full JSON is NEVER modified, even on future date rollover.
  */
 function buildRecentYearsCollections(origin, now = new Date(), mode = 'shield') {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit'
-  }).formatToParts(now);
-  const year = Number(parts.find(part => part.type === 'year')?.value);
-  const month = Number(parts.find(part => part.type === 'month')?.value);
-  const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7);
-  // Most recent/future first. Preserve the native dynamic daily/weekly
-  // catalog IDs, then the original YYYY-MM source for the previous month.
-  const recentOrder = ['nextweek', 'tomorrow', 'today', 'yesterday', 'lastweek', previousMonth];
-  const recentKeys = new Set(recentOrder);
-
+  const { current, previous } = recentCalendarMonths(now);
+  const recentOrder = ['nextweek', 'tomorrow', 'today', 'yesterday', 'lastweek', current, previous];
   return buildCollections(origin, now, mode).map(collection => ({
     ...collection,
-    folders: collection.folders.flatMap(folder => {
+    folders: collection.folders.map(folder => {
       const byPeriod = new Map(folder.sources.map(source => [sourcePeriod(source), source]));
+      const exemplar = folder.sources[0];
+      const descriptor = parseCatalog(exemplar.catalogId);
       const recent = recentOrder.map(period => byPeriod.get(period)).filter(Boolean);
-      const monthByYear = new Map(), heritage = [], other = [];
-
-      for (const source of folder.sources) {
+      const annual = annualPeriods(now, descriptor.genre).map(({ key }) => ({
+        provider: 'addon', addonId: ADDON_ID, type: 'movie',
+        catalogId: catalogId(descriptor.view, descriptor.genre, key)
+      }));
+      // Western periods before 2015 are already grouped by individual year,
+      // so keep them untouched, as well as the before-1900/undated sources.
+      const heritage = folder.sources.filter(source => {
         const period = sourcePeriod(source);
-        if (recentKeys.has(period)) continue;
-        if (/^\d{4}-\d{2}$/.test(period)) {
-          const year = period.slice(0, 4);
-          if (!monthByYear.has(year)) monthByYear.set(year, []);
-          monthByYear.get(year).push(source);
-        } else if (/^\d{4}$/.test(period)) heritage.push(source);
-        else other.push(source);
-      }
-
-      const yearFolder = (sources, suffix, title) => ({
-        ...sourcesInFolder(folder, sources, folder.id + '-' + suffix, title, true),
-        titleLogoUrl: null
+        return /^\\d{4}$/.test(period) || ['before1900','undated'].includes(period);
       });
-      const result = [sourcesInFolder(folder, recent, folder.id, folder.title)];
-      // The original period sequence is already descending. Still sort keys
-      // explicitly to protect ordering if the upstream generator ever changes.
-      for (const year of [...monthByYear.keys()].sort((a, b) => Number(b) - Number(a))) {
-        result.push(yearFolder(monthByYear.get(year), 'year-' + year, folder.title + ' · ' + year));
-      }
-      // Western keeps its older year-only periods and pre-1900/undated sources.
-      for (let i = 0; i < heritage.length; i += 12) {
-        const group = heritage.slice(i, i + 12);
-        const first = sourcePeriod(group[0]), last = sourcePeriod(group.at(-1));
-        result.push(yearFolder(group, 'heritage-' + first + '-' + last,
-          folder.title + ' · ' + first + '–' + last));
-      }
-      if (other.length) result.push(yearFolder(other, 'heritage-special',
-        folder.title + ' · Archives historiques'));
-      if (result.some(part => part.sources.length > 12 || part.sources.length === 0)) {
-        throw Error('Oversized or empty Films Monde recent-years folder: ' + folder.id);
-      }
-      return result;
+      return sourcesInFolder(folder, [...recent, ...annual, ...heritage], folder.id, folder.title);
     })
   }));
 }
@@ -370,7 +359,8 @@ async function handler(req, res) {
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/manifest.json') return send(res, 200,
     cachedJsonPayload(origin, now, 'manifest', () => buildManifest(origin, now)));
-  if (url.pathname === '/nuvio-collections-recent-years.json' || url.pathname === '/nuvio-collections-recent-years-desktop.json')
+  if (['/nuvio-collections-recent-years.json', '/nuvio-collections-recent-years-desktop.json',
+    '/nuvio-collections-unified.json', '/nuvio-collections-unified-desktop.json'].includes(url.pathname))
     return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
       () => buildRecentYearsCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
   if (url.pathname === '/nuvio-collections-year-by-year.json' || url.pathname === '/nuvio-collections-year-by-year-desktop.json')
