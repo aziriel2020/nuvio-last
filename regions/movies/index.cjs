@@ -253,11 +253,11 @@ function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
         const period = sourcePeriod(source);
         if (dynamic.has(period) || (period.length === 7 && period.startsWith(currentYear + '-'))) {
           current.push(source);
-        } else if (/^\\d{4}-\\d{2}$/.test(period)) {
+        } else if (/^\d{4}-\d{2}$/.test(period)) {
           const year = period.slice(0, 4);
           if (!monthByYear.has(year)) monthByYear.set(year, []);
           monthByYear.get(year).push(source);
-        } else if (/^\\d{4}$/.test(period)) heritage.push(source);
+        } else if (/^\d{4}$/.test(period)) heritage.push(source);
         else other.push(source);
       }
       const result = [sourcesInFolder(folder, current, folder.id, folder.title)];
