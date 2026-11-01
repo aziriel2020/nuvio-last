@@ -233,6 +233,63 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
     return { ...collection, folders: [...currentFolders, ...archiveFolders] };
   });
 }
+// Optional Shield import for the full Films Monde history without the eager
+// 100+ parallel requests of a genre containing every monthly catalog.
+// The original approved genre cards / 2018-2030 period IDs are unchanged.
+// All years appear as *named genre/year folders* (no archive is concealed).
+// Each folder loads at most one calendar year (plus five live-day descriptors).
+// The original full and fast imports are kept intact and can be restored.
+function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
+  const dynamic = new Set(['today', 'tomorrow', 'yesterday', 'lastweek', 'nextweek']);
+  return buildCollections(origin, now, mode).map(collection => ({
+    ...collection,
+    folders: collection.folders.flatMap(folder => {
+      const current = [];
+      const monthByYear = new Map();
+      const heritage = [];
+      const other = [];
+      for (const source of folder.sources) {
+        const period = sourcePeriod(source);
+        if (dynamic.has(period)) {
+          current.push(source);
+        } else if (/^\d{4}-\d{2}$/.test(period)) {
+          const year = period.slice(0, 4);
+          if (!monthByYear.has(year)) monthByYear.set(year, []);
+          monthByYear.get(year).push(source);
+        } else if (/^\d{4}$/.test(period)) heritage.push(source);
+        else other.push(source);
+      }
+      // Only five dynamic periods are fetched from the main genre folder.
+      // Each calendar year, including the current year, is a clearly named
+      // shelf with up to 12 months, so no history is hidden or deleted.
+      const result = [sourcesInFolder(folder, current, folder.id, folder.title)];
+      const yearFolder = (sources, suffix, title) => ({
+        ...sourcesInFolder(folder, sources, folder.id + '-' + suffix, title, true),
+        // Archived years reuse approved genre artwork; title captions make
+        // their exact year instantly visible instead of hiding it in a folder.
+        titleLogoUrl: null
+      });
+      for (const [year, sources] of monthByYear) {
+        result.push(yearFolder(sources, 'year-' + year, folder.title + ' · ' + year));
+      }
+      // Western also has 115+ annual historical periods, grouped into
+      // small sequential ranges without deleting one catalog.
+      for (let i = 0; i < heritage.length; i += 12) {
+        const group = heritage.slice(i, i + 12);
+        const first = sourcePeriod(group[0]), last = sourcePeriod(group.at(-1));
+        result.push(yearFolder(group, 'heritage-' + first + '-' + last,
+          folder.title + ' · ' + first + '–' + last));
+      }
+      if (other.length) result.push(yearFolder(other, 'heritage-special',
+        folder.title + ' · Archives historiques'));
+      if (result.some(part => part.sources.length > 17 || part.sources.length === 0)) {
+        throw Error('Oversized or empty Films Monde historical folder: ' + folder.id);
+      }
+      return result;
+    })
+  }));
+}
+
 function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', cacheControl);
@@ -248,6 +305,9 @@ async function handler(req, res) {
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/manifest.json') return send(res, 200,
     cachedJsonPayload(origin, now, 'manifest', () => buildManifest(origin, now)));
+  if (url.pathname === '/nuvio-collections-year-by-year.json' || url.pathname === '/nuvio-collections-year-by-year-desktop.json')
+    return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
+      () => buildYearByYearCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
   if (url.pathname === '/nuvio-collections-fast.json' || url.pathname === '/nuvio-collections-fast-desktop.json')
     return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
       () => buildFastCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
@@ -316,4 +376,4 @@ async function handler(req, res) {
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, buildFastCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
+module.exports._internals = { buildManifest, buildCollections, buildFastCollections, buildYearByYearCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
