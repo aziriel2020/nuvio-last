@@ -469,6 +469,22 @@ test('streaming and VOD cards display a provider for that offer type', (t) => {
 });
 
 
+test('unified annual catalog retains this month, excludes last month, and Western undated remains queryable', (t) => {
+  const s = memory(t);
+  for (const [id, date] of [[9401,'2026-09-15'],[9402,'2026-10-20'],[9403,'2026-11-10']]) {
+    s.upsert(record(id, { release_date:date,genres:[{id:18}],release_dates:regional([3,date]) }));
+  }
+  const now = new Date('2026-11-15T12:00:00Z');
+  const annual = s.query({view:'cinema',genre:'18',period:'annual-2026',now,curated:true});
+  assert.deepEqual(annual.map(m=>m.name),['Film 9403','Film 9401']);
+  assert.deepEqual(s.query({view:'cinema',genre:'18',period:'2026-10',now,curated:true})
+    .map(m=>m.name),['Film 9402']);
+  assert.deepEqual(annual.map(m=>m.originalReleaseDate), ['2026-11-10','2026-09-15']);
+  s.upsert(record(9404,{ release_date:null,genres:[{id:37}],release_dates:{results:[]} }));
+  const undated = s.query({view:'streaming',genre:'37',period:'undated',now,curated:true});
+  assert.deepEqual(undated.map(m=>m.name),['Film 9404']);
+});
+
 test('2018 cutoff covers all four movie views while Western retains every historical period', (t) => {
   const s = memory(t);
   for (const [id, date] of [[801, '2017-12-31'], [802, '2018-01-01'], [803, '1890-01-01']]) {
