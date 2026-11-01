@@ -656,6 +656,9 @@ module.exports = async function handler(req, res) {
     const origin = originFromRequest(req);
     return sendJson(res, 200, {
       version: VERSION,
+      designPluginConfig: `${origin}/design-plugin/config.json`,
+      designPluginPosterPattern: designPlugin.posterPattern(origin),
+      designPluginNoApk: true,
       seriesAddonId: seriesHandler._internals.releaseForOrigin(`${origin}/series-v2`).id,
       seriesVersion: seriesHandler._internals.releaseForOrigin(`${origin}/series-v2`).version,
       seriesManifest: `${origin}/series-v2/manifest.json`,
