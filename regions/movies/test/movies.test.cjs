@@ -369,64 +369,66 @@ test('every import source has a named manifest catalog, with stable standalone i
   }
 });
 
-test('Films Monde single-genre calendar groups older months into annual catalogues through 2030', () => {
+test('Films Monde keeps ONE genre folder with six recent sources and annual catalogues until 2030', () => {
   const origin = 'https://example.test/movies';
-  const dates = [
+  for (const now of [
     new Date('2026-11-01T15:30:00Z'),
     new Date('2027-01-01T12:00:00Z'),
     new Date('2030-12-31T12:00:00Z'),
     new Date('2031-01-01T12:00:00Z')
-  ];
-  for (const now of dates) for (const mode of ['shield', 'desktop']) {
+  ]) for (const mode of ['shield', 'desktop']) {
     const originals = addon._internals.buildCollections(origin, now, mode);
     const compact = addon._internals.buildRecentYearsCollections(origin, now, mode);
-    const manifest = addon._internals.buildManifest(origin, now);
-    const manifestIds = new Set(manifest.catalogs.map(c => c.id));
+    const manifestIds = new Set(addon._internals.buildManifest(origin, now).catalogs.map(c => c.id));
     assert.equal(compact.length, originals.length);
-    const today = new Intl.DateTimeFormat('sv-SE', {timeZone:'Europe/Brussels',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+    const today = new Intl.DateTimeFormat('sv-SE', {
+      timeZone:'Europe/Brussels',year:'numeric',month:'2-digit',day:'2-digit'
+    }).format(now);
     const year = Number(today.slice(0,4)), month = Number(today.slice(5,7));
-    const current = today.slice(0,7);
     const previous = new Date(Date.UTC(year,month-2,1)).toISOString().slice(0,7);
     for (let i=0;i<originals.length;i++) {
       const before = originals[i], after = compact[i];
       assert.equal(after.id, before.id);
       assert.deepEqual(after.folders.map(f=>f.id), before.folders.map(f=>f.id),
-        'original genres must remain exactly one folder each, with original order');
+        'unchanged genre-grid layout, NO annual folders');
       for (let j=0;j<before.folders.length;j++) {
         const original = before.folders[j], folder = after.folders[j];
+        const desc = parseCatalog(folder.sources[0].catalogId);
         const sourceKeys = folder.sources.map(s=>parseCatalog(s.catalogId).period);
-        assert.equal(folder.title,original.title);
-        assert.equal(folder.coverImageUrl,original.coverImageUrl);
-        assert.equal(folder.heroBackdropUrl,original.heroBackdropUrl);
-        assert.equal(folder.tileShape, original.tileShape);
-        assert.equal(folder.hideTitle,original.hideTitle);
-        assert.deepEqual(sourceKeys.slice(0,7),
-          ['nextweek','tomorrow','today','yesterday','lastweek',current,previous]);
+        for(const key of ['title','coverImageUrl','heroBackdropUrl','tileShape','hideTitle'])
+          assert.deepEqual(folder[key], original[key], 'original approved genre visuals');
+        assert.deepEqual(sourceKeys.slice(0,6),
+          ['nextweek','tomorrow','today','yesterday','lastweek',previous]);
         assert.deepEqual(folder.catalogSources.map(s=>s.catalogId),
           folder.sources.map(s=>s.catalogId));
         for (const source of folder.sources) assert(manifestIds.has(source.catalogId),
-          'every optimized source must exist in manifest');
+          'every new annual catalogue must exist in the addon manifest');
         const annual = sourceKeys.filter(p=>p.startsWith('annual-'));
-        assert.deepEqual(annual,[...annual].sort().reverse());
+        assert.deepEqual(annual,[...annual].sort().reverse(),'years newest first');
         const originalMonthKeys = original.sources.map(s=>parseCatalog(s.catalogId).period)
-          .filter(p=>/^\\d{4}-\\d{2}$/.test(p)).sort();
-        const annualMonthKeys = [];
+          .filter(p=>/^\d{4}-\d{2}$/.test(p)).sort();
+        const coveredMonths = [previous];
         for (const annualPeriod of annual) {
-          const bounds = catalogWindowForMovie(annualPeriod,
-            parseCatalog(folder.sources[0].catalogId).genre,now);
-          assert(bounds && bounds.end < previous,'annual period cannot overlap current or previous month');
+          const bounds = catalogWindowForMovie(annualPeriod,desc.genre,now);
+          assert(bounds && bounds.start && bounds.end);
           for (let key=bounds.start.slice(0,7);key<=bounds.end.slice(0,7);) {
-            annualMonthKeys.push(key);
-            const [y,m] = key.split('-').map(Number);
+            if (key !== previous) coveredMonths.push(key);
+            const [y,m]=key.split('-').map(Number);
             key=new Date(Date.UTC(y,m,1)).toISOString().slice(0,7);
           }
+          if (bounds.excludeStart) {
+            assert.equal(bounds.excludeStart.slice(0,7), previous);
+            assert.equal(bounds.excludeEnd.slice(0,7), previous);
+          }
         }
-        assert.deepEqual([...annualMonthKeys,current,previous].sort(),originalMonthKeys,
-          'no original monthly period dropped or double counted');
-        const originalOther = original.sources.map(s=>parseCatalog(s.catalogId).period)
-          .filter(p=>/^\\d{4}$/.test(p)||['before1900','undated'].includes(p));
-        assert.deepEqual(sourceKeys.filter(p=>/^\\d{4}$/.test(p)||['before1900','undated'].includes(p)),originalOther,
-          'Western historical yearly periods must remain accessible');
+        assert.deepEqual(coveredMonths.sort(),originalMonthKeys,
+          'every historical, current and previous month must be covered exactly once');
+        assert(annual.includes('annual-'+year),'current year must remain represented');
+        const originalOther=original.sources.map(s=>parseCatalog(s.catalogId).period)
+          .filter(p=>/^\d{4}$/.test(p)||['before1900','undated'].includes(p));
+        assert.deepEqual(sourceKeys.filter(p=>/^\d{4}$/.test(p)||
+          ['before1900','undated'].includes(p)),originalOther,
+          'Western older years retained');
       }
     }
   }
