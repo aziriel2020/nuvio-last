@@ -83,7 +83,7 @@ function fromTmdb(data) {
 function candidateRecord(data) { return fromTmdb({ ...data, genres: (data.genre_ids || []).map((id) => ({ id })) }); }
 function catalogId(view, genre, period) { return `movies-fr-${view}-${genre}-${period}`; }
 function parseCatalog(id) {
-  const m = String(id).match(/^movies-fr-(all|streaming|vod|cinema)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|last7|last30|next7|before1900|undated|\d{4}(?:-\d{2})?)$/);
+  const m = String(id).match(/^movies-fr-(all|streaming|vod|cinema)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|\d{4}(?:-\d{2})?)$/);
   return m && GENRES.some((g) => g.id === m[2]) ? { view: m[1], genre: m[2], period: m[3] } : null;
 }
 module.exports = { ADDON_ID, VERSION, GENRES, VIEWS, fromTmdb, candidateRecord, displayDateForPremiere, catalogId, parseCatalog, isoDate, localDay, shiftDay, windowFor, catalogWindowFor, WESTERN_GENRE, periods };
