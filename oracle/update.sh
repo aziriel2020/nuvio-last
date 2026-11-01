@@ -173,6 +173,9 @@ if ! curl -fsS --max-time 5 http://127.0.0.1:3000/_oracle/health >/dev/null; the
     echo "Rolling back to $(basename "$PREVIOUS")" >&2
     systemctl stop nuvio-series-sync.service || true
     systemctl stop nuvio-movies-sync.service || true
+    systemctl stop nuvio-movies-warm.timer || true
+    systemctl stop nuvio-movies-warm.service || true
+    systemctl disable nuvio-movies-warm.timer || true
     ln -sfn "$PREVIOUS" "$BASE/current.rollback"
     mv -Tf "$BASE/current.rollback" "$CURRENT"
     systemctl restart nuvio
