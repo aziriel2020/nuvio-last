@@ -3,6 +3,8 @@ package com.nuvio.tv.ui.components
 import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -128,10 +129,12 @@ private fun dateLabel(released: String?): String? = runCatching {
 
 @Composable
 private fun FranceDesignBadge(label: String, accent: Color, solid: Boolean) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = if (solid) accent else Color(0xDD020617),
-        border = if (solid) null else androidx.compose.foundation.BorderStroke(1.dp, accent)
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(if (solid) accent else Color(0xDD020617))
+            .then(if (solid) Modifier else Modifier.border(1.dp, accent, shape))
     ) {
         Text(
             text = label,
