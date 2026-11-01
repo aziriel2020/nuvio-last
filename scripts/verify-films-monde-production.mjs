@@ -24,10 +24,23 @@ assert(status.eligible>1000,`Too few indexed films: ${status.eligible}`);
 assert(status.datePolicy==='first-release-worldwide','World premiere date policy changed');
 const {data:regular}=await get('/movies/nuvio-collections.json');
 const {data:fast}=await get('/movies/nuvio-collections-fast.json');
+const {data:yearByYear}=await get('/movies/nuvio-collections-year-by-year.json');
 assert.equal(regular.length,4);
 assert.equal(fast.length,4);
+assert.equal(yearByYear.length,4);
 for(let i=0;i<regular.length;i++){
   assert.equal(regular[i].id,fast[i].id,'collection ID changed');
+  assert.equal(yearByYear[i].id,regular[i].id,'Year-by-year IDs changed');
+  assert.deepEqual(ids(yearByYear[i]).sort(),ids(regular[i]).sort(),
+    'Year-by-year import dropped or duplicated a period');
+  assert(yearByYear[i].folders.every(f => f.sources.length>0&&f.sources.length<=17),
+    'Too many eagerly loaded period sources in year-by-year import');
+  for(const f of yearByYear[i].folders) {
+    const sourceFolder=regular[i].folders.find(g=>f.id===g.id||
+      f.id.startsWith(g.id+'-year-')||f.id.startsWith(g.id+'-heritage-'));
+    assert(sourceFolder && f.coverImageUrl===sourceFolder.coverImageUrl&&
+      f.heroBackdropUrl===sourceFolder.heroBackdropUrl,'Approved genre artwork changed: '+f.id);
+  }
   assert.deepEqual(regular[i].folders.map(f=>f.id),
     fast[i].folders.slice(0,regular[i].folders.length).map(f=>f.id),
     'original genre IDs must lead fast collection');
@@ -65,6 +78,8 @@ assert(direct>=Math.min(3,native.metas.length),'Native Bridge still sends Oracle
 const summary={ok:true,eligible:status.eligible,collections:regular.length,
   periodRefs:regular.reduce((s,c)=>s+ids(c).length,0),
   fastFolders:fast.map(c=>c.folders.length),
+  yearByYearFolders:yearByYear.map(c=>c.folders.length),
+  maxYearByYearSourceLoad:Math.max(...yearByYear.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxSourcesPerFolder:Math.max(...fast.flatMap(c=>c.folders.map(f=>f.sources.length))),
   sampleMovies:native.metas.length,directPosters:direct,sha:process.env.GITHUB_SHA||null};
 console.log('FILMS_MONDE_PRODUCTION_GATE='+JSON.stringify(summary));
