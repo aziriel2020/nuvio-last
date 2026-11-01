@@ -158,10 +158,19 @@ class MovieStore extends SeriesStore {
     // calculated afresh on every request. Only proven new-production
     // platform premieres use their streaming date instead of festival date.
     const eventDate = this.calendarDisplaySql('s',view);
-    if (window.undated) where.push(`${eventDate} IS NULL`);
-    else if (window.start) { where.push(`${eventDate} BETWEEN ? AND ?`); args.push(window.start, window.end); }
-    if (window.excludeStart) { where.push(`NOT (${eventDate} BETWEEN ? AND ?)`); args.push(window.excludeStart, window.excludeEnd); }
-    else { where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`); args.push(window.end); }
+    if (window.undated) {
+      where.push(`${eventDate} IS NULL`);
+    } else if (window.start) {
+      where.push(`${eventDate} BETWEEN ? AND ?`);
+      args.push(window.start, window.end);
+      if (window.excludeStart) {
+        where.push(`NOT (${eventDate} BETWEEN ? AND ?)`);
+        args.push(window.excludeStart, window.excludeEnd);
+      }
+    } else {
+      where.push(`(${eventDate}<=? OR ${eventDate} IS NULL)`);
+      args.push(window.end);
+    }
     // Ensure a verified world premiere cannot be pushed off the first page by
     // hundreds of later releases. Sorting happens before LIMIT/OFFSET so pages
     // remain mutually exclusive.
