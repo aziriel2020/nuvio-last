@@ -111,6 +111,11 @@ function windowFor(period, now = new Date(), timeZone = 'Europe/Brussels') {
   const monday = shiftDay(today, -((weekday + 6) % 7));
   if (period === 'all') return { start: null, end: today };
   if (period === 'undated') return { undated: true };
+  // Rolling, self-updating windows for the opt-in Nuvio Pulse collections.
+  // Never add them to the legacy monthly import: its IDs/visuals stay intact.
+  if (period === 'last7') return { start: shiftDay(today, -6), end: today };
+  if (period === 'last30') return { start: shiftDay(today, -29), end: today };
+  if (period === 'next7') return { start: shiftDay(today, 1), end: shiftDay(today, 7) };
   if (period === 'before1900') return { start: '0001-01-01', end: '1899-12-31' };
   if (period === 'today') return { start: today, end: today };
   if (period === 'tomorrow') return { start: shiftDay(today, 1), end: shiftDay(today, 1) };
@@ -166,7 +171,7 @@ function periods(now = new Date(), genre = 'all') {
 
 function catalogId(mode, genre, period) { return `series-fr-${mode}-${genre}-${period}`; }
 function parseCatalog(id) {
-  const match = String(id).match(/^series-(?:world|fr)-(premieres|seasons)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|\d{4}(?:-\d{2})?)$/);
+  const match = String(id).match(/^series-(?:world|fr)-(premieres|seasons)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|last7|last30|next7|before1900|undated|\d{4}(?:-\d{2})?)$/);
   return match && GENRES.some((g) => g.id === match[2]) ? { mode: match[1], genre: match[2], period: match[3] } : null;
 }
 
