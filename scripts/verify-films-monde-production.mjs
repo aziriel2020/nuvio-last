@@ -109,8 +109,15 @@ for(const year of [2025,2024]) {
     'Films Monde annual catalog missing Series Monde-style cache instrumentation');
   const {data:repeated,response:repeatResponse}=await get(path+'.json');
   assert.deepEqual(repeated.metas,first.metas,'cached annual page mutated between requests');
-  assert.equal(repeatResponse.headers.get('x-nuvio-catalog-cache'),'HIT',
-    'annual page must be reused from Oracle instead of repeating expensive SQL');
+  // Oracle first checks its shared disk/hot cache, then the movies engine's
+  // in-memory catalog cache. A disk hit legitimately replays the stored
+  // X-Nuvio-Catalog-Cache: MISS header from the original response, because
+  // the handler has not been executed for this second request.
+  const engineHit=repeatResponse.headers.get('x-nuvio-catalog-cache')==='HIT';
+  const diskHit=repeatResponse.headers.get('x-nuvio-disk-cache')==='HIT'
+    || repeatResponse.headers.get('x-nuvio-hot-cache')==='HIT';
+  assert(engineHit||diskHit,
+    'annual page must hit either Oracle disk cache or Films Monde in-memory cache');
   assert(first.metas?.length>0,`Annual catalog ${year} is empty`);
   assert(months.length>=6,`Annual catalog ${year} shows only ${months.length} months on its initial page: ${months.join(', ')}`);
   const {data:second}=await get(path+'/skip=24.json');
@@ -120,7 +127,7 @@ for(const year of [2025,2024]) {
   assert(all.every(meta=>String(meta.released||'').startsWith(String(year))),
     `Annual ${year} contains releases from other years`);
   annualCoverage.push({year,months:months.length,firstPage:first.metas.length,
-    secondPage:second.metas?.length||0,cache:repeatResponse.headers.get('x-nuvio-catalog-cache'),ms:Date.now()-start});
+    secondPage:second.metas?.length||0,cache:diskHit?'ORACLE-DISK-HIT':'MOVIES-MEMORY-HIT',ms:Date.now()-start});
 }
 const {data:manifest}=await get('/movies/native-bridge/manifest.json');
 assert(manifest.id==='com.nuvio.movies.france.world.v1','addon identity changed');
