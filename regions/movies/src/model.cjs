@@ -90,14 +90,20 @@ function catalogWindowForMovie(period, genre = 'all', now = new Date()) {
   if (!match) return catalogWindowFor(period, genre, now);
   const year = Number(match[1]);
   const today = localDay(now);
-  const thisYear = Number(today.slice(0, 4));
-  const month = Number(today.slice(5, 7));
+  const thisYear = Number(today.slice(0,4));
+  const thisMonth = Number(today.slice(5,7));
   if (year < (genre === WESTERN_GENRE ? 2015 : 2018) || year > thisYear) return null;
-  const beforePreviousMonth = new Date(Date.UTC(thisYear, month - 2, 1) - 86400000)
-    .toISOString().slice(0, 10);
   const start = `${year}-01-01`;
-  const end = `${year}-12-31` < beforePreviousMonth ? `${year}-12-31` : beforePreviousMonth;
-  return end < start ? null : { start, end };
+  const end = year === thisYear ? today : `${year}-12-31`;
+  // There is only one month that remains a standalone month source:
+  // the previous calendar month. Exclude it even across January rollover.
+  const previous = new Date(Date.UTC(thisYear,thisMonth-2,1)).toISOString().slice(0,7);
+  const excluded = Number(previous.slice(0,4)) === year
+    ? {excludeStart:previous + '-01',excludeEnd:new Date(Date.UTC(
+        Number(previous.slice(0,4)), Number(previous.slice(5,7)), 1) - 86400000)
+      .toISOString().slice(0,10)}
+    : {};
+  return {start,end,...excluded};
 }
 function parseCatalog(id) {
   const m = String(id).match(/^movies-fr-(all|streaming|vod|cinema)-([a-z0-9]+)-(all|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated|annual-\d{4}|\d{4}(?:-\d{2})?)$/);
