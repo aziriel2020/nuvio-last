@@ -41,6 +41,9 @@ export function edgeTtl(input) {
   const path = url.pathname;
 
   if (path === '/collection-title.svg') return GENERATED_ART_TTL;
+  // Original France design, resolved once by ID then cached as an image.
+  if (path === '/design-plugin/poster.jpg') return GENERATED_ART_TTL;
+  if (path === '/design-plugin/config.json') return 0;
 
   if (/^\/images\/original\.(?:jpg|png)$/.test(path)) return GENERATED_ART_TTL;
 
@@ -659,7 +662,7 @@ const artworkInFlight = new Map();
 const MAX_INFLIGHT_ARTWORK = 192;
 
 const COALESCED_ARTWORK_NAMES = new Set([
-  'calendar-card.jpg', 'calendar-card.svg', 'desktop-content-card.jpg',
+  'poster.jpg', 'calendar-card.jpg', 'calendar-card.svg', 'desktop-content-card.jpg',
   'shield-content-card.jpg', 'genre-folder-art.svg',
   'platform-category-card.svg', 'platform-backdrop.svg',
   'original.jpg', 'original.png'
