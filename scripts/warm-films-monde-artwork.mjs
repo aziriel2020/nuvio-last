@@ -68,7 +68,7 @@ export async function run({now=new Date(),iteration=Math.floor(Date.now()/180000
   const deadline = Date.now() + TIME_BUDGET_MS;
   const art = new Set(), failures = [],catalogTimes = [];
   for (const id of catalogIds(now,iteration)) {
-    if (Date.now() >= deadline || art.size >= MAX_JPEGS) break;
+    if (Date.now() >= deadline) break; // Finish catalog cache prewarming even if the JPEG quota is full.
     const start=performance.now();
     try {
       const json = await fetchJson(LOCAL + '/movies/catalog/movie/' + id + '.json',9000);
