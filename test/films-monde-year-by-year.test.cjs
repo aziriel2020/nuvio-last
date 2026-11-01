@@ -32,7 +32,7 @@ test('year-by-year import preserves every original catalog period, exact approve
   assert.equal(next.backdropImageUrl,orig.backdropImageUrl);
   assert.deepEqual(sourceIds(next),sourceIds(orig),'Never delete or duplicate a 2018+ period');
   assert(next.folders.length>orig.folders.length,'Must visibly expose historical years');
-  assert(next.folders.every(f=>f.sources.length>0&&f.sources.length<=17),'At most 17 eager sources per folder');
+  assert(next.folders.every(f=>f.sources.length>0&&f.sources.length<=12),'At most 12 eager sources per folder');
   const ids=new Set(next.folders.flatMap(f=>f.sources.map(x=>x.catalogId)));
   assert.equal(ids.size,sourceIds(next).length,'No duplicated period');
   for(const f of next.folders){
@@ -46,8 +46,14 @@ test('year-by-year import preserves every original catalog period, exact approve
   }
   const actionCurrent=next.folders.find(f=>f.id==='movies-world-'+orig.id.split('-').at(-1)+'-28');
   assert(actionCurrent,'Original genre id must remain first-class');
-  assert(actionCurrent.sources.some(x=>x.catalogId.endsWith('-today')));
-  assert(actionCurrent.sources.some(x=>x.catalogId.endsWith('-2026-11')));
+  assert.deepEqual(actionCurrent.sources.map(x=>x.catalogId.split('-').at(-1)).sort(),
+    ['today','tomorrow','yesterday','lastweek','nextweek'].sort(),
+    'Main genre loads only the five rolling daily/weekly periods');
+  const currentYear=next.folders.find(f=>f.title==='Action · 2026');
+  assert(currentYear,'Current year gets its own visible named shelf');
+  assert(currentYear.sources.some(x=>x.catalogId.endsWith('-2026-11')));
+  assert(currentYear.sources.some(x=>x.catalogId.endsWith('-2026-01')));
+  assert(currentYear.sources.length===11,'Current year must include every month up to November');
   const older=next.folders.find(f=>f.title==='Action · 2025');
   assert(older,'2025 visible as a named Action year, not hidden by a generic archives folder');
   assert(older.sources.some(x=>x.catalogId.endsWith('-2025-12')));
@@ -86,7 +92,7 @@ test('year-by-year import is additional and retains full and fast existing route
  assert.deepEqual(y.map(c=>c.id),f.map(c=>c.id));
  assert.deepEqual(y.map(c=>sourceIds(c)),f.map(c=>sourceIds(c)));
  assert.deepEqual(y.map(c=>sourceIds(c)),d.map(c=>sourceIds(c)));
- assert(y.every(c=>c.folders.every(folder=>folder.sources.length<=17)));
+ assert(y.every(c=>c.folders.every(folder=>folder.sources.length<=12)));
  assert(JSON.parse(fast.body)[0].folders.length>f[0].folders.length);
  const manifestObj=JSON.parse(manifest.body);
  for(const source of y[0].folders.flatMap(x=>x.sources)){
