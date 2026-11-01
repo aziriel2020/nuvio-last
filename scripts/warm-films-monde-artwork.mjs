@@ -3,6 +3,7 @@
 // This requests EXISTING original catalog IDs and EXISTING approved image
 // URLs; never touches collections, images, movie dates, layouts, apps or APKs.
 import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const LOCAL = 'http://127.0.0.1:3000';
@@ -105,6 +106,6 @@ export async function run({now=new Date(),iteration=Math.floor(Date.now()/180000
   // Missing upstream photos never block boot, upgrades, or catalog indexing.
   return result;
 }
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   run().catch(e=>{console.error('Oracle artwork warm failed:',e.message);process.exitCode=1;});
 }
