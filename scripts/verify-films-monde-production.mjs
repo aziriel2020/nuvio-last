@@ -33,8 +33,8 @@ for(let i=0;i<regular.length;i++){
   assert.equal(yearByYear[i].id,regular[i].id,'Year-by-year IDs changed');
   assert.deepEqual(ids(yearByYear[i]).sort(),ids(regular[i]).sort(),
     'Year-by-year import dropped or duplicated a period');
-  assert(yearByYear[i].folders.every(f => f.sources.length>0&&f.sources.length<=17),
-    'Too many eagerly loaded period sources in year-by-year import');
+  assert(yearByYear[i].folders.every(f => f.sources.length>0&&f.sources.length<=12),
+    'More than 12 eager period requests in a year-by-year folder');
   for(const f of yearByYear[i].folders) {
     const sourceFolder=regular[i].folders.find(g=>f.id===g.id||
       f.id.startsWith(g.id+'-year-')||f.id.startsWith(g.id+'-heritage-'));
