@@ -97,6 +97,25 @@ for(let i=0;i<regular.length;i++){
       'approved genre cover changed');
   }
 }
+// Live regression: annual catalogs must not display only December despite
+// containing a whole year's eligible movies. Test Nuvio's actual 24-item page.
+const annualCoverage=[];
+for(const year of [2025,2024]) {
+  const start=Date.now();
+  const path=`/movies/catalog/movie/movies-fr-all-all-annual-${year}`;
+  const {data:first}=await get(path+'.json');
+  const months=[...new Set((first.metas||[]).map(meta=>String(meta.released||'').slice(0,7)))];
+  assert(first.metas?.length>0,`Annual catalog ${year} is empty`);
+  assert(months.length>=6,`Annual catalog ${year} shows only ${months.length} months on its initial page: ${months.join(', ')}`);
+  const {data:second}=await get(path+'/skip=24.json');
+  const all=[...first.metas,...(second.metas||[])];
+  assert.equal(new Set(all.map(meta=>meta.id)).size,all.length,
+    `Annual ${year} loses pagination uniqueness`);
+  assert(all.every(meta=>String(meta.released||'').startsWith(String(year))),
+    `Annual ${year} contains releases from other years`);
+  annualCoverage.push({year,months:months.length,firstPage:first.metas.length,
+    secondPage:second.metas?.length||0,ms:Date.now()-start});
+}
 const {data:manifest}=await get('/movies/native-bridge/manifest.json');
 assert(manifest.id==='com.nuvio.movies.france.world.v1','addon identity changed');
 for(const source of fast[0].folders[0].sources){
@@ -127,5 +146,5 @@ const summary={ok:true,eligible:status.eligible,collections:regular.length,
   maxUnifiedGenreSources:Math.max(...recentYears.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxYearByYearSourceLoad:Math.max(...yearByYear.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxSourcesPerFolder:Math.max(...fast.flatMap(c=>c.folders.map(f=>f.sources.length))),
-  sampleMovies:native.metas.length,directPosters:direct,sha:process.env.GITHUB_SHA||null};
+  annualCoverage,sampleMovies:native.metas.length,directPosters:direct,sha:process.env.GITHUB_SHA||null};
 console.log('FILMS_MONDE_PRODUCTION_GATE='+JSON.stringify(summary));
