@@ -2,6 +2,15 @@
 
 const { decorateCatalogMetas } = require('../../fr/api/index.js')._internals;
 const { fastContentCards } = require('../../fr/api/fast-content-cards.cjs');
+// Database can retain TMDB logo metadata for future optional use, but the
+// Films Monde public metadata endpoint must not make native clients draw it.
+function withoutFilmTitleLogo(meta) {
+  const clean = { ...meta };
+  delete clean.logo;
+  delete clean.titleLogoUrl;
+  return clean;
+}
+
 function decorateMovieMetas(origin, metas, descriptor) {
   const franceOrigin = new URL('../fr', `${origin}/`).href;
   const period = /^\d{4}-\d{2}$/.test(descriptor.period) ? `archive-${descriptor.period}` : descriptor.period;
@@ -26,4 +35,4 @@ function decorateMovieMetas(origin, metas, descriptor) {
     return fast;
   });
 }
-module.exports = { decorateMovieMetas };
+module.exports = { decorateMovieMetas, withoutFilmTitleLogo };
