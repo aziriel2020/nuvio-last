@@ -290,6 +290,71 @@ function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
   }));
 }
 
+
+/**
+ * Opt-in Shield layout: exactly six recent periods per genre, followed by
+ * descending calendar-year shelves. The previous calendar month is the
+ * EXISTING monthly catalog ID, so every original period is kept once.
+ * JSON imports are snapshots: the layout must be re-imported after a month
+ * boundary to move the newly finished month into its yearly archive.
+ */
+function buildRecentYearsCollections(origin, now = new Date(), mode = 'shield') {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit'
+  }).formatToParts(now);
+  const year = Number(parts.find(part => part.type === 'year')?.value);
+  const month = Number(parts.find(part => part.type === 'month')?.value);
+  const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7);
+  // Most recent/future first. Preserve the native dynamic daily/weekly
+  // catalog IDs, then the original YYYY-MM source for the previous month.
+  const recentOrder = ['nextweek', 'tomorrow', 'today', 'yesterday', 'lastweek', previousMonth];
+  const recentKeys = new Set(recentOrder);
+
+  return buildCollections(origin, now, mode).map(collection => ({
+    ...collection,
+    folders: collection.folders.flatMap(folder => {
+      const byPeriod = new Map(folder.sources.map(source => [sourcePeriod(source), source]));
+      const recent = recentOrder.map(period => byPeriod.get(period)).filter(Boolean);
+      const monthByYear = new Map(), heritage = [], other = [];
+
+      for (const source of folder.sources) {
+        const period = sourcePeriod(source);
+        if (recentKeys.has(period)) continue;
+        if (/^\d{4}-\d{2}$/.test(period)) {
+          const year = period.slice(0, 4);
+          if (!monthByYear.has(year)) monthByYear.set(year, []);
+          monthByYear.get(year).push(source);
+        } else if (/^\d{4}$/.test(period)) heritage.push(source);
+        else other.push(source);
+      }
+
+      const yearFolder = (sources, suffix, title) => ({
+        ...sourcesInFolder(folder, sources, folder.id + '-' + suffix, title, true),
+        titleLogoUrl: null
+      });
+      const result = [sourcesInFolder(folder, recent, folder.id, folder.title)];
+      // The original period sequence is already descending. Still sort keys
+      // explicitly to protect ordering if the upstream generator ever changes.
+      for (const year of [...monthByYear.keys()].sort((a, b) => Number(b) - Number(a))) {
+        result.push(yearFolder(monthByYear.get(year), 'year-' + year, folder.title + ' · ' + year));
+      }
+      // Western keeps its older year-only periods and pre-1900/undated sources.
+      for (let i = 0; i < heritage.length; i += 12) {
+        const group = heritage.slice(i, i + 12);
+        const first = sourcePeriod(group[0]), last = sourcePeriod(group.at(-1));
+        result.push(yearFolder(group, 'heritage-' + first + '-' + last,
+          folder.title + ' · ' + first + '–' + last));
+      }
+      if (other.length) result.push(yearFolder(other, 'heritage-special',
+        folder.title + ' · Archives historiques'));
+      if (result.some(part => part.sources.length > 12 || part.sources.length === 0)) {
+        throw Error('Oversized or empty Films Monde recent-years folder: ' + folder.id);
+      }
+      return result;
+    })
+  }));
+}
+
 function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', cacheControl);
@@ -305,6 +370,9 @@ async function handler(req, res) {
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
   if (url.pathname === '/manifest.json') return send(res, 200,
     cachedJsonPayload(origin, now, 'manifest', () => buildManifest(origin, now)));
+  if (url.pathname === '/nuvio-collections-recent-years.json' || url.pathname === '/nuvio-collections-recent-years-desktop.json')
+    return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
+      () => buildRecentYearsCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
   if (url.pathname === '/nuvio-collections-year-by-year.json' || url.pathname === '/nuvio-collections-year-by-year-desktop.json')
     return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
       () => buildYearByYearCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
@@ -376,4 +444,4 @@ async function handler(req, res) {
   return send(res, 404, { error: 'Route inconnue' });
 }
 module.exports = handler;
-module.exports._internals = { buildManifest, buildCollections, buildFastCollections, buildYearByYearCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
+module.exports._internals = { buildManifest, buildCollections, buildFastCollections, buildYearByYearCollections, buildRecentYearsCollections, reader, officialWorldMeta, verifiedWorldCatalogMetas, pagedMovieCatalog, WORLD_PAGE_SIZE };
