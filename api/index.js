@@ -14,7 +14,7 @@ const { handleOriginalImage } = require('../regions/fr/api/original-images.cjs')
 const { nativeBridgePayload } = require('../runtime/native-bridge.cjs');
 const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 const CINEMA_COLLECTION_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 
@@ -60,7 +60,12 @@ async function delegate(req, res, prefix, handler) {
     .replace(/^\/shield-content-card\.jpg(?=\?|$)/, '/desktop-content-card.jpg')
     .replace(/^\/shield-genre-card\.jpg(?=\?|$)/, '/desktop-genre-card.jpg');
   req.url = stripped.startsWith('/') ? stripped : `/${stripped}`;
-  req.headers = { ...originalHeaders, 'x-nuvio-base-path': prefix };
+  // Collection-only is just a manifest filtering view, not a new catalog
+  // engine or visual origin. Every delegated source must still run under its
+  // canonical base path. Crucial for /series-v2: otherwise filtered requests
+  // silently fell back to the legacy /series policy and allowed TV shows.
+  const canonicalPrefix = prefix.replace(/\/(?:collections-only|mobile-desktop-collections|native-bridge(?:\/mobile)?)$/, '');
+  req.headers = { ...originalHeaders, 'x-nuvio-base-path': canonicalPrefix };
   try {
     return await handler(req, res);
   } finally {
@@ -657,6 +662,19 @@ module.exports = async function handler(req, res) {
       moviesAddonId: MOVIES_ADDON_ID,
       moviesVersion: MOVIES_VERSION,
       moviesManifest: `${origin}/movies/manifest.json`,
+      // Opt-in manifests for existing imported collections: same addon IDs,
+      // artwork, source catalog IDs and detail routes, but absent from global
+      // Home, Discover and Search. TV and Mobile/Desktop require separate
+      // parameter contracts, hence two explicit installation profiles.
+      collectionsOnlyShieldManifests: Object.fromEntries(
+        ['fr', 'global', 'tr', 'us', 'movies', 'series-v2']
+          .map((region) => [region, `${origin}/${region}/collections-only/manifest.json`])
+      ),
+      collectionsOnlyMobileDesktopManifests: Object.fromEntries(
+        ['fr', 'global', 'tr', 'us', 'movies', 'series-v2']
+          .map((region) => [region, `${origin}/${region}/mobile-desktop-collections/manifest.json`])
+      ),
+      collectionOnlyInstallNote: 'Replace standard addon manifests with the correct profile; keep existing custom collection imports. Reinstall the same ID if the client still caches the old manifest. No Native Bridge.',
       moviesCollections: `${origin}/movies/nuvio-collections.json`,
       moviesFastCollections: `${origin}/movies/nuvio-collections-fast.json`,
       moviesFastDesktopCollections: `${origin}/movies/nuvio-collections-fast-desktop.json`,
