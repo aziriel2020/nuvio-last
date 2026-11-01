@@ -44,9 +44,9 @@ for(let i=0;i<regular.length;i++){
   const m = Number(parts.find(p=>p.type==='month').value);
   const currentMonth = `${y}-${String(m).padStart(2,'0')}`;
   const previousMonth = new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,7);
-  const recentOrder = ['nextweek','tomorrow','today','yesterday','lastweek',currentMonth,previousMonth];
+  const recentOrder = ['nextweek','tomorrow','today','yesterday','lastweek',previousMonth];
   const catalogPeriod = id => {
-    const match=String(id).match(/-(annual-\\d{4}|\\d{4}-\\d{2}|\\d{4}|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated)$/);
+    const match=String(id).match(/-(annual-\d{4}|\d{4}-\d{2}|\d{4}|today|tomorrow|yesterday|lastweek|nextweek|before1900|undated)$/);
     assert(match,'unknown calendar source '+id);
     return match[1];
   };
@@ -58,19 +58,19 @@ for(let i=0;i<regular.length;i++){
     const annual=sourcePeriods.filter(p=>p.startsWith('annual-'));
     assert.deepEqual(annual,[...annual].sort().reverse(),'annual catalogs not descending');
     const originalMonths=original.sources.map(s=>catalogPeriod(s.catalogId))
-      .filter(p=>/^\\d{4}-\\d{2}$/.test(p));
-    const oldMonths=originalMonths.filter(p=>p<previousMonth);
+      .filter(p=>/^\d{4}-\d{2}$/.test(p));
+    const oldMonths=originalMonths.filter(p=>p!==previousMonth);
     const expectedYears=[...new Set(oldMonths.map(p=>p.slice(0,4)))].map(y=>'annual-'+y);
     assert.deepEqual(annual,expectedYears,
       'a year is missing or duplicated in the unified genre');
     const originalHeritage=original.sources.map(s=>catalogPeriod(s.catalogId)).filter(p=>
-      /^\\d{4}$/.test(p)||['before1900','undated'].includes(p));
-    assert.deepEqual(sourcePeriods.filter(p=>/^\\d{4}$/.test(p)||['before1900','undated'].includes(p)),
+      /^\d{4}$/.test(p)||['before1900','undated'].includes(p));
+    assert.deepEqual(sourcePeriods.filter(p=>/^\d{4}$/.test(p)||['before1900','undated'].includes(p)),
       originalHeritage,'Western historical years disappeared');
     assert.equal(unified.coverImageUrl,original.coverImageUrl,'Approved cover changed');
     assert.equal(unified.heroBackdropUrl,original.heroBackdropUrl,'Approved backdrop changed');
     assert.equal(unified.tileShape,original.tileShape,'Original genre card shape changed');
-    assert.equal(unified.sources.length,7+annual.length+originalHeritage.length,
+    assert.equal(unified.sources.length,6+annual.length+originalHeritage.length,
       'Unified source count unexpected');
   }
 
