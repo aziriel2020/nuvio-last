@@ -53,8 +53,8 @@ for(let i=0;i<regular.length;i++){
   for (let j=0;j<regular[i].folders.length;j++) {
     const original=regular[i].folders[j], unified=recentYears[i].folders[j];
     const sourcePeriods=unified.sources.map(s=>catalogPeriod(s.catalogId));
-    assert.deepEqual(sourcePeriods.slice(0,7),recentOrder,
-      'Unified folder must retain the recent periods and current/last month');
+    assert.deepEqual(sourcePeriods.slice(0,6),recentOrder,
+      'Unified folder must retain six recent periods and previous month');
     const annual=sourcePeriods.filter(p=>p.startsWith('annual-'));
     assert.deepEqual(annual,[...annual].sort().reverse(),'annual catalogs not descending');
     const originalMonths=original.sources.map(s=>catalogPeriod(s.catalogId))
