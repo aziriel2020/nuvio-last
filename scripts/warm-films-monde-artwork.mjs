@@ -2,6 +2,9 @@
 // Bounded low-priority Films Monde prewarming on Oracle localhost.
 // This requests EXISTING original catalog IDs and EXISTING approved image
 // URLs; never touches collections, images, movie dates, layouts, apps or APKs.
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
 const LOCAL = 'http://127.0.0.1:3000';
 const DEFAULT_ORIGIN = 'https://141-145-215-202.nip.io';
 const MAX_JPEGS = 96;
@@ -10,7 +13,7 @@ const CONCURRENCY = 2;
 const ZONE = 'Europe/Brussels';
 
 function month(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: ZONE, year: 'numeric',
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: ZONE, year: 'numeric',
     month: '2-digit', day: '2-digit' }).format(now).slice(0, 7);
 }
 
@@ -102,6 +105,6 @@ export async function run({now=new Date(),iteration=Math.floor(Date.now()/180000
   // Missing upstream photos never block boot, upgrades, or catalog indexing.
   return result;
 }
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   run().catch(e=>{console.error('Oracle artwork warm failed:',e.message);process.exitCode=1;});
 }
