@@ -49,6 +49,7 @@ function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) 
     const releaseDay = displayDateForPremiere(p);
     if (window.start && releaseDay < window.start) continue;
     if (window.end && releaseDay > window.end) continue;
+    if (window.excludeStart && releaseDay >= window.excludeStart && releaseDay <= window.excludeEnd) continue;
     if (normalizedSearch && ![p.title, p.originalTitle].some(v =>
       String(v || '').toLocaleLowerCase('fr').includes(normalizedSearch))) continue;
     const row = store?.row(`tmdb:${p.tmdbId}`) || null;
