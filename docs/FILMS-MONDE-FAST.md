@@ -49,16 +49,27 @@ still never cached. Today/Yesterday have a 60-second maximum; archived
 nonempty pages use 300 seconds, with the Brussels day in the cache identity.
 Images remain direct provider CDN URLs; no extra Oracle poster hop.
 
-## Installation and rollback
+## Installation and rollback — standard addon, NO Native Bridge required
 
-1. Replace your installed Films Monde manifest with the Native Bridge
-   manifest appropriate to your Nuvio client, without changing any other addons.
-2. Re-import *only Films Monde* with the corresponding new fast JSON endpoint.
-   Reimport uses the same four collection IDs, updating them in place.
-3. Keep the France/Global/US/TR/Series imports unchanged.
-4. If any layout disagrees with your preferred design, reimport the original
-   `/movies/nuvio-collections.json` (Shield) or original desktop/mobile
-   import; no SQLite migration or cleanup is necessary.
+1. Keep the **original Films Monde addon**:
+   `https://141-145-215-202.nip.io/movies/manifest.json`.
+   Do not replace it with Native Bridge.
+2. On Shield, re-import **only Films Monde** using
+   `https://141-145-215-202.nip.io/movies/nuvio-collections-fast.json`.
+   Reimport updates the same four collection IDs without deleting any date.
+3. Keep France/Global/US/TR/Series imports unchanged.
+4. Premium covers, hero backdrops, typography and original genre folder
+   IDs are identical. Old monthly dates appear in clearly labelled archive
+   folders, limiting eager requests; this changes archive navigation, **not**
+   the existing visual design or the source catalogs.
+5. Roll back instantly by reimporting
+   `https://141-145-215-202.nip.io/movies/nuvio-collections.json`.
+   No SQLite migration or cleanup is necessary.
+
+The standard addon automatically benefits from reduced simultaneous duplicate
+TMDB poster downloads, catalog singleflight, hot-cache hits and larger Oracle
+artwork retention. A previously imported full collection keeps its large
+119-period folders until the fast import is applied.
 
 Note: this is a **server-only mitigation**. The client still loads all
 periods *within the open folder*; the addon cannot implement genuine

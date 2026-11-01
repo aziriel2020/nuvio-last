@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import runtime from '../runtime/index.mjs';
+import { encodeJsonForClient } from './response-compression.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -13,7 +14,7 @@ const DIST = path.join(ROOT, 'dist');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
 const CACHE_DIR = process.env.NUVIO_CACHE_DIR || '/var/cache/nuvio';
-const CACHE_MAX_ENTRIES = Math.max(128, Number(process.env.NUVIO_CACHE_MAX_ENTRIES || 8192));
+const CACHE_MAX_ENTRIES = Math.max(128, Number(process.env.NUVIO_CACHE_MAX_ENTRIES || 24576));
 const DEFAULT_TIMEZONE = process.env.NUVIO_TIMEZONE || 'Europe/Brussels';
 const MAX_RESPONSE_BYTES = Math.max(1024 * 1024, Number(process.env.NUVIO_MAX_RESPONSE_BYTES || 24 * 1024 * 1024));
 const CACHE_NAMESPACE = String(process.env.NUVIO_GIT_SHA || process.env.NUVIO_CACHE_NAMESPACE || 'unversioned').trim() || 'unversioned';
@@ -36,6 +37,12 @@ class FileCache {
     this.puts = 0;
     this.lastPrune = 0;
     this.writes = new Map();
+    // Tiny bounded LRU for hot catalog JSON and rendered artwork. A reopened
+    // Nuvio folder skips both SQLite/rendering and repeated disk file reads.
+    this.hot = new Map();
+    this.hotBytes = 0;
+    this.hotMaxBytes = 48 * 1024 * 1024;
+    this.hotMaxEntries = 384;
   }
 
   key(input) {
@@ -59,7 +66,39 @@ class FileCache {
     await fs.mkdir(this.dir, { recursive: true });
   }
 
+  remember(input, body, meta) {
+    if (!meta?.expiresAt || body.length > 512 * 1024 || body.length === 0) return;
+    const key = this.key(input);
+    const old = this.hot.get(key);
+    if (old) { this.hotBytes -= old.bytes; this.hot.delete(key); }
+    const item = { body, meta, bytes: body.length };
+    this.hot.set(key, item);
+    this.hotBytes += item.bytes;
+    while (this.hot.size > this.hotMaxEntries || this.hotBytes > this.hotMaxBytes) {
+      const first = this.hot.keys().next().value;
+      if (!first) break;
+      const removed = this.hot.get(first);
+      this.hot.delete(first);
+      this.hotBytes -= removed.bytes;
+    }
+  }
+
   async match(input) {
+    const key = this.key(input);
+    const hot = this.hot.get(key);
+    if (hot) {
+      if (hot.meta.expiresAt > Date.now()) {
+        this.hot.delete(key);
+        this.hot.set(key, hot);
+        return new Response(hot.body, {
+          status: hot.meta.status || 200,
+          statusText: hot.meta.statusText || '',
+          headers: { ...hot.meta.headers, 'x-nuvio-disk-cache': 'HIT', 'x-nuvio-hot-cache': 'HIT' }
+        });
+      }
+      this.hot.delete(key);
+      this.hotBytes -= hot.bytes;
+    }
     const files = this.paths(input);
     try {
       const meta = JSON.parse(await fs.readFile(files.meta, 'utf8'));
@@ -68,6 +107,7 @@ class FileCache {
         return undefined;
       }
       const body = await fs.readFile(files.body);
+      this.remember(input, body, meta);
       const headers = new Headers(meta.headers || {});
       headers.set('x-nuvio-disk-cache', 'HIT');
       return new Response(body, {
@@ -124,6 +164,7 @@ class FileCache {
       await fs.writeFile(metaTmp, JSON.stringify(meta));
       await fs.rename(bodyTmp, files.body);
       await fs.rename(metaTmp, files.meta);
+      this.remember(input, bytes, meta);
 
       this.puts += 1;
       if (!this.pruning && Date.now() - this.lastPrune > 10 * 60 * 1000) {
@@ -307,8 +348,10 @@ async function handle(req, res) {
     };
 
     const response = await runtime.fetch(request, envBindings(), ctx);
-    const body = req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
-    const headers = Object.fromEntries(response.headers.entries());
+    const rawBody = req.method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
+    const transfer = await encodeJsonForClient(rawBody,
+      Object.fromEntries(response.headers.entries()), req.headers['accept-encoding'], req.method);
+    const { body, headers } = transfer;
 
     // The same renderer is reused, but the public runtime must be truthful.
     headers['x-nuvio-origin'] = 'oracle-vm';

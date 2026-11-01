@@ -103,6 +103,21 @@ function pagedMovieCatalog(store, descriptor, now, skip, search, pageSize = WORL
 
 let cachedStore, cachedPath;
 const imageCache = new Map();
+// Manifest and native-collection JSON are large and stable during a Brussels
+// calendar day. Build and serialize once per day/origin/mode. Original URLs,
+// collection IDs, cover links, period names and daily rollover are unchanged.
+const jsonPayloadCache = new Map();
+const brusselsDayFormatter = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit'
+});
+function cachedJsonPayload(origin, now, route, build) {
+  const key = origin + '|' + brusselsDayFormatter.format(now) + '|' + route;
+  if (jsonPayloadCache.has(key)) return jsonPayloadCache.get(key);
+  const payload = JSON.stringify(build());
+  jsonPayloadCache.set(key, payload);
+  while (jsonPayloadCache.size > 12) jsonPayloadCache.delete(jsonPayloadCache.keys().next().value);
+  return payload;
+}
 const GENRE_BACKDROP_DIR = path.resolve(__dirname, '../../assets/movie-backdrops');
 const VISIBLE_GENRES = GENRES.filter(g => g.id !== 'unclassified');
 function reader() {
@@ -222,7 +237,7 @@ function buildFastCollections(origin, now = new Date(), mode = 'shield') {
 function send(res, code, data, cacheControl = 'no-store') {
   res.statusCode = code; res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Cache-Control', cacheControl);
-  res.end(JSON.stringify(data));
+  res.end(typeof data === 'string' ? data : JSON.stringify(data));
 }
 function image(res, bytes, type = 'image/webp') {
   res.statusCode = 200; res.setHeader('Content-Type', type); res.setHeader('Access-Control-Allow-Origin', '*');
@@ -232,11 +247,14 @@ async function handler(req, res) {
   const base = req.headers?.['x-nuvio-public-origin'] || `${req.headers?.['x-forwarded-proto'] || 'https'}://${req.headers?.host || 'localhost'}`;
   const url = new URL(req.url, base), origin = `${url.origin}/movies`;
   const now = process.env.NUVIO_NOW_OVERRIDE ? new Date(process.env.NUVIO_NOW_OVERRIDE) : new Date();
-  if (url.pathname === '/manifest.json') return send(res, 200, buildManifest(origin, now));
+  if (url.pathname === '/manifest.json') return send(res, 200,
+    cachedJsonPayload(origin, now, 'manifest', () => buildManifest(origin, now)));
   if (url.pathname === '/nuvio-collections-fast.json' || url.pathname === '/nuvio-collections-fast-desktop.json')
-    return send(res, 200, buildFastCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'));
+    return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
+      () => buildFastCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
   if (['/nuvio-collections.json', '/collections.json', '/nuvio-collections-desktop.json'].includes(url.pathname))
-    return send(res, 200, buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield'));
+    return send(res, 200, cachedJsonPayload(origin, now, url.pathname,
+      () => buildCollections(origin, now, url.pathname.includes('desktop') ? 'desktop' : 'shield')));
   const genre = url.pathname.match(/^\/artwork\/genre\/([a-z0-9]+)\.webp$/);
   if (genre) { const bytes = art.genreBytes(genre[1]); return bytes ? image(res, bytes) : send(res, 404, { error: 'Cover inconnue' }); }
   const backdrop = url.pathname.match(/^\/artwork\/backdrop\/([a-z0-9]+)\.jpg$/);

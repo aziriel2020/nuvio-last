@@ -24,6 +24,7 @@ const suites = [
   { name: 'Concurrent Shield artwork request deduplication', cwd: root, args: ['--test', 'test/shield-poster-singleflight.test.mjs'] },
   { name: 'Films Monde poster/cache performance regression', cwd: root, args: ['--test', 'test/films-monde-posters.test.mjs'] },
   { name: 'Films Monde fast archives, period parity and preserved design', cwd: root, args: ['--test', 'test/films-monde-fast-collections.test.cjs'] },
+  { name: 'Films Monde JSON transfer compression and content parity', cwd: root, args: ['--test', 'test/oracle-json-compression.test.mjs'] },
   { name: 'Oracle Always Free guardrails', cwd: root, args: ['--test', 'test/oracle-config.test.mjs'] }
 ];
 

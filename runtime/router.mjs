@@ -291,9 +291,24 @@ async function servePlatformVisual(request, env, url) {
   });
 }
 
+// A title may appear in Streaming, VOD and All on the same screen. Each
+// overlay keeps its approved design, but concurrent TMDB image downloads share
+// one in-flight request rather than fetching the same photograph repeatedly.
+const posterSourceInFlight = new Map();
+const MAX_INFLIGHT_POSTER_SOURCES = 128;
+
 async function embeddedPosterDataUri(src) {
   if (!isAllowedPosterSource(src)) return null;
+  const existing = posterSourceInFlight.get(src);
+  if (existing) return existing;
+  if (posterSourceInFlight.size >= MAX_INFLIGHT_POSTER_SOURCES) return loadPosterDataUri(src);
+  const task = loadPosterDataUri(src);
+  posterSourceInFlight.set(src, task);
+  try { return await task; }
+  finally { if (posterSourceInFlight.get(src) === task) posterSourceInFlight.delete(src); }
+}
 
+async function loadPosterDataUri(src) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6500);
   try {
@@ -637,12 +652,11 @@ async function invokeNodeHandler(request, timeZone) {
   });
 }
 
-// Deduplicate concurrent cold artwork requests. The disk cache already keeps
-// successful posters across Oracle deployments; however, during a cold scan the
-// same title can be requested simultaneously for several UI surfaces before a
-// cache entry exists. Without coalescing each request renders/fetches again.
+// Coalesce identical cold posters and Films Monde catalog pages. Some clients
+// request the same period simultaneously; this keeps one SQLite/render pass
+// without changing cache freshness, addon IDs or approved visual assets.
 const artworkInFlight = new Map();
-const MAX_INFLIGHT_ARTWORK = 96;
+const MAX_INFLIGHT_ARTWORK = 192;
 
 const COALESCED_ARTWORK_NAMES = new Set([
   'calendar-card.jpg', 'calendar-card.svg', 'desktop-content-card.jpg',
@@ -653,7 +667,9 @@ const COALESCED_ARTWORK_NAMES = new Set([
 
 function canCoalesceArtwork(request) {
   if (request.method !== 'GET' || request.headers.has('authorization')) return false;
-  const name = new URL(request.url).pathname.split('/').pop();
+  const pathname = new URL(request.url).pathname;
+  if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections|native-bridge(?:\/mobile)?)\/)?catalog\/movie\//.test(pathname)) return true;
+  const name = pathname.split('/').pop();
   return COALESCED_ARTWORK_NAMES.has(name);
 }
 
