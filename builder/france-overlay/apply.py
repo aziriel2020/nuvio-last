@@ -97,6 +97,8 @@ replace("app/src/main/java/com/nuvio/tv/ui/components/ContentCard.kt", [
      "        val showExpandedLogo = !franceOverlayEnabled && !item.logo.isNullOrBlank() && !logoLoadFailed"),
     ("                val showLandscapeOverlay = globalLandscape &&",
      "                val showLandscapeOverlay = !franceOverlayEnabled && globalLandscape &&"),
+    ("                if (isBackdropExpanded && !globalLandscape && !(useLandscapeAsExpanded && !trailerFirstFrameRendered)) {",
+     "                if (!franceOverlayEnabled && isBackdropExpanded && !globalLandscape && !(useLandscapeAsExpanded && !trailerFirstFrameRendered)) {"),
     ("                if (isWatched) {\n                    WatchedMarker(",
      """                if (franceOverlayEnabled) {
                     FranceCalendarCardOverlay(
@@ -121,6 +123,8 @@ replace("app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRows.kt", [
     )"""),
     ("    val hasLandscapeLogo =\n        (useLandscapeOverlayTreatment || isBackdropExpanded) &&",
      "    val hasLandscapeLogo =\n        !franceOverlayEnabled && (useLandscapeOverlayTreatment || isBackdropExpanded) &&"),
+    ("                } else if ((useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder",
+     "                } else if (!franceOverlayEnabled && (useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder"),
     ("                if (isWatched) {\n                    WatchedMarker(",
      """                if (franceOverlayEnabled && !isCollectionFolder) {
                     item.metaPreview?.let { preview ->
