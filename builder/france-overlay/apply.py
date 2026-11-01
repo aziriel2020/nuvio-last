@@ -127,7 +127,25 @@ replace("app/src/main/java/com/nuvio/tv/ui/screens/home/ModernHomeRows.kt", [
      "                } else if (!franceOverlayEnabled && (useLandscapeOverlayTreatment || isBackdropExpanded) && !isCollectionFolder"),
     ("                if (isWatched) {\n                    WatchedMarker(",
      """                if (franceOverlayEnabled && !isCollectionFolder && FranceOverlayArtwork.shouldPaint(imageUrl)) {
-                    item.metaPreview?.let { preview ->
+                    // Some Modern rows have a HeroPreview but no MetaPreview.
+                    // Do not hide their original labels without supplying a native title.
+                    val overlayPreview = item.metaPreview ?: (item.payload as? ModernPayload.Catalog)?.let { catalog ->
+                        com.nuvio.tv.domain.model.MetaPreview(
+                            id = catalog.itemId,
+                            type = com.nuvio.tv.domain.model.ContentType.fromString(catalog.itemType),
+                            name = item.title,
+                            poster = item.imageUrl,
+                            posterShape = com.nuvio.tv.domain.model.PosterShape.LANDSCAPE,
+                            background = item.heroPreview.backdrop,
+                            logo = item.heroPreview.logo,
+                            description = null,
+                            releaseInfo = catalog.trailerReleaseInfo ?: item.subtitle,
+                            imdbRating = null,
+                            genres = emptyList(),
+                            sourceAddonBaseUrl = catalog.addonBaseUrl
+                        )
+                    }
+                    overlayPreview?.let { preview ->
                         FranceCalendarCardOverlay(
                             item = preview,
                             landscape = useLandscapeOverlayTreatment
