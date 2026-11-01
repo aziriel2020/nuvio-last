@@ -369,6 +369,57 @@ test('every import source has a named manifest catalog, with stable standalone i
   }
 });
 
+test('Films Monde recent-years keeps all periods with six current sources and 2018–2030 calendar rollover', () => {
+  const origin = 'https://example.test/movies';
+  const dates = [
+    new Date('2026-11-01T15:30:00Z'),
+    new Date('2027-01-01T12:00:00Z'),
+    new Date('2030-12-31T12:00:00Z')
+  ];
+  for (const now of dates) for (const mode of ['shield', 'desktop']) {
+    const originals = addon._internals.buildCollections(origin, now, mode);
+    const optimized = addon._internals.buildRecentYearsCollections(origin, now, mode);
+    assert.equal(optimized.length, 4);
+    const brussels = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit'
+    }).formatToParts(now);
+    const year = Number(brussels.find(p => p.type === 'year').value);
+    const month = Number(brussels.find(p => p.type === 'month').value);
+    const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7);
+    const recentKeys = ['nextweek', 'tomorrow', 'today', 'yesterday', 'lastweek', previousMonth];
+    for (let i = 0; i < originals.length; i++) {
+      const before = originals[i], after = optimized[i];
+      assert.equal(after.id, before.id);
+      const beforeIds = before.folders.flatMap(f => f.sources.map(s => s.catalogId)).sort();
+      const afterIds = after.folders.flatMap(f => f.sources.map(s => s.catalogId)).sort();
+      assert.deepEqual(afterIds, beforeIds, 'no missing or duplicate periods');
+      assert(after.folders.every(f => f.sources.length > 0 && f.sources.length <= 12));
+      for (const original of before.folders) {
+        const group = after.folders.filter(f => f.id === original.id || f.id.startsWith(original.id + '-year-') ||
+          f.id.startsWith(original.id + '-heritage-'));
+        assert(group.length > 1, 'expected recent genre plus annual history');
+        const live = group[0];
+        assert.equal(live.id, original.id);
+        assert.deepEqual(live.sources.map(s => parseCatalog(s.catalogId).period), recentKeys);
+        const yearFolders = group.filter(f => /-year-\d{4}$/.test(f.id));
+        const years = yearFolders.map(f => Number(f.id.slice(-4)));
+        assert.deepEqual(years, [...years].sort((a, b) => b - a));
+        assert(years.includes(year), 'current year kept, including current month');
+        assert(years.includes(2018), 'historical 2018 kept');
+        for (const f of group) {
+          assert.equal(f.coverImageUrl, original.coverImageUrl);
+          assert.equal(f.heroBackdropUrl, original.heroBackdropUrl);
+        }
+        for (const f of yearFolders) {
+          const periods = f.sources.map(s => parseCatalog(s.catalogId).period);
+          assert.deepEqual(periods, [...periods].sort().reverse(), 'newest month first');
+          assert(!periods.includes(previousMonth), 'previous month must be in recent folder only');
+        }
+      }
+    }
+  }
+});
+
 test('all genre covers use the approved 16:9 design and include three previously missing film themes', async () => {
   assert(progress().ready);
   for (const genre of GENRES) {
