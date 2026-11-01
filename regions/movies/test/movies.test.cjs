@@ -369,6 +369,36 @@ test('every import source has a named manifest catalog, with stable standalone i
   }
 });
 
+test('Films Monde reuses Series Monde-style cached archive pages but never freezes live dates', () => {
+  const { cachedMovieCatalogJson, movieCatalogCachePolicy }=addon._internals;
+  const today=new Date('2026-11-01T12:00:00Z');
+  const tomorrow=new Date('2026-11-02T12:00:00Z');
+  const descriptor={view:'all',genre:'28',period:'annual-2025'};
+  let calculated=0;
+  const build=()=>{calculated++;return [{id:'tt123',name:'Film conservé',released:'2025-01-01T00:00:00.000Z'}];};
+  const first=cachedMovieCatalogJson('https://cache.test/movies',descriptor,today,0,'',build);
+  const second=cachedMovieCatalogJson('https://cache.test/movies',descriptor,today,0,'',build);
+  assert.equal(first.hit,false);assert.equal(second.hit,true);
+  assert.equal(calculated,1,'expensive annual SQL + cinematic decoration must execute only once');
+  assert.equal(second.json,first.json);
+  assert.equal(JSON.parse(first.json).metas[0].name,'Film conservé');
+  assert.equal(movieCatalogCachePolicy(descriptor.period,today).ttl,900000);
+  const page2=cachedMovieCatalogJson('https://cache.test/movies',descriptor,today,24,'',build);
+  assert.equal(page2.hit,false,'skip pagination must not borrow page one');
+  const search=cachedMovieCatalogJson('https://cache.test/movies',descriptor,today,0,'autre',build);
+  assert.equal(search.hit,false,'search must have its own cache key');
+  const otherDay=cachedMovieCatalogJson('https://cache.test/movies',descriptor,tomorrow,0,'',build);
+  assert.equal(otherDay.hit,false,'Brussels calendar rollover must never reuse prior day');
+  assert.equal(movieCatalogCachePolicy('today',today).http,'no-store');
+  assert.equal(movieCatalogCachePolicy('annual-2026',today).ttl,120000,
+    'active year uses brief expiry so new films remain fresh');
+  let emptyCalls=0;
+  const empty=()=>{emptyCalls++;return []};
+  cachedMovieCatalogJson('https://cache.test/movies',{view:'vod',genre:'53',period:'annual-2019'},today,0,'',empty);
+  cachedMovieCatalogJson('https://cache.test/movies',{view:'vod',genre:'53',period:'annual-2019'},today,0,'',empty);
+  assert.equal(emptyCalls,2,'empty catalogs must never be frozen by caching');
+});
+
 test('Films Monde keeps ONE genre folder with six recent sources and annual catalogues until 2030', () => {
   const origin = 'https://example.test/movies';
   for (const now of [
