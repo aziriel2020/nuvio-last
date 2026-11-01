@@ -30,7 +30,7 @@ jobs:
           root=Path("NuvioTV/app/src/main/java/com/nuvio/tv")
           component=(root/"ui/components/FranceCalendarCardOverlay.kt").read_text()
           assert "Color(0xC638BDF8)" in component, "original blue-cyan divider"
-          assert "Color(0xE5062B5C)" in component, "original France gradient"
+          assert "Color(0xC5062B5C)" in component, "France navy-blue palette not preserved"
           assert 'text = item.name' in component
           assert "FranceOverlayArtwork" in component
           assert "fun shouldPaint(" in component, "must detect already rendered images"
