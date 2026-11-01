@@ -12,9 +12,10 @@ const seriesHandler = require('../regions/series/index.cjs');
 const moviesHandler = require('../regions/movies/index.cjs');
 const { handleOriginalImage } = require('../regions/fr/api/original-images.cjs');
 const { nativeBridgePayload } = require('../runtime/native-bridge.cjs');
+const { buildNuvioPulseCollections } = require('../runtime/nuvio-pulse.cjs');
 const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
-const VERSION = '1.4.1';
+const VERSION = '1.4.2';
 const LARGE_JSON_CACHE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 const CINEMA_COLLECTION_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=900';
 
@@ -499,6 +500,30 @@ function cinemaTorrentioCollection(req, availableKeys = null) {
   };
 }
 
+// A one-time opt-in collection import: the three rolling catalog IDs per
+// Films Monde / Series V2 view never change at midnight or month rollover.
+// Reuse the original premium covers and production discovery rules. This
+// feature cannot publish sources to global Search: addon manifests remain
+// collections-only. US / Türkiye are intentionally excluded.
+const pulseCache = new Map();
+function pulseCollections(req) {
+  const origin=originFromRequest(req);
+  const now=frHandler._internals.runtimeNow();
+  const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Brussels',
+    year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+  const key=origin+'|'+day;
+  if (pulseCache.has(key)) return pulseCache.get(key);
+  const frEditorial=frHandler._internals.buildEditorialCollection(origin+'/fr');
+  const movies=moviesHandler._internals.buildCollections(origin+'/movies',now,'shield');
+  const series=seriesHandler._internals.buildCollections(origin+'/series-v2',now,'shield');
+  const global=globalHandler._internals.buildNuvioCollectionsImport(
+    now,globalHandler._internals.requestTimeZone(req),origin+'/global');
+  const result=buildNuvioPulseCollections({origin,frEditorial,movies,series,global});
+  pulseCache.set(key,result);
+  while(pulseCache.size>4) pulseCache.delete(pulseCache.keys().next().value);
+  return result;
+}
+
 function combinedRawCollections(req, cinemaKeys = null) {
   const origin = originFromRequest(req);
   const nowUs = usHandler._internals.runtimeNow();
@@ -597,6 +622,9 @@ module.exports = async function handler(req, res) {
     return sendJson(res, report.safe ? 200 : 500, { ok: report.safe, ...report }, 'no-store');
   }
   if (path === '/coexistence-check.json') return sendJson(res, 200, await coexistenceReportLive(req), 'no-store');
+  if (path === '/nuvio-collections-pulse.json') {
+    return sendJson(res,200,pulseCollections(req),'public, max-age=300, s-maxage=300');
+  }
   if (path === '/nuvio-collections-fr-global-tr-usa.json' || path === '/nuvio-collections-shield.json' || path === '/nuvio-collections-fr-global-usa.json' || path === '/nuvio-collections-usa-fr.json' || path === '/collections.json') {
     return sendJson(res, 200, await combinedCollectionsLive(req), CINEMA_COLLECTION_CACHE);
   }
@@ -662,6 +690,8 @@ module.exports = async function handler(req, res) {
       moviesAddonId: MOVIES_ADDON_ID,
       moviesVersion: MOVIES_VERSION,
       moviesManifest: `${origin}/movies/manifest.json`,
+      pulseCollections: `${origin}/nuvio-collections-pulse.json`,
+      pulseNote: 'One optional collection import, four curated parents, rolling 7/30/next-7 days, no APK or Native Bridge; requires refreshed collection-only movies and series-v2 manifests.',
       // Opt-in manifests for existing imported collections: same addon IDs,
       // artwork, source catalog IDs and detail routes, but absent from global
       // Home, Discover and Search. TV and Mobile/Desktop require separate
@@ -737,6 +767,7 @@ module.exports._internals = {
   combinedCollections,
   combinedRawCollections,
   combinedMobileCollections,
+  pulseCollections,
   mobileizeCollectionArt,
   combinedDesktopCollections,
   combinedRawCollectionsLive,
