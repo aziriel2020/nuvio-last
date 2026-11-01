@@ -199,6 +199,7 @@ fun FranceCalendarCardOverlay(item: MetaPreview, landscape: Boolean, modifier: M
         val height = maxHeight
         val overlayTop = height * if (landscape) 0.61f else 0.65f
         val compact = maxWidth < 245.dp || maxHeight < 135.dp
+        val providerBadgeMaxWidth = maxWidth * 0.58f
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
@@ -226,7 +227,7 @@ fun FranceCalendarCardOverlay(item: MetaPreview, landscape: Boolean, modifier: M
             modifier = Modifier.align(Alignment.TopEnd).padding(if (compact) 4.dp else 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Box(modifier = Modifier.widthIn(max = maxWidth * 0.58f)) {
+            Box(modifier = Modifier.widthIn(max = providerBadgeMaxWidth)) {
                 FranceDesignBadge(provider, accent, false)
             }
             FranceDesignBadge(type, accent, true)
