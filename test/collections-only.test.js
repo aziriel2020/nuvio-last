@@ -94,3 +94,56 @@ test('TV concise period descriptor carries genuine month names and pagination', 
   assert.equal(catalog.extra.some((e) => e.name === 'genre' && e.isRequired), true);
   assert.equal(catalog.extra.length, 3, 'keep compact metadata to reduce transfer size');
 });
+
+
+test('installation index advertises all six collection-only replacement addon URLs, without touching imports', async () => {
+  const result = await request('/install.json');
+  assert.equal(result.status,200);
+  const data = JSON.parse(result.body);
+  const regions = ['fr','global','tr','us','movies','series-v2'];
+  assert.deepEqual(Object.keys(data.collectionsOnlyShieldManifests),regions);
+  assert.deepEqual(Object.keys(data.collectionsOnlyMobileDesktopManifests),regions);
+  for(const region of regions) {
+    assert.equal(data.collectionsOnlyShieldManifests[region],
+      'https://nuvio.test/'+region+'/collections-only/manifest.json');
+    assert.equal(data.collectionsOnlyMobileDesktopManifests[region],
+      'https://nuvio.test/'+region+'/mobile-desktop-collections/manifest.json');
+  }
+  assert.equal(data.moviesManifest,'https://nuvio.test/movies/manifest.json');
+  assert.equal(data.seriesManifest,'https://nuvio.test/series-v2/manifest.json');
+  assert.equal(data.moviesFastCollections,'https://nuvio.test/movies/nuvio-collections-fast.json');
+  assert.equal(data.seriesCollections,'https://nuvio.test/series-v2/nuvio-collections.json');
+  assert.match(data.collectionOnlyInstallNote,/No Native Bridge/);
+});
+
+test('all filtered routes delegate to canonical region, never legacy series-v1, and return matching metadata', async () => {
+  const standardV2 = JSON.parse((await request('/series-v2/status.json')).body);
+  const legacyV1 = JSON.parse((await request('/series/status.json')).body);
+  assert.notEqual(standardV2.addonId, legacyV1.addonId,'must be distinct addon identities');
+  for (const profile of ['collections-only','mobile-desktop-collections','native-bridge','native-bridge/mobile']) {
+    const path = '/series-v2/'+profile+'/status.json';
+    const response = await request(path);
+    assert.equal(response.status,200,path);
+    const data = JSON.parse(response.body);
+    assert.equal(data.addonId, standardV2.addonId,path+' must keep V2 curated policy');
+    assert.equal(data.version, standardV2.version,path+' version');
+    assert.equal(data.catalogPolicy?.replayCollections,false,path+' policy');
+  }
+});
+
+test('delegated collection-only sources keep canonical content origin and original query', async () => {
+  const fn = handler._internals.delegate;
+  for (const region of ['fr','us','tr','global','movies','series-v2']) {
+    const req={method:'GET',url:'/'+region+'/collections-only/catalog/movie/mock.json?skip=24',
+      headers:{host:'nuvio.test','x-nuvio-base-path':'/origin'}};
+    const res={};
+    const reply=await fn(req,res,'/'+region+'/collections-only',async innerReq=>{
+      assert.equal(innerReq.url,'/catalog/movie/mock.json?skip=24');
+      assert.equal(innerReq.headers['x-nuvio-base-path'],'/'+region);
+      return 'ok';
+    });
+    assert.equal(reply,'ok');
+    assert.equal(req.url,'/'+region+'/collections-only/catalog/movie/mock.json?skip=24');
+    assert.equal(req.headers['x-nuvio-base-path'],'/origin');
+  }
+});
