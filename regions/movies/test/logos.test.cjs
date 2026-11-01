@@ -54,14 +54,30 @@ test('MovieStore persists logos and exposes them without changing dates, poster 
   assert.equal(store.meta(store.row(id)).logo,undefined);
 });
 
-test('Films Monde catalog presentation preserves native title logos through the French calendar decorator',()=>{
-  const { decorateMovieMetas } = require('../src/presentation.cjs');
+test('Films Monde public cards never overlay a film title logo, but keep approved cinematic artwork',()=>{
+  const { decorateMovieMetas, withoutFilmTitleLogo } = require('../src/presentation.cjs');
   const logo='https://image.tmdb.org/t/p/w500/test-title.png';
   const base={ id:'tt12345678',type:'movie',name:'Film',poster:'https://image.tmdb.org/t/p/w500/a.jpg',
     background:'https://image.tmdb.org/t/p/w1280/b.jpg',logo, released:'2026-10-30T00:00:00.000Z',
     releaseInfo:'2026' };
-  const decorated=decorateMovieMetas('https://example.test/movies',[base],{view:'all',period:'2026-10'})[0];
-  assert.equal(decorated.logo,logo);
-  const noLogo=decorateMovieMetas('https://example.test/movies',[{...base,logo:null}],{view:'all',period:'2026-10'})[0];
-  assert.equal(noLogo.logo,undefined,'avoid forcing an empty transparent placeholder');
+  for (const view of ['all','streaming','vod','cinema']) {
+    const decorated=decorateMovieMetas('https://example.test/movies',[base],{view,period:'2026-10'})[0];
+    assert.notEqual(decorated.logo,logo,'TMDB title logo must never be published');
+    if (decorated.logo) assert.match(decorated.logo,/\/fr\/calendar-transparent-logo\.svg\?/,
+      'only the invisible original Modern layout slot is allowed');
+    assert.match(decorated.poster,/\/fr\/calendar-card\.jpg\?/,'premium card renderer unchanged');
+    assert.match(decorated.poster, /title=Film/, 'original design typography still present');
+    assert.equal(decorated.poster,decorated.background,'reuse the same cached thumbnail');
+    assert.equal(decorated.id,base.id);
+    assert.equal(decorated.released,base.released);
+    const noLogo=decorateMovieMetas('https://example.test/movies',[{...base,logo:null}],{view,period:'2026-10'})[0];
+    assert.notEqual(noLogo.logo,logo);
+    if (noLogo.logo) assert.match(noLogo.logo,/calendar-transparent-logo\.svg/);
+  }
+  const details=withoutFilmTitleLogo({ ...base,titleLogoUrl: logo });
+  assert.equal(details.logo,undefined,'the detail view cannot request film clearlogo');
+  assert.equal(details.titleLogoUrl,undefined,'all title-logo aliases must be removed');
+  assert.equal(details.poster,base.poster,'raw TMDB image preserved');
+  assert.equal(details.background,base.background,'backdrop preserved');
+  assert.equal(base.logo,logo,'internal stored data not mutated');
 });
