@@ -14,6 +14,39 @@ const { RECORDS: VERIFIED_PREMIERES } = require('../../runtime/verified-streamin
 const VERIFIED_WORLD = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.type === 'movie'
   && p.worldPremiereDate && p.worldPremiereSource);
 const WORLD_PAGE_SIZE = 24; // One immediate row + pagination, rather than 100 posters per period.
+const annualPreviewCache = new Map();
+function annualYearPage(store, descriptor, now, skip, search, size = WORLD_PAGE_SIZE) {
+  const key = JSON.stringify([descriptor.view,descriptor.genre,descriptor.period,
+    search,new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels'}).format(now)]);
+  const cached = annualPreviewCache.get(key);
+  let highlighted;
+  if (cached && Date.now()-cached.storedAt < 60000) highlighted=cached.metas;
+  else {
+    highlighted=store.query({...descriptor,now,search,curated:true,skip:0,
+      limit:size,monthSample:2});
+    annualPreviewCache.set(key,{storedAt:Date.now(),metas:highlighted});
+    while(annualPreviewCache.size>180) annualPreviewCache.delete(annualPreviewCache.keys().next().value);
+  }
+  const ids=highlighted.map(m=>m._sourceId);
+  const featured=highlighted.map(({_sourceId,...m})=>m);
+  const request=(offset,count)=>count>0 ? store.query({...descriptor,now,search,curated:true,
+    skip:offset,limit:count,excludeIds:ids}) : [];
+  // Supplement sparse months with additional films. In either case the first
+  // 24 poster slots span as many months as the source index actually contains.
+  const supplement=request(0,size-featured.length);
+  const first=[...featured,...supplement].sort((a,b)=>
+    String(b.released||'').localeCompare(String(a.released||'')) ||
+    String(a.id).localeCompare(String(b.id)));
+  if(skip===0) return first;
+  if(skip<first.length){
+    const remaining=first.slice(skip);
+    return remaining.concat(request(supplement.length,size-remaining.length));
+  }
+  // The rest is a stable chronological stream, excluding page-one highlights
+  // and accounting for the supplementary titles already loaded on page one.
+  return request(skip-featured.length,size);
+}
+
 
 
 function officialWorldMeta(p, row = null) {
@@ -82,9 +115,9 @@ function verifiedWorldCatalogMetas(store, descriptor, now, skip, search, metas) 
 function pagedMovieCatalog(store, descriptor, now, skip, search, pageSize = WORLD_PAGE_SIZE) {
   if (!store) return verifiedWorldCatalogMetas(null, descriptor, now, skip, search, [])
     .slice(0, pageSize);
-  const query = (offset) => store.query({
-    ...descriptor, skip: offset, search, now, curated: true, limit: pageSize
-  });
+  const query = (offset) => descriptor.period.startsWith('annual-')
+    ? annualYearPage(store,descriptor,now,offset,search,pageSize)
+    : store.query({ ...descriptor,skip:offset,search,now,curated:true,limit:pageSize });
   if (skip === 0) {
     return verifiedWorldCatalogMetas(store, descriptor, now, 0, search, query(0))
       .slice(0, pageSize);
