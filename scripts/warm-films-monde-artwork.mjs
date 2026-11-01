@@ -26,9 +26,18 @@ export function catalogIds(now = new Date(), iteration = 0) {
   const selected = genres.filter((_, i) => (i % 5) === ((iteration % 5 + 5) % 5));
   const primary = ['all', 'streaming', 'vod', 'cinema'].flatMap(v =>
     ['today','yesterday',m].map(p => 'movies-fr-'+v+'-all-'+p));
+  // Warm the same existing annual source IDs opened by the ORIGINAL genre
+  // folders. Unlike creating more collections, this only avoids a cold
+  // database + graphic-composition query when a Shield opens past years.
+  const currentYear = Number(m.slice(0,4));
+  const archiveYears = [currentYear,currentYear-1].filter(y=>y>=2018);
+  const annualAll = ['all','streaming','vod','cinema'].flatMap(v=>archiveYears.map(y=>
+    'movies-fr-'+v+'-all-annual-'+y));
   const rotated = selected.flatMap(g => ['all','streaming','vod','cinema'].map(v =>
     'movies-fr-'+v+'-'+g+'-'+m));
-  return [...new Set([...primary,...rotated])];
+  const annualRotated = selected.flatMap(g=>['all','streaming'].map(v=>
+    'movies-fr-'+v+'-'+g+'-annual-'+Math.max(2018,currentYear-1)));
+  return [...new Set([...primary,...annualAll,...rotated,...annualRotated])];
 }
 
 export function sameArtworkUrl(value, approvedOrigin = DEFAULT_ORIGIN) {
