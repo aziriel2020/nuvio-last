@@ -146,7 +146,7 @@ function recentCalendarMonths(now = new Date()) {
 function annualPeriods(now, genre) {
   const { previous } = recentCalendarMonths(now);
   return [...new Set(periods(now, genre).filter(p =>
-    /^\d{4}-\d{2}$/.test(p.key) && p.key < previous
+    /^\d{4}-\d{2}$/.test(p.key) && p.key !== previous
   ).map(p => p.key.slice(0,4)))].map(year => ({
     key: 'annual-' + year, name: year
   }));
@@ -320,8 +320,8 @@ function buildYearByYearCollections(origin, now = new Date(), mode = 'shield') {
  * Original full JSON is NEVER modified, even on future date rollover.
  */
 function buildRecentYearsCollections(origin, now = new Date(), mode = 'shield') {
-  const { current, previous } = recentCalendarMonths(now);
-  const recentOrder = ['nextweek', 'tomorrow', 'today', 'yesterday', 'lastweek', current, previous];
+  const { previous } = recentCalendarMonths(now);
+  const recentOrder = ['nextweek', 'tomorrow', 'today', 'yesterday', 'lastweek', previous];
   return buildCollections(origin, now, mode).map(collection => ({
     ...collection,
     folders: collection.folders.map(folder => {
@@ -337,7 +337,7 @@ function buildRecentYearsCollections(origin, now = new Date(), mode = 'shield') 
       // so keep them untouched, as well as the before-1900/undated sources.
       const heritage = folder.sources.filter(source => {
         const period = sourcePeriod(source);
-        return /^\\d{4}$/.test(period) || ['before1900','undated'].includes(period);
+        return /^\d{4}$/.test(period) || ['before1900','undated'].includes(period);
       });
       return sourcesInFolder(folder, [...recent, ...annual, ...heritage], folder.id, folder.title);
     })
