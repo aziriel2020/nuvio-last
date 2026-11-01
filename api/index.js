@@ -12,6 +12,7 @@ const seriesHandler = require('../regions/series/index.cjs');
 const moviesHandler = require('../regions/movies/index.cjs');
 const { handleOriginalImage } = require('../regions/fr/api/original-images.cjs');
 const { nativeBridgePayload } = require('../runtime/native-bridge.cjs');
+const designPlugin = require('../runtime/design-plugin.cjs');
 const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
 const VERSION = '1.4.1';
@@ -580,6 +581,9 @@ function landing(req) {
 module.exports = async function handler(req, res) {
   const url = new URL(req.url, originFromRequest(req));
   const path = url.pathname;
+
+  if (path === '/design-plugin/config.json' || path === '/design-plugin/poster.jpg')
+    return designPlugin.handle(req, res, originFromRequest(req));
 
   if (path === '/collection-title.svg') {
     const svg = titleSvg(url.searchParams.get('title'), url.searchParams.get('label'));
