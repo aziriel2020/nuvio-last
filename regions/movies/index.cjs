@@ -8,7 +8,6 @@ const sharp = require('sharp');
 const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowFor, displayDateForPremiere, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const catalogPolicy = require('../series/src/catalog-policy.cjs');
-const { PULSE_PERIODS } = require('../../runtime/pulse-periods.cjs');
 const art = require('./src/artwork.cjs');
 const { decorateMovieMetas, withoutFilmTitleLogo } = require('./src/presentation.cjs');
 const { RECORDS: VERIFIED_PREMIERES } = require('../../runtime/verified-streaming-premieres.cjs');
@@ -141,11 +140,6 @@ function buildManifest(origin, now = new Date()) {
     catalogs: VIEWS.flatMap((view) => VISIBLE_GENRES.flatMap((genre) => (genre.id === WESTERN_GENRE ? westernDates : dates).map((period) => ({
       id: catalogId(view.id, genre.id, period.key), type: 'movie', name: period.name, showInHome: false,
       pageSize: WORLD_PAGE_SIZE, extraSupported: ['skip', 'search'], extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
-    })))).concat(VIEWS.flatMap((view) => PULSE_PERIODS.map((period) => ({
-      id: catalogId(view.id, 'all', period.key), type: 'movie',
-      name: period.label, showInHome: false, pageSize: WORLD_PAGE_SIZE,
-      extraSupported: ['skip', 'search'],
-      extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
     })))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
     background: `${origin}/backdrop.jpg?v=${art.REVISION}`, behaviorHints: { configurable: false, configurationRequired: false }
