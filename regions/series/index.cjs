@@ -10,7 +10,6 @@ const { SeriesStore, defaultPath } = require('./src/store.cjs');
 const { tmdb, tvmaze, mapLimit } = require('./src/upstream.cjs');
 const { decorateSeriesMetas } = require('./src/presentation.cjs');
 const catalogPolicy = require('./src/catalog-policy.cjs');
-const { PULSE_PERIODS } = require('../../runtime/pulse-periods.cjs');
 
 let cachedStore;
 let cachedPath;
@@ -153,13 +152,7 @@ function buildManifest(origin, now = new Date()) {
       pageSize: 100, showInHome: false,
       extraSupported: ['skip', 'search'],
       extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
-    }))))).concat(release.id === V2_ADDON_ID
-      ? ['premieres', 'seasons'].flatMap(mode => PULSE_PERIODS.map(period => ({
-          id: catalogId(mode, 'all', period.key), type: 'series',
-          name: period.label, showInHome: false, pageSize: 100,
-          extraSupported: ['skip', 'search'],
-          extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
-        }))) : []),
+    }))))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
     background: `${origin}/backdrop.jpg?v=${GENRE_COVER_VERSION}`, behaviorHints: { configurable: false }
   };
