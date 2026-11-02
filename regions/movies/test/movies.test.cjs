@@ -631,3 +631,53 @@ test('Films Monde paginated collection retains all indexed movies alongside firs
   assert.equal(all[0].released.slice(0,10),'2026-10-30');
   assert.equal(all[0].originalReleaseDate,'2026-10-09');
 });
+
+
+test('fast Films Monde catalog keeps IDs, dates, providers and direct TMDB art without per-film lookups', t => {
+  const s=memory(t);
+  s.upsert(record(99111,{imdb_id:'tt99111', poster_path:'/test-poster.jpg',backdrop_path:'/test-backdrop.jpg',
+    'watch/providers':{results:{FR:{flatrate:[{provider_id:8,provider_name:'Netflix'}],
+      rent:[{provider_id:2,provider_name:'Apple TV Store'}]}}}}));
+  s.upsert(record(99112,{imdb_id:'tt99112', poster_path:'/test2.jpg',backdrop_path:null}));
+  const q={view:'all',genre:'all',period:'2026-10',curated:true,now:NOW,limit:24};
+  const rich=s.query(q);
+  s.sources=()=>{throw Error('catalog should not fetch individual sources')};
+  s.franceOffers=()=>{throw Error('catalog should not fetch individual offers')};
+  const fast=s.query({...q,cardOnly:true});
+  assert.deepEqual(fast.map(x=>x.id),rich.map(x=>x.id));
+  assert.deepEqual(fast.map(x=>x.released),rich.map(x=>x.released));
+  assert.deepEqual(fast.map(x=>x.originalReleaseDate),rich.map(x=>x.originalReleaseDate));
+  for(let i=0;i<fast.length;i++){
+    assert.deepEqual(fast[i].providersByKind,rich[i].providersByKind);
+    assert.deepEqual(fast[i].streamingProviders,rich[i].streamingProviders);
+    assert.equal(fast[i].poster,rich[i].poster);
+  }
+  const decorated=decorateMovieMetas('https://example.test/movies',fast,{period:'2026-10'});
+  assert(decorated.every(m=>!m.poster||m.poster.startsWith('https://image.tmdb.org/t/p/')));
+  assert.doesNotMatch(JSON.stringify(decorated),/\/images\/original\.|\/calendar-card\.jpg|\/content-card\.jpg/);
+});
+
+test('fast annual previews retain complete 12-month coverage and stable 24-film pagination',t=>{
+  const s=memory(t),now=new Date('2026-11-01T12:00:00Z');
+  for(let month=1;month<=12;month++){
+    const date=`2025-${String(month).padStart(2,'0')}-15`;
+    for(let i=0;i<(month===12?30:2);i++){
+      const id=880000+month*100+i;
+      s.upsert(record(id,{release_date:date,genres:[{id:18}],release_dates:regional([3,date])}));
+    }
+  }
+  s.sources=()=>{throw Error('annual preview must not do per-film source reads')};
+  s.franceOffers=()=>{throw Error('annual preview must not do per-film offer reads')};
+  const d={view:'cinema',genre:'18',period:'annual-2025'};
+  const first=addon._internals.pagedMovieCatalog(s,d,now,0,'');
+  assert.equal(first.length,24);
+  assert.equal(new Set(first.map(m=>m.released.slice(0,7))).size,12);
+  const ids=[];
+  for(let skip=0;skip<80;skip+=24){
+    const page=addon._internals.pagedMovieCatalog(s,d,now,skip,'');
+    ids.push(...page.map(m=>m.id));
+    if(page.length<24)break;
+  }
+  assert.equal(ids.length,52);
+  assert.equal(new Set(ids).size,52);
+});
