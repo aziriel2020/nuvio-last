@@ -6,7 +6,7 @@ const { selectMovieLogo } = require('../regions/movies/src/logos.cjs');
 const { createSvgService } = require('./native-design-svg.cjs');
 
 const ADDON_ID = 'com.nuvio.native.metadata.design';
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const TTL_MS = 2 * 60 * 60 * 1000;
 const ID = /^(?:tt\d{5,12}|tmdb:(?:(?:movie|tv):)?[1-9]\d{0,11})$/;
 const imagePath = /^\/[a-zA-Z0-9_/-]{1,210}\.(?:jpg|jpeg|png|webp)$/i;
@@ -192,6 +192,12 @@ function respond(res, status, payload, ttl = 0) {
   res.end(JSON.stringify(payload));
 }
 
+function vectorPosterPattern(origin) {
+  // Nuvio resolves these native placeholders for every catalog item,
+  // regardless of which addon supplied that catalog.
+  return origin + '/design-meta/art/{type}/{id}/{shape}.svg';
+}
+
 function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } = {}) {
   const load = tmdb || ((path, params) => require('../regions/fr/api/index.js')._internals.tmdbFetch(path, params));
   const cache = new Map();
@@ -214,14 +220,23 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
       svgPreview: '/design-meta/preview/{movie|series}/{id}.svg',
       svgEnabledForMetadata: false,
       vectorPreviewManifest: '/design-meta/vector/manifest.json',
+      vectorPosterPattern: vectorPosterPattern(origin),
+      vectorPosterScope: 'Nuvio Custom Posters URL resolver, only when global landscape posters are enabled',
       limitation: 'Metadata addon does not inject a Compose/UI overlay into Nuvio.'
     });
     const preview = /^\/design-meta\/preview\/(movie|series)\/([^/]+)\.svg$/.exec(route);
-    if (preview) {
+    const globalArt = /^\/design-meta\/art\/(movie|series)\/([^/]+)\/(landscape|poster|square)\.svg$/.exec(route);
+    if (globalArt && globalArt[3] !== 'landscape') {
+      // Portrait/square UI must fall back to its native artwork: our approved
+      // composition is 16:9 and must not be cropped to a portrait card.
+      return respond(res, 404, { error: 'Landscape artwork only' });
+    }
+    const artworkRequest = preview || globalArt;
+    if (artworkRequest) {
       let id;
-      try { id = decodeURIComponent(preview[2]); }
+      try { id = decodeURIComponent(artworkRequest[2]); }
       catch { return respond(res, 400, { error: 'Invalid ID' }); }
-      const request = parseId(preview[1], id);
+      const request = parseId(artworkRequest[1], id);
       if (!request) return respond(res, 400, { error: 'Invalid ID or media type' });
       try {
         const data = await fetchDetails(request, load);
@@ -299,5 +314,5 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
 
 module.exports = {
   createAddon, manifest, buildMeta, fetchDetails, episodesForSeries, parseId,
-  validDate, earliestMovieRelease, streamingPlatforms, tmdbImage, VERSION, ADDON_ID
+  validDate, earliestMovieRelease, streamingPlatforms, tmdbImage, vectorPosterPattern, VERSION, ADDON_ID
 };
