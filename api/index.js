@@ -275,9 +275,49 @@ function cleanVisualQuery(url, removeKeys) {
     .replace(/[?&]+$/, '');
 }
 
+// V4 collection folders cannot use Nuvio's media-ID Custom Posters hook.
+// Route those folder images to the existing vector endpoints instead of
+// selecting pre-generated JPEG covers or invoking the Shield/Desktop rasterizer.
+function v4CollectionVisualUrl(value, folder = null, variant = 'card', collectionTitle = '') {
+  if (typeof value !== 'string' || !value) return value || null;
+  let url;
+  try { url = new URL(value); } catch { return value; }
+  const originalPath = url.pathname;
+  const context = `${folder?.title || ''} ${collectionTitle || ''}`.toLowerCase();
+  const type = context.includes('film') ? 'movie' : 'series';
+  if (/\/(?:platform-category-card\.svg|platform-card\.jpg)$/.test(originalPath)) {
+    url.pathname = originalPath.replace(/\/(?:platform-category-card\.svg|platform-card\.jpg)$/,
+      variant === 'backdrop' ? '/platform-backdrop.svg' : '/platform-category-card.svg');
+    url.searchParams.set('type', type);
+    if (folder?.title) url.searchParams.set('title', folder.title);
+    if (collectionTitle) url.searchParams.set('label', collectionTitle);
+    url.searchParams.set('v', 'v4-folder-svg-1');
+    return url.toString();
+  }
+  if (/\/(?:genre-folder-art\.svg|genre-card\.jpg)$/.test(originalPath)) {
+    url.pathname = originalPath.replace(/\/(?:genre-folder-art\.svg|genre-card\.jpg)$/, '/genre-folder-art.svg');
+    url.searchParams.set('variant', variant);
+    url.searchParams.set('type', type);
+    if (folder?.title) url.searchParams.set('title', folder.title);
+    if (collectionTitle) url.searchParams.set('label', collectionTitle);
+    url.searchParams.set('v', 'v4-folder-svg-1');
+    return url.toString();
+  }
+  if (variant === 'backdrop' && /\/platform-backdrop\.(?:svg|jpg)$/.test(originalPath)) {
+    url.pathname = originalPath.replace(/\/platform-backdrop\.(?:svg|jpg)$/, '/platform-backdrop.svg');
+    url.searchParams.set('v', 'v4-folder-svg-1');
+    return url.toString();
+  }
+  // Curated fixed collections, films/series genre covers are static assets:
+  // preserve them directly without recompressing them on demand.
+  return value;
+}
+
 const DESKTOP_VISUAL_REV = 'desktop14-safe-badges';
 
 function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
+  if (process.env.NUVIO_V4_COLLECTIONS === '1')
+    return v4CollectionVisualUrl(url, folder, variant, collectionTitle);
   const generated = generatedCoverStaticUrl(url, folder, variant, 'desktop', collectionTitle);
   if (generated) return generated;
   const value = String(url || '');
@@ -319,6 +359,8 @@ function desktopCollectionVisualUrl(url, folder = null, variant = 'card', collec
 const SHIELD_VISUAL_REV = 'shield15-safe-badges';
 
 function shieldCollectionVisualUrl(url, folder = null, variant = 'card', collectionTitle = '') {
+  if (process.env.NUVIO_V4_COLLECTIONS === '1')
+    return v4CollectionVisualUrl(url, folder, variant, collectionTitle);
   const generated = generatedCoverStaticUrl(url, folder, variant, 'shield', collectionTitle);
   if (generated) return generated;
   const value = String(url || '');
@@ -759,6 +801,7 @@ module.exports._internals = {
   cinemaTorrentioCollection,
   shieldizeCollectionArt,
   shieldCollectionVisualUrl,
+  v4CollectionVisualUrl,
   generatedCoverStaticUrl,
   desktopizeCollectionArt,
   coexistenceReport,
