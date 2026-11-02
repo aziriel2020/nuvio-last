@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { createMirrorProfileUpdate } from './profile-mirror-fields.mjs';
 
 const PREFIX = '/cloner';
 const PORT = Number(process.env.CLONER_PORT || '3001');
@@ -95,14 +96,9 @@ async function readCategories(token,pid,options) {
   const sourceProfile=profilesRaw?.find(p=>p.profile_index===pid);
   if(!sourceProfile) throw appError('Profil source introuvable',404);
   if(options.profile) {
-    const fields=['name','avatar_color_hex','avatar_id','avatar_url',
-      'profile_background_id','profile_background_url'];
-    d.profile=Object.fromEntries(fields.filter(key=>Object.hasOwn(sourceProfile,key))
-      .map(key=>[key,sourceProfile[key]]));
-    // Independent snapshots: inheriting destination addons from its own primary
-    // would NOT yield an identical mirror on a different Nuvio account.
-    d.profile.uses_primary_addons=false;
-    d.profile.uses_primary_plugins=false;
+    // Never copy the source name or avatar: each destination keeps its identity.
+    // Only appearance background and independent addon/plugin configuration mirror.
+    d.profile=createMirrorProfileUpdate(sourceProfile);
   }
   const addonsPid=sourceProfile.uses_primary_addons?1:pid;
   const pluginsPid=sourceProfile.uses_primary_plugins?1:pid;
@@ -182,7 +178,8 @@ async function apply(token,pid,data,options) {
   await run(options.plugins,'plugins','sync_push_plugins',{p_profile_id:pid,p_plugins:data.plugins});
   await run(options.collections,'collections','sync_push_collections',{p_profile_id:pid,p_collections_json:data.collections});
   if(options.profile){
-    await api('/rest/v1/profiles?profile_index=eq.'+pid,'PATCH',token,data.profile);
+    // Defense-in-depth: allowlist the PATCH fields even if a source snapshot changes.
+    await api('/rest/v1/profiles?profile_index=eq.'+pid,'PATCH',token,createMirrorProfileUpdate(data.profile));
     done.profile='copié';
   }
   if(options.home){

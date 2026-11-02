@@ -26,7 +26,7 @@ small{color:#95a8c2}footer{padding:25px 0 45px;color:#8394aa}
 <div class="eyebrow">Oracle Cloud · espace sécurisé</div>
 <h1>Nuvio Profile Mirror · Remplacement complet</h1>
 <p>Copier un profil Nuvio vers un autre profil du même compte, ou vers plusieurs profils de comptes différents. Les catalogues Oracle hébergés ici sont indépendants de cette opération. Le style d’affiches V4 est copié par les paramètres d’affichage synchronisés.</p>
-<div class="warning">« Continuer à regarder », les positions de lecture et les sessions de connexion ne sont jamais copiés. Certaines listes Nuvio peuvent être fusionnées par les API, et les paramètres locaux des appareils restent propres à chaque appareil.</div>
+<div class="warning">Le nom et la photo de profil de chaque destination sont conservés. « Continuer à regarder », les positions de lecture et les sessions de connexion ne sont jamais copiés. Certaines listes Nuvio peuvent être fusionnées par les API, et les paramètres locaux des appareils restent propres à chaque appareil.</div>
 <section><h2>1. Compte et profil source</h2>
 <div class="row">
 <div class="field"><label for="source-email">Adresse e-mail Nuvio</label><input id="source-email" type="email" autocomplete="off"></div>
@@ -42,7 +42,7 @@ small{color:#95a8c2}footer{padding:25px 0 45px;color:#8394aa}
 <label class="check"><input type="checkbox" data-opt="plugins" checked> Plugins</label>
 <label class="check"><input type="checkbox" data-opt="collections" checked> Collections du profil</label>
 <label class="check"><input type="checkbox" data-opt="home" checked> Accueil : ordre, affichage et rangées</label>
-<label class="check"><input type="checkbox" data-opt="profile" checked> Nom, avatar et arrière-plan du profil</label>
+<label class="check"><input type="checkbox" data-opt="profile" checked> Arrière-plan du profil (nom et photo conservés)</label>
 <label class="check"><input type="checkbox" data-opt="library" checked> Bibliothèque</label>
 <label class="check"><input type="checkbox" data-opt="watched" checked> Titres déjà vus</label>
 <label class="check"><input type="checkbox" data-opt="settings" checked> Réglages TV et Mobile</label>
@@ -109,7 +109,7 @@ $('run').onclick=async()=>{try{
  if(!source().profileId)throw new Error('Charge le profil source avant de cloner.');
  if(!targets.length)throw new Error('Ajoute au moins une destination.');
  if(targets.some(t=>!t.profileId))throw new Error('Choisis un profil pour chaque destination.');
- if(!confirm('Copier les catégories sélectionnées sur '+targets.length+' profil(s) ? Les anciennes données de destination seront remplacées, sauf « Continuer à regarder ». Le clonage ne pourra pas être annulé.'))return;
+ if(!confirm('Copier les catégories sélectionnées sur '+targets.length+' profil(s) ? Les anciennes données de destination seront remplacées, sauf le nom, la photo du profil et « Continuer à regarder ». Le clonage ne pourra pas être annulé.'))return;
  $('run').disabled=true;$('state').textContent='Clonage en cours…';
  const d=await api('mirror',{source:source(),targets,options});
  const report=d.results.map(r=>(r.ok?'✓ ':'✗ ')+r.target+' : '+(r.ok?JSON.stringify(r.changes):r.error)).join('\n');
