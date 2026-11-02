@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nuvio Profile Mirror · Oracle</title>
+<style>
+:root{color-scheme:dark;font:15px/1.5 system-ui,Arial;background:#090d17;color:#e7eefc}*{box-sizing:border-box}
+main{max-width:1020px;margin:3rem auto;padding:0 20px}h1{font-size:2.15rem;margin:.15rem 0 .3rem}
+p{color:#aebbd1}section{border:1px solid #283145;border-radius:18px;padding:24px;background:#12192a;margin:18px 0}
+section h2{font-size:1.15rem;margin:0 0 16px}.eyebrow{text-transform:uppercase;letter-spacing:.13em;color:#8ab1ff;font-weight:700;font-size:.75rem}
+.field{display:flex;flex-direction:column;gap:5px;margin:8px 0}label{color:#c2d3ed;font-size:.88rem}
+input,select{width:100%;padding:11px 12px;border:1px solid #37455d;border-radius:9px;background:#0d1422;color:#fff;font:inherit}
+input:focus,select:focus{outline:2px solid #6886ed}.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+button{border:1px solid #667bf6;border-radius:9px;background:#5269e8;color:white;padding:11px 17px;cursor:pointer;font:inherit;font-weight:650}
+button.secondary{background:#1c2940;border-color:#38475f}
+button.danger{background:#321b2a;border-color:#70334b}button:disabled{opacity:.55;cursor:not-allowed}
+.target{border:1px solid #37445b;border-radius:12px;padding:18px;margin:12px 0;background:#0d1524}
+.target-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.checks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.check{display:flex;gap:9px;align-items:center;background:#0c1421;padding:11px;border-radius:9px}
+.check input,.mode input{width:auto;accent-color:#839cff}.mode{display:flex;align-items:center;gap:8px;margin:12px 0}
+.warning{background:#272318;border:1px solid #64532c;color:#ead39d;padding:12px 16px;border-radius:11px}
+#output{white-space:pre-wrap;word-break:break-word;background:#0b1320;border:1px solid #2c384d;border-radius:12px;padding:18px;min-height:70px;color:#b9d7e8}
+small{color:#95a8c2}footer{padding:25px 0 45px;color:#8394aa}
+@media(max-width:700px){.row,.checks{grid-template-columns:1fr}main{margin:1.3rem auto}section{padding:18px}}
+</style></head><body><main>
+<div class="eyebrow">Oracle Cloud · espace sécurisé</div>
+<h1>Nuvio Profile Mirror</h1>
+<p>Copier un profil Nuvio vers un autre profil du même compte, ou vers plusieurs profils de comptes différents. Les catalogues Oracle hébergés ici sont indépendants de cette opération.</p>
+<div class="warning">« Continuer à regarder », les positions de lecture et les sessions de connexion ne sont jamais copiés. Certaines listes Nuvio peuvent être fusionnées par les API, et les paramètres locaux des appareils restent propres à chaque appareil.</div>
+<section><h2>1. Compte et profil source</h2>
+<div class="row">
+<div class="field"><label for="source-email">Adresse e-mail Nuvio</label><input id="source-email" type="email" autocomplete="off"></div>
+<div class="field"><label for="source-pass">Mot de passe Nuvio</label><input id="source-pass" type="password" autocomplete="off"></div>
+</div>
+<div class="toolbar"><button id="load-source">Charger les profils source</button>
+<div class="field" style="min-width:230px;margin:0"><label for="source-profile">Profil à copier</label><select id="source-profile"><option value="">Charger les profils…</option></select></div></div>
+</section>
+<section><h2>2. Comptes et profils de destination</h2><p>Ajoute plusieurs destinations ; chacune peut être sur le compte source ou sur un autre compte.</p>
+<div id="targets"></div><button id="add-target" class="secondary">+ Ajouter une destination</button></section>
+<section><h2>3. Catégories du miroir</h2><div class="checks">
+<label class="check"><input type="checkbox" data-opt="addons" checked> Addons</label>
+<label class="check"><input type="checkbox" data-opt="plugins" checked> Plugins</label>
+<label class="check"><input type="checkbox" data-opt="collections" checked> Collections du profil</label>
+<label class="check"><input type="checkbox" data-opt="library" checked> Bibliothèque</label>
+<label class="check"><input type="checkbox" data-opt="watched" checked> Titres déjà vus</label>
+<label class="check"><input type="checkbox" data-opt="settings" checked> Réglages TV et Mobile</label>
+<label class="check"><input type="checkbox" data-opt="posters" checked> Sources d’affiches personnalisées</label>
+</div><small>Les réglages de prestataires comportant des secrets ne sont pas transférés. Si « Réglages TV et Mobile » est activé, les affiches synchronisées en font déjà partie.</small>
+<div class="toolbar"><button id="run">Lancer le clonage</button><span id="state"></span></div></section>
+<section><h2>4. Rapport</h2><div id="output" role="status" aria-live="polite">Aucun clonage effectué.</div></section>
+<footer>Accès administrateur obligatoire · aucun mot de passe Nuvio stocké dans le navigateur, sur le disque ou dans le dépôt</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let sourceProfiles=[], seq=0;
+const fail=e=>{ $('state').textContent='Erreur';$('output').textContent=e.message||String(e); };
+async function api(name,payload){
+ const res=await fetch('/cloner/api/'+name,{method:'POST',credentials:'same-origin',
+ headers:{'Content-Type':'application/json','X-Requested-With':'NuvioMirror'},body:JSON.stringify(payload)});
+ const txt=await res.text();let data;try{data=JSON.parse(txt);}catch{throw new Error('Réponse serveur invalide ('+res.status+')');}
+ if(!res.ok)throw new Error(data.error||'Erreur '+res.status);
+ return data;
+}
+function selection(select,profiles){
+ select.replaceChildren();
+ if(!profiles?.length){const o=new Option('Aucun profil','');select.append(o);return;}
+ for(const p of profiles)select.append(new Option(p.name+' · profil '+p.id,String(p.id)));
+}
+function source(){
+ return {email:$('source-email').value.trim(),password:$('source-pass').value,profileId:Number($('source-profile').value)};
+}
+function makeEl(tag,className,text){const e=document.createElement(tag);if(className)e.className=className;if(text)e.textContent=text;return e;}
+function field(label,type='text') {
+ const wrapper=makeEl('div','field');const l=makeEl('label','',label),input=makeEl('input');input.type=type;
+ if(type==='password'||type==='email')input.autocomplete='off';
+ wrapper.append(l,input);return {wrapper,input};
+}
+function addTarget(){
+ if($('targets').children.length>=12){fail(new Error('Maximum 12 destinations'));return;}
+ const id=++seq, card=makeEl('div','target'),top=makeEl('div','target-title'),
+ title=makeEl('strong','', 'Destination '+id),remove=makeEl('button','danger','Retirer');
+ remove.type='button';remove.onclick=()=>card.remove();top.append(title,remove);
+ const mode=makeEl('label','mode'),checkbox=makeEl('input');checkbox.type='checkbox';checkbox.checked=true;
+ mode.append(checkbox,document.createTextNode('Même compte que la source'));
+ const fields=makeEl('div','row'),email=field('E-mail autre compte','email'),pass=field('Mot de passe autre compte','password');
+ fields.append(email.wrapper,pass.wrapper);
+ const toolbar=makeEl('div','toolbar'),load=makeEl('button','secondary','Charger les profils'),profile=makeEl('select'),profileWrapper=makeEl('div','field');
+ profileWrapper.style.minWidth='230px';profileWrapper.append(makeEl('label','','Profil destination'),profile);
+ toolbar.append(load,profileWrapper);
+ const sync=()=>{fields.hidden=checkbox.checked;load.hidden=checkbox.checked;if(checkbox.checked)selection(profile,sourceProfiles);else selection(profile,[]);};
+ checkbox.onchange=sync;
+ load.onclick=async()=>{try{$('state').textContent='Chargement destination '+id;let d=await api('profiles',{account:{email:email.input.value.trim(),password:pass.input.value}});selection(profile,d.profiles);$('state').textContent='Profils chargés';}catch(e){fail(e);}};
+ card.append(top,mode,fields,toolbar);$('targets').append(card);sync();
+ card.data=()=>({sameAccount:checkbox.checked,email:email.input.value.trim(),password:pass.input.value,profileId:Number(profile.value)});
+ return card;
+}
+$('add-target').onclick=addTarget;
+$('load-source').onclick=async()=>{try{$('state').textContent='Connexion Nuvio…';
+ const d=await api('profiles',{account:source()});sourceProfiles=d.profiles;
+ selection($('source-profile'),sourceProfiles);
+ for(const card of $('targets').children){const mode=card.querySelector('.mode input');if(mode.checked){const sel=card.querySelector('select');selection(sel,sourceProfiles);}}
+ $('state').textContent=sourceProfiles.length+' profil(s) disponible(s)';
+ }catch(e){fail(e);}};
+$('run').onclick=async()=>{try{
+ const targets=Array.from($('targets').children).map(c=>c.data()),options={};
+ document.querySelectorAll('[data-opt]').forEach(c=>{options[c.dataset.opt]=c.checked;});
+ if(!source().profileId)throw new Error('Charge le profil source avant de cloner.');
+ if(!targets.length)throw new Error('Ajoute au moins une destination.');
+ if(targets.some(t=>!t.profileId))throw new Error('Choisis un profil pour chaque destination.');
+ if(!confirm('Copier les catégories sélectionnées sur '+targets.length+' profil(s) ? Des données existantes peuvent être remplacées.'))return;
+ $('run').disabled=true;$('state').textContent='Clonage en cours…';
+ const d=await api('mirror',{source:source(),targets,options});
+ const report=d.results.map(r=>(r.ok?'✓ ':'✗ ')+r.target+' : '+(r.ok?JSON.stringify(r.changes):r.error)).join('\n');
+ $('output').textContent=report+'\n\n'+d.warning;
+ $('state').textContent=d.results.filter(r=>r.ok).length+'/'+d.results.length+' destinations traitées';
+ }catch(e){fail(e);}finally{$('run').disabled=false;}};
+addTarget();
+</script></body></html>
