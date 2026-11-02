@@ -1054,18 +1054,36 @@ import com.nuvio.app.isWindows
 ''',
 "desktop Windows preference resolution")
 replace_once(style,
-'''    val catalogLandscapeModeEnabled: Boolean = false,
+'''@Serializable
+private data class StoredPosterCardStylePreferences(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,
     val hideLabelsEnabled: Boolean = false,
     val hoverPreviewEnabled: Boolean = true,''',
-'''    val catalogLandscapeModeEnabled: Boolean = false,
+'''@Serializable
+private data class StoredPosterCardStylePreferences(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,
     val catalogLandscapeModeConfigured: Boolean = false,
     val hideLabelsEnabled: Boolean = false,
     val hoverPreviewEnabled: Boolean = true,''',
 "V4 stored explicit landscape preference")
 replace_once(style,
-'''    val hoverPreviewTrailerEnabled: Boolean = false,
+'''    val catalogLandscapeModeConfigured: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,
+    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = false,
     val hoverPreviewTrailerSoundEnabled: Boolean = false,''',
-'''    val hoverPreviewTrailerEnabled: Boolean = false,
+'''    val catalogLandscapeModeConfigured: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,
+    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = false,
     val hoverPreviewTrailerConfigured: Boolean = false,
     val hoverPreviewTrailerSoundEnabled: Boolean = false,''',
 "Hero stored explicit trailer preference")
@@ -1241,6 +1259,7 @@ replace_once(home,
 ''',
 '''import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.isWindows
 import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.features.trailer.TrailerPlaybackSource
 import kotlinx.coroutines.CancellationException
