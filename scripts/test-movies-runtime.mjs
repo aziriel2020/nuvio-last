@@ -87,7 +87,7 @@ try {
   const fallback = await get('/movies/content-card.jpg?title=Film%20sans%20photo&label=VOD');
   assert.equal(fallback.status, 410, 'Film Mondiaux must never generate old JPEG cards');
   assert.equal(fallback.headers.get('cache-control'), 'no-store');
-  const oldCover = await get('/movies/cover.jpg', { redirect: 'manual' });
+  const oldCover = await fetch(origin + '/movies/cover.jpg', { redirect: 'manual', signal: AbortSignal.timeout(15000) });
   assert.equal(oldCover.status, 302);
   assert.match(oldCover.headers.get('location') || '', /\/movies\/artwork\/genre\/all\.webp/);
   const status = await (await get('/movies/status.json')).json(); assert.equal(status.eligible, 204); assert(status.genreArtwork.ready);
