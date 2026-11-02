@@ -44,6 +44,11 @@ export function edgeTtl(input) {
   // Original France design, resolved once by ID then cached as an image.
   if (path === '/design-plugin/poster.jpg') return GENERATED_ART_TTL;
   if (path === '/design-plugin/config.json') return 0;
+  // Dynamic vector artwork is generated in the Oracle runtime, not a prebuilt JPEG.
+  // Keep changes fresh while sharing cached output across rapid Shield scrolling.
+  if (/^\/design-meta\/(?:art\/(?:movie|series)\/[^/]+\/landscape|preview\/(?:movie|series)\/[^/]+)\.svg$/.test(path)) return 900;
+  if (path === '/design-meta/status.json') return 0;
+  if (path === '/design-meta/manifest.json' || path === '/design-meta/vector/manifest.json') return 300;
 
   if (/^\/images\/original\.(?:jpg|png)$/.test(path)) return GENERATED_ART_TTL;
 
