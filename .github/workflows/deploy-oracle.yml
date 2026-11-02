@@ -115,6 +115,7 @@ jobs:
         shell: bash
         env:
           VERIFY_TIMEOUT_MS: 30000
+          NUVIO_V4_COLLECTIONS: '1'
         run: |
           set -Eeuo pipefail
           node scripts/verify-oracle-production.mjs | tee "$RUNNER_TEMP/oracle-production-audit.json.log"
