@@ -76,18 +76,15 @@ test('Collections editor saves only target Home/collections and rejects stale co
 
 test('mobile and mouse sorting handlers compile, preserve existing save flow',async()=>{
   const html=await readFile(fileURLToPath(new URL('home-manager.html',import.meta.url)),'utf8');
-  const script=html.match(/<script>([\\s\\S]*?)<\\/script>/)?.[1];
+  const script=html.split('<script>')[1]?.split('</script>')[0];
   assert(script,'missing Home Manager script');
   new Script(script,{filename:'home-manager-inline.js'});
-  assert.match(html,/touch-action:none/);
-  assert.match(script,/setPointerCapture/);
-  assert.match(script,/pointercancel/);
-  assert.match(script,/pointermove/);
-  assert.match(script,/moveTo\\(list,old/);
-  assert.match(script,/reorderHandle\\(rows,r/);
-  assert.match(script,/reorderHandle\\(state.collections,c/);
-  assert.match(script,/reorderHandle\\(collection.folders,folder/);
-  assert.match(script,/Enregistrer les modifications/);
+  for(const term of ['touch-action:none','setPointerCapture','pointercancel',
+    'pointermove','moveTo(list,old','reorderHandle(rows,r',
+    'reorderHandle(state.collections,c','reorderHandle(collection.folders,folder)',
+    'Enregistrer les modifications']) {
+    assert((html+script).includes(term),'Missing expected drag feature: '+term);
+  }
 });
 
 const port=41000+Math.floor(Math.random()*10000);
