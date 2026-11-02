@@ -24,8 +24,8 @@ small{color:#95a8c2}footer{padding:25px 0 45px;color:#8394aa}
 @media(max-width:700px){.row,.checks{grid-template-columns:1fr}main{margin:1.3rem auto}section{padding:18px}}
 </style></head><body><main>
 <div class="eyebrow">Oracle Cloud · espace sécurisé</div>
-<h1>Nuvio Profile Mirror</h1>
-<p>Copier un profil Nuvio vers un autre profil du même compte, ou vers plusieurs profils de comptes différents. Les catalogues Oracle hébergés ici sont indépendants de cette opération.</p>
+<h1>Nuvio Profile Mirror · Remplacement complet</h1>
+<p>Copier un profil Nuvio vers un autre profil du même compte, ou vers plusieurs profils de comptes différents. Les catalogues Oracle hébergés ici sont indépendants de cette opération. Le style d’affiches V4 est copié par les paramètres d’affichage synchronisés.</p>
 <div class="warning">« Continuer à regarder », les positions de lecture et les sessions de connexion ne sont jamais copiés. Certaines listes Nuvio peuvent être fusionnées par les API, et les paramètres locaux des appareils restent propres à chaque appareil.</div>
 <section><h2>1. Compte et profil source</h2>
 <div class="row">
@@ -41,6 +41,8 @@ small{color:#95a8c2}footer{padding:25px 0 45px;color:#8394aa}
 <label class="check"><input type="checkbox" data-opt="addons" checked> Addons</label>
 <label class="check"><input type="checkbox" data-opt="plugins" checked> Plugins</label>
 <label class="check"><input type="checkbox" data-opt="collections" checked> Collections du profil</label>
+<label class="check"><input type="checkbox" data-opt="home" checked> Accueil : ordre, affichage et rangées</label>
+<label class="check"><input type="checkbox" data-opt="profile" checked> Nom, avatar et arrière-plan du profil</label>
 <label class="check"><input type="checkbox" data-opt="library" checked> Bibliothèque</label>
 <label class="check"><input type="checkbox" data-opt="watched" checked> Titres déjà vus</label>
 <label class="check"><input type="checkbox" data-opt="settings" checked> Réglages TV et Mobile</label>
@@ -48,7 +50,7 @@ small{color:#95a8c2}footer{padding:25px 0 45px;color:#8394aa}
 </div><small>Les réglages de prestataires comportant des secrets ne sont pas transférés. Si « Réglages TV et Mobile » est activé, les affiches synchronisées en font déjà partie.</small>
 <div class="toolbar"><button id="run">Lancer le clonage</button><span id="state"></span></div></section>
 <section><h2>4. Rapport</h2><div id="output" role="status" aria-live="polite">Aucun clonage effectué.</div></section>
-<footer>Accès administrateur obligatoire · aucun mot de passe Nuvio stocké dans le navigateur, sur le disque ou dans le dépôt</footer>
+<footer>Connexion habituelle Nuvio pour chaque compte · aucun mot de passe conservé sur le serveur ou dans le dépôt</footer>
 </main>
 <script>
 const $=id=>document.getElementById(id);
@@ -107,7 +109,7 @@ $('run').onclick=async()=>{try{
  if(!source().profileId)throw new Error('Charge le profil source avant de cloner.');
  if(!targets.length)throw new Error('Ajoute au moins une destination.');
  if(targets.some(t=>!t.profileId))throw new Error('Choisis un profil pour chaque destination.');
- if(!confirm('Copier les catégories sélectionnées sur '+targets.length+' profil(s) ? Des données existantes peuvent être remplacées.'))return;
+ if(!confirm('Copier les catégories sélectionnées sur '+targets.length+' profil(s) ? Les anciennes données de destination seront remplacées, sauf « Continuer à regarder ». Le clonage ne pourra pas être annulé.'))return;
  $('run').disabled=true;$('state').textContent='Clonage en cours…';
  const d=await api('mirror',{source:source(),targets,options});
  const report=d.results.map(r=>(r.ok?'✓ ':'✗ ')+r.target+' : '+(r.ok?JSON.stringify(r.changes):r.error)).join('\n');
