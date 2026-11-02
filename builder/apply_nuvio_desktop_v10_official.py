@@ -412,4 +412,87 @@ replace_once(extract,
         val combinedCandidateUrl = combinedUrl?.let { resolveReachableUrlOrNull(it) }''',
 "Windows combined trailer stream priority")
 
+
+# The official Dev tabbed folder grid still hard-codes portrait cards. Align it
+# with the official V4 landscape/card/logo logic already used in home and catalogs,
+# keeping the mobile presentation unchanged.
+folder="composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt"
+replace_once(folder,
+'''import com.nuvio.app.core.ui.catalogPosterBaseWidthDp
+''',
+'''import com.nuvio.app.core.ui.catalogPosterBaseWidthDp
+import com.nuvio.app.core.ui.landscapePosterWidth
+''',
+"folder desktop landscape width import")
+replace_once(folder,
+'''import com.nuvio.app.features.home.components.HomeCatalogRowSection
+''',
+'''import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import com.nuvio.app.features.home.components.HomePosterCard
+''',
+"folder desktop V4 poster import")
+replace_once(folder,
+'''            val gridCells = if (isDesktop) {
+                GridCells.FixedSize(basePosterWidthDp.dp)
+            } else {
+                GridCells.Fixed(columns)
+            }''',
+'''            val gridCells = if (isDesktop) {
+                GridCells.FixedSize(
+                    if (posterCardStyle.catalogLandscapeModeEnabled)
+                        landscapePosterWidth(basePosterWidthDp)
+                    else basePosterWidthDp.dp
+                )
+            } else {
+                GridCells.Fixed(columns)
+            }''',
+"folder V4 landscape grid columns")
+replace_once(folder,
+'''                                HomePosterHoverPreview(
+                                    item = item,
+                                    isWatched = isWatched,
+                                    onClick = { onPosterClick(item) },
+                                    onLongClick = null,
+                                ) { cardModifier ->
+                                    NuvioPosterCard(
+                                        title = item.name,
+                                        imageUrl = item.poster,
+                                        modifier = cardModifier,
+                                        basePosterWidthDp = if (isDesktop) basePosterWidthDp else null,
+                                        fallbackImageUrl = item.rawPosterUrl,
+                                        shape = NuvioPosterShape.Poster,
+                                        detailLine = item.releaseInfo,
+                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                }''',
+'''                                if (isDesktop) {
+                                    HomePosterCard(
+                                        item = item,
+                                        isWatched = isWatched,
+                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                } else {
+                                    HomePosterHoverPreview(
+                                        item = item,
+                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                        onLongClick = null,
+                                    ) { cardModifier ->
+                                        NuvioPosterCard(
+                                            title = item.name,
+                                            imageUrl = item.poster,
+                                            modifier = cardModifier,
+                                            basePosterWidthDp = null,
+                                            fallbackImageUrl = item.rawPosterUrl,
+                                            shape = NuvioPosterShape.Poster,
+                                            detailLine = item.releaseInfo,
+                                            isWatched = isWatched,
+                                            onClick = { onPosterClick(item) },
+                                        )
+                                    }
+                                }''',
+"V4 custom landscape covers in desktop folder grids")
+
 print("V10 official Dev patch applied: native Windows Hero, gradients, official V4 and Watch Party intact")
