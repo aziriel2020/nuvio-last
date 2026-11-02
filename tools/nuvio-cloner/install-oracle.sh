@@ -32,7 +32,7 @@ chown -R root:root "$BASE/source";chmod -R go-w "$BASE/source"
 node --check "$BASE/source/tools/nuvio-cloner/server-nuvio-login.mjs"
 node --test "$BASE/source/tools/nuvio-cloner/test.mjs"
 install -m 0644 "$BASE/source/tools/nuvio-cloner/nuvio-cloner.service" /etc/systemd/system/nuvio-cloner.service
-if ! grep -q 'reverse_proxy @nuvio_cloner' /etc/caddy/Caddyfile; then
+if ! grep -q 'handle @nuvio_cloner' /etc/caddy/Caddyfile; then
  python3 - <<'PY'
 from pathlib import Path
 p=Path('/etc/caddy/Caddyfile')
