@@ -5,6 +5,7 @@ on:
       - feature/nuvio-account-mirror-oracle
     paths:
       - .github/workflows/install-nuvio-cloner.yml
+      - 'tools/nuvio-cloner/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
           node-version: '22'
       - name: Test isolated cloner
         run: |
-          node --check tools/nuvio-cloner/server.mjs
+          node --check tools/nuvio-cloner/server-nuvio-login.mjs
           node --test tools/nuvio-cloner/test.mjs
           bash -n tools/nuvio-cloner/install-oracle.sh
       - name: Prepare Oracle credentials
@@ -40,6 +41,6 @@ jobs:
           set -Eeuo pipefail
           origin='https://141-145-215-202.nip.io'
           code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "$origin/cloner/")
-          test "$code" = 401
+          test "$code" = 200
           curl -fsS "$origin/_oracle/health" | jq -e '.ok == true' >/dev/null
           curl -fsS "$origin/fr/manifest.json" >/dev/null
