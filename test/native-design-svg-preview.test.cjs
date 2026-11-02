@@ -65,6 +65,31 @@ test('vector preview serves full 16:9 artwork, badges and metadata, without a ge
   assert.equal(imageCalls, 2, 'vector assets must be cached across requests');
 });
 
+test('Shield SVG enlarges key text and shows confirmed TV season, episode and broadcast date', async () => {
+  const { latestAiredEpisode } = require('../runtime/native-design-meta-addon.cjs');
+  const data = {
+    last_episode_to_air: { season_number: 4, episode_number: 5, air_date: '2026-10-14' }
+  };
+  assert.deepEqual(latestAiredEpisode(data,'2026-11-02'),
+    { season: 4, episode: 5, date: '2026-10-14' });
+  assert.equal(latestAiredEpisode({
+    last_episode_to_air: { season_number: 4, episode_number: 6, air_date: '2026-12-01' }
+  },'2026-11-02'),null, 'future airings must never be presented as already released');
+  const art = {
+    genres: ['Drame'], platforms: ['Netflix'], firstRelease:'2024-01-01',
+    tmdbScore:7.5, seasonCount:4,
+    latestEpisode:latestAiredEpisode(data,'2026-11-02')
+  };
+  const svg = renderSvg({type:'series',name:'Exemple de série'},art,'data:image/png;base64,AA==');
+  assert.match(svg,/DERNIER ÉPISODE  •  S04 E05/);
+  assert.match(svg,/DIFFUSION : 14\/10\/2026/);
+  assert.match(svg,/font-size="67"/);
+  assert.match(svg,/font-size="60"/);
+  const movieSvg = renderSvg({type:'movie',name:'Exemple de film'},art,'data:image/png;base64,AA==');
+  assert.doesNotMatch(movieSvg,/DERNIER ÉPISODE/);
+  assert.match(movieSvg,/SORTIE : 01\/01\/2024/);
+});
+
 test('multiple services must not be mislabeled as one platform', async () => {
   const addon = createAddon({
     tmdb: async () => {
@@ -135,7 +160,7 @@ test('an optional installable vector manifest produces SVG poster URLs, while na
 test('one global vector poster URL pattern renders art for any catalog source ID', async () => {
   const { vectorPosterPattern } = require('../runtime/native-design-meta-addon.cjs');
   assert.equal(vectorPosterPattern('https://example.test'),
-    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v2');
+    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3');
   let lookupCalls = 0;
   const addon = createAddon({
     tmdb: async (route) => {
@@ -180,7 +205,7 @@ test('global art rejects unsupported IDs and never fetches untrusted artwork URL
 
 test('Oracle routing caches artwork 15 minutes while status is always fresh', async () => {
   const { edgeTtl } = await import('../runtime/router.mjs');
-  assert.equal(edgeTtl('https://oracle.test/design-meta/art/movie/tt1234567/landscape.svg?v=oracle-vector-v2'), 900);
+  assert.equal(edgeTtl('https://oracle.test/design-meta/art/movie/tt1234567/landscape.svg?v=oracle-vector-v3'), 900);
   assert.equal(edgeTtl('https://oracle.test/design-meta/preview/series/tmdb%3Atv%3A123.svg'), 900);
   assert.equal(edgeTtl('https://oracle.test/design-meta/status.json'), 0);
   assert.equal(edgeTtl('https://oracle.test/design-meta/vector/manifest.json'), 300);
