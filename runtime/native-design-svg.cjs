@@ -19,6 +19,49 @@ function renderSvg(meta,art,bgData,logoData=null){
   const isMovie=meta.type==='movie';
   const services=Array.isArray(art.platforms)?art.platforms:[];
   const provider=services.length===1?clip(services[0],24).toUpperCase():null;
+  const platformWidth=provider?Math.min(450,Math.max(210,provider.length*27+70)):0;
+  const platformX=1540-platformWidth;
+  const typeX=provider?platformX-209:1347;
+  const date=/^\d{4}-\d{2}-\d{2}$/.test(String(art.firstRelease||''))?art.firstRelease:null;
+  const formattedDate=date?date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4):'';
+  const score=Number(art.tmdbScore);
+  const rating=Number.isFinite(score)&&score>0?'★ TMDB '+score.toFixed(1)+'/10':null;
+  const seasonCount=Number(art.seasonCount);
+  const seasons=!isMovie&&Number.isInteger(seasonCount)&&seasonCount>0?seasonCount+(seasonCount===1?' SAISON':' SAISONS'):null;
+  const properties=[date?.slice(0,4),rating,seasons].filter(Boolean).join('  •  ');
+  const genres=(Array.isArray(art.genres)?art.genres:[]).slice(0,3).map(x=>clip(x,24)).join('  •  ');
+  const title=clip(meta.name,37);
+  const titleSize=title.length>29?75:title.length>20?93:120;
+  // The global URL has no catalog-month placeholder. Show only the actual
+  // latest confirmed episode, never claim it belongs to the browsed month.
+  const episode=!isMovie&&art.latestEpisode&&
+    Number.isInteger(art.latestEpisode.season)&&art.latestEpisode.season>0&&
+    Number.isInteger(art.latestEpisode.episode)&&art.latestEpisode.episode>0&&
+    /^\d{4}-\d{2}-\d{2}$/.test(String(art.latestEpisode.date||''))
+    ?art.latestEpisode:null;
+  const episodeDate=episode?episode.date.slice(8,10)+'/'+episode.date.slice(5,7)+'/'+episode.date.slice(0,4):null;
+  const episodeLabel=episode?'DERNIER ÉPISODE  •  S'+String(episode.season).padStart(2,'0')+' E'+String(episode.episode).padStart(2,'0'):null;
+  const badge=provider?'<rect x="'+platformX+'" y="42" width="'+platformWidth+'" height="108" rx="23" fill="#03112a" stroke="#38bdf8" stroke-width="5"/><text x="'+(platformX+platformWidth/2)+'" y="115" font-family="sans-serif" font-weight="bold" font-size="51" fill="#fff" text-anchor="middle">'+escapeXml(provider)+'</text>':'';
+  const logo=logoData?'<image x="72" y="383" width="750" height="238" preserveAspectRatio="xMinYMid meet" href="'+escapeXml(logoData)+'"/>':'<text x="74" y="619" font-size="'+titleSize+'" font-family="sans-serif" font-weight="bold" fill="#fff">'+escapeXml(title)+'</text>';
+  const propertyText=properties?'<text x="78" y="721" font-family="sans-serif" font-size="60" fill="#fff" font-weight="bold">'+escapeXml(properties)+'</text>':'';
+  const secondaryText=episodeLabel
+    ?'<text x="78" y="801" font-size="67" font-family="sans-serif" font-weight="bold" fill="#fff">'+escapeXml(episodeLabel)+'</text>'
+    :genres?'<text x="78" y="800" font-family="sans-serif" font-size="54" font-weight="bold" fill="#e7f1ff">'+escapeXml(clip(genres,55))+'</text>':'';
+  const bottomLabel=episodeDate?'DIFFUSION : '+episodeDate:
+    formattedDate?(isMovie?'SORTIE : ':'1RE DIFFUSION : ')+formattedDate:'';
+  const bottomText=bottomLabel?'<text x="78" y="868" font-size="56" font-family="sans-serif" font-weight="bold" fill="#8edfff">'+escapeXml(bottomLabel)+'</text>':'';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">'+
+    '<defs><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#071525" stop-opacity=".13"/><stop offset="43%" stop-color="#071525" stop-opacity=".19"/><stop offset="100%" stop-color="#041a3e" stop-opacity=".99"/></linearGradient></defs>'+
+    '<image x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid slice" href="'+escapeXml(bgData)+'"/>'+
+    '<rect width="1600" height="900" fill="url(#blue)"/>'+badge+
+    '<rect x="'+typeX+'" y="42" width="193" height="108" rx="23" fill="#0788c5"/><text x="'+(typeX+96.5)+'" y="115" font-size="55" font-family="sans-serif" font-weight="bold" fill="#fff" text-anchor="middle">'+(isMovie?'FILM':'SÉRIE')+'</text>'+
+    logo+propertyText+secondaryText+bottomText+
+    '<rect width="1600" height="900" fill="none" stroke="#d6f0ff" stroke-opacity=".16" stroke-width="5"/></svg>';
+}
+function renderSvgLegacy(meta,art,bgData,logoData=null){
+  const isMovie=meta.type==='movie';
+  const services=Array.isArray(art.platforms)?art.platforms:[];
+  const provider=services.length===1?clip(services[0],24).toUpperCase():null;
   const platformWidth=provider?Math.min(450,Math.max(190,provider.length*25+65)):0;
   const platformX=1540-platformWidth;
   const typeX=provider?platformX-200:1360;
@@ -56,8 +99,8 @@ function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
     cachedBytes-=entry.bytes||0;
     cache.delete(key);
   }
-  async function make(meta,art){
-    const key=JSON.stringify([meta.id,meta.type,meta.name,art]);
+  async function make(meta,art,{legacy=false}={}){
+    const key=JSON.stringify([meta.id,meta.type,meta.name,art,legacy]);
     const hit=cache.get(key);
     if(hit&&hit.until>now()){
       cache.delete(key);
@@ -68,7 +111,7 @@ function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
     const promise=(async()=>{
       const bg=await remoteImage(art.backdrop,fetcher);
       const logo=validImage(art.logo)?await remoteImage(art.logo,fetcher).catch(()=>null):null;
-      return renderSvg(meta,art,bg,logo);
+      return legacy?renderSvgLegacy(meta,art,bg,logo):renderSvg(meta,art,bg,logo);
     })();
     const entry={promise,until:now()+15*60*1000,bytes:0};
     cache.set(key,entry);
@@ -87,4 +130,4 @@ function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
   }
   return {make,cache};
 }
-module.exports={escapeXml,validImage,imageData,remoteImage,renderSvg,createSvgService};
+module.exports={escapeXml,validImage,imageData,remoteImage,renderSvg,renderSvgLegacy,createSvgService};

@@ -108,7 +108,7 @@ try {
   requireHeader(vectorStatusResponse, 'x-nuvio-origin', 'oracle-vm');
   const vectorStatus = await vectorStatusResponse.json();
   const expectedPosterPattern =
-    origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v2';
+    origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3';
   if (vectorStatus.vectorPosterPattern !== expectedPosterPattern) {
     throw new Error('Oracle vector artwork hook is not routed or revisioned correctly');
   }
