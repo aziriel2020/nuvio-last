@@ -313,3 +313,24 @@ test('V4 batches concurrent TMDB artwork requests and reuses image and details c
   assert.equal(detailsCalls,1);
   assert.equal(imageCalls,2);
 });
+
+test('Films Mondiaux V4 resolves indexed IMDb IDs without a second TMDB /find request',async()=>{
+  const paths=[];
+  const addon=createAddon({
+    movieIdResolver:id=>id==='tt1234567'?456:null,
+    tmdb:async path=>{
+      paths.push(path);
+      assert.equal(path,'/movie/456','local TMDB index should skip remote IMDb /find');
+      return movie();
+    },
+    imageFetcher:fakeImageResponse
+  });
+  const url='/design-meta/art/movie/tt1234567/landscape.svg?v=oracle-vector-v4-film-details';
+  const result=response();
+  await addon.handle({url},result,'https://example.test');
+  assert.equal(result.statusCode,200);
+  assert.deepEqual(paths,['/movie/456']);
+  const next=response();
+  await addon.handle({url},next,'https://example.test');
+  assert.deepEqual(paths,['/movie/456'],'repeat Shield artwork must not repeat details request');
+});
