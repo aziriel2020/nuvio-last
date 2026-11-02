@@ -55,7 +55,12 @@ try {
     assert.match(r.headers.get('cache-control') || '', /public/, 'Nonempty catalog pages can be served from Oracle cache');
     const data = await r.json(); ids.push(...data.metas.map((m) => m.id));
     assert(data.metas.length > 0 && data.metas.length <= firstCatalog.pageSize);
-    assert(data.metas.every((m) => m.posterShape === 'landscape' && new URL(m.background).pathname === '/fr/calendar-card.jpg'));
+    assert(data.metas.every((m) => m.posterShape === 'landscape'
+      && m.poster === 'https://image.tmdb.org/t/p/w780/backdrop.jpg'
+      && m.background === 'https://image.tmdb.org/t/p/w1280/backdrop.jpg'
+      && m.landscapePoster === m.poster && m.banner === m.poster
+      && !JSON.stringify(m).includes('/calendar-card.jpg')),
+      'canonical Films Monde must deliver direct TMDB artwork, without server JPEG processing');
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
   const cached = await get('/movies/catalog/movie/movies-fr-all-all-all/skip=0.json');
