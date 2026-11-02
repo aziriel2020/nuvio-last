@@ -135,7 +135,7 @@ test('an optional installable vector manifest produces SVG poster URLs, while na
 test('one global vector poster URL pattern renders art for any catalog source ID', async () => {
   const { vectorPosterPattern } = require('../runtime/native-design-meta-addon.cjs');
   assert.equal(vectorPosterPattern('https://example.test'),
-    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg');
+    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v2');
   let lookupCalls = 0;
   const addon = createAddon({
     tmdb: async (route) => {
@@ -176,4 +176,12 @@ test('global art rejects unsupported IDs and never fetches untrusted artwork URL
   const invalid=response();
   await addon.handle({url:'/design-meta/art/movie/https%3A%2F%2Fevil.example/landscape.svg'},invalid,'https://example.test');
   assert.equal(invalid.statusCode,400);
+});
+
+test('Oracle routing caches artwork 15 minutes while status is always fresh', async () => {
+  const { edgeTtl } = await import('../runtime/router.mjs');
+  assert.equal(edgeTtl('https://oracle.test/design-meta/art/movie/tt1234567/landscape.svg?v=oracle-vector-v2'), 900);
+  assert.equal(edgeTtl('https://oracle.test/design-meta/preview/series/tmdb%3Atv%3A123.svg'), 900);
+  assert.equal(edgeTtl('https://oracle.test/design-meta/status.json'), 0);
+  assert.equal(edgeTtl('https://oracle.test/design-meta/vector/manifest.json'), 300);
 });
