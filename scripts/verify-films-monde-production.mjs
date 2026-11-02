@@ -154,21 +154,21 @@ assert(direct>=Math.min(3,native.metas.length),'Native Bridge still sends Oracle
 // Check the real image pipeline from an indexed movie in Oracle production.
 const {data:designConfig}=await get('/design-plugin/config.json');
 assert.equal(designConfig.requiresModifiedApk,false);
-assert.equal(designConfig.posterPattern, ORIGIN+'/design-plugin/poster.jpg?type={type}&id={id}&shape={shape}');
+assert.equal(designConfig.posterPattern, ORIGIN+'/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details');
 assert.equal(designConfig.originalBackup,ORIGIN+'/movies/nuvio-collections.json');
+// Legacy poster requests must not trigger Oracle JPEG rasterization.
 let designPosterLoaded=false;
 for(const meta of raw.metas.slice(0,10)){
   const url=ORIGIN+'/design-plugin/poster.jpg?type=movie&shape=landscape&id='+encodeURIComponent(meta.id);
-  const response=await fetch(url,{signal:AbortSignal.timeout(18000)});
-  if(response.status!==200){await response.body?.cancel();continue;}
-  assert.match(response.headers.get('content-type')||'',/^image\/jpeg/,
-    'plugin must deliver genuine cinematic artwork');
-  const bytes=Buffer.from(await response.arrayBuffer());
-  assert(bytes.length>1000&&bytes[0]===255&&bytes[1]===216,
-    'plugin must return JPEG bytes, not error HTML');
+  const response=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(18000)});
+  if(response.status!==307){await response.body?.cancel();continue;}
+  const redirect=response.headers.get('location')||'';
+  assert.match(redirect,/\/design-meta\/art\/movie\/.+\/landscape\.svg\?v=oracle-vector-v4-film-details$/,
+    'legacy JPEG route must redirect to native V4 SVG');
+  await response.body?.cancel();
   designPosterLoaded=true;break;
 }
-assert(designPosterLoaded,'design plugin failed to resolve any indexed Films Monde movie');
+assert(designPosterLoaded,'design plugin V4 redirect failed for indexed Films Monde movie');
 const invalidPoster=await fetch(ORIGIN+'/design-plugin/poster.jpg?type=movie&id=invalid&shape=landscape');
 assert.equal(invalidPoster.status,400,'invalid Custom Posters ID should fall back to native art');
 await invalidPoster.body?.cancel();
