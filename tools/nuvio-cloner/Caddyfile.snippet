@@ -1,0 +1,6 @@
+# Reference routing; keep existing catalog backend as final fallback.
+route {
+  @nuvio_cloner path /cloner /cloner/*
+  reverse_proxy @nuvio_cloner 127.0.0.1:3001
+  reverse_proxy 127.0.0.1:3000
+}
