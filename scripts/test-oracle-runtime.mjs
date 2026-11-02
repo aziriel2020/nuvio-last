@@ -171,6 +171,28 @@ try {
   }
 
   const desktopStrings = flattenDesktopStrings(desktopBody);
+  if (process.env.NUVIO_V4_COLLECTIONS === '1') {
+    const svgUrls = desktopStrings.filter((value) => {
+      try {
+        const path = new URL(value).pathname;
+        return path.endsWith('/platform-category-card.svg') ||
+          path.endsWith('/genre-folder-art.svg');
+      } catch { return false; }
+    });
+    if (svgUrls.length < 4) throw new Error('V4 folder SVGs missing from Desktop collection payloads');
+    if (desktopStrings.some(value => value.includes('/static/assets/generated-covers/')))
+      throw new Error('V4 still references generated collection JPEG covers');
+    const sampled = [...new Set(svgUrls)].slice(0, 3);
+    for (const visual of sampled) {
+      const u = new URL(visual);
+      if (u.origin !== origin) throw new Error('V4 collection SVG escaped Oracle');
+      const response = await retry(u.pathname + u.search);
+      if (!String(response.headers.get('content-type') || '').includes('image/svg+xml'))
+        throw new Error('V4 folder image is not SVG');
+      const svg = await response.text();
+      if (!svg.includes('<svg')) throw new Error('V4 folder SVG is empty');
+    }
+  } else {
   const desktopFolderVisual = desktopStrings.find((value) => {
     try {
       return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/(?!genres\/)[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/i.test(new URL(value).pathname);
@@ -199,6 +221,7 @@ try {
     if (meta.format !== 'jpeg' || meta.width !== 1600 || meta.height !== 900) throw new Error(`Desktop ${label} expected 1600x900 JPEG, got ${meta.format} ${meta.width}x${meta.height}`);
   }
 
+  }
   const visual = findFirstOracleVisual(desktopBody) || findFirstOracleVisual(collectionBody);
   if (!visual) throw new Error('No Oracle-owned generated visual URL found in collection payloads');
   const visualUrl = new URL(visual);
