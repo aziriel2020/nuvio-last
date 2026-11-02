@@ -1,0 +1,45 @@
+name: Install Nuvio Cloner on Oracle
+on:
+  push:
+    branches:
+      - feature/nuvio-account-mirror-oracle
+    paths:
+      - .github/workflows/install-nuvio-cloner.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test isolated cloner
+        run: |
+          node --check tools/nuvio-cloner/server.mjs
+          node --test tools/nuvio-cloner/test.mjs
+          bash -n tools/nuvio-cloner/install-oracle.sh
+      - name: Prepare Oracle credentials
+        env:
+          ORACLE_SSH_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ORACLE_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/keys/oracle.pem"
+          chmod 600 "$RUNNER_TEMP/keys/oracle.pem"
+          ssh-keygen -y -f "$RUNNER_TEMP/keys/oracle.pem" >/dev/null
+      - name: Install on existing Oracle instance
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$RUNNER_TEMP/keys/oracle.pem" -o StrictHostKeyChecking=accept-new ubuntu@141.145.215.202 'sudo bash -s' < tools/nuvio-cloner/install-oracle.sh
+      - name: Validate public routing and catalogs
+        run: |
+          set -Eeuo pipefail
+          origin='https://141-145-215-202.nip.io'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "$origin/cloner/")
+          test "$code" = 401
+          curl -fsS "$origin/_oracle/health" | jq -e '.ok == true' >/dev/null
+          curl -fsS "$origin/fr/manifest.json" >/dev/null
