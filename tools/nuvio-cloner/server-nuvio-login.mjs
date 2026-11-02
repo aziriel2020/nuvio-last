@@ -57,6 +57,10 @@ async function profiles(token) {
   if (!Array.isArray(result)) throw appError('Profils Nuvio indisponibles',502);
   return result.map(p=>({id:p.profile_index,name:p.name})).filter(p=>Number.isInteger(p.id));
 }
+function accountId(token) {
+  try { return JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString('utf8')).sub; }
+  catch { throw appError('Identité Nuvio non vérifiable',401); }
+}
 async function checkedProfile(token,pid) {
   validPid(pid);
   if (!(await profiles(token)).some(p=>p.id===pid)) throw appError('Le profil '+pid+' ne fait pas partie de ce compte Nuvio',400);
@@ -143,11 +147,10 @@ function filteredSettings(source,target,postersOnly) {
       }
     }
   }
-  for(const values of Object.values(next)){
+  for(const [feature,values] of Object.entries(next)){
     if(!values || typeof values!=='object' || Array.isArray(values))continue;
-    for(const key of Object.keys(values)){
-      if(exempt.test(key) && !Object.hasOwn(previous,key)) delete values[key];
-    }
+    for(const key of Object.keys(values))
+      if(exempt.test(key) && !Object.hasOwn(previous[feature]||{},key)) delete values[key];
   }
   return {...(source||{}),features:next};
 }
@@ -246,7 +249,8 @@ async function route(req,res) {
             const targetAccount=t.sameAccount?source:t;
             const targetToken=t.sameAccount?token:await login(targetAccount);
             await checkedProfile(targetToken,t.profileId);
-            if(t.sameAccount && t.profileId===source.profileId)throw appError('La destination ne peut pas être le profil source');
+            if(accountId(targetToken)===accountId(token) && t.profileId===source.profileId)
+              throw appError('La destination ne peut pas être le profil source');
             title=(t.sameAccount?'Même compte':String(t.email||'Autre compte'))+' · '+title;
             const changes=await apply(targetToken,t.profileId,data,options);
             results.push({target:title,ok:true,changes});
