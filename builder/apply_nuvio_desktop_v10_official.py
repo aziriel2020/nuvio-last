@@ -1354,3 +1354,271 @@ require(home, "HomePosterHoverTrailer(", "homeTrailerEnabled", "resolveHomePoste
 require(custom, "oracle-vector-v4-film-details", "NUVIO_DESKTOP_V4_ARTWORK_PATTERN")
 require(style, "hoverPreviewTrailerConfigured", "catalogLandscapeModeConfigured")
 print("V10.1: native Home/Catalog Hero and original Oracle V4 poster link connected for Windows MSI")
+
+
+# V10.2 — missing collection/folder Hero was a real integration bug.
+# The previous V10.1 only rendered CatalogHoverHero inside CatalogScreen,
+# not the FolderDetailScreen used by the user's collection catalogs.
+# Restore the full width fixed Hero ABOVE tabbed and row layouts, and reuse
+# the original V4 cards without introducing duplicate thumbnail video players.
+replace_once(folder,
+'''import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import com.nuvio.app.features.home.components.HomePosterCard
+''',
+'''import com.nuvio.app.features.home.components.CatalogHoverHero
+import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import com.nuvio.app.features.home.components.HomePosterCard
+''',
+"folder full Hero component import")
+
+replace_once(folder,
+'''import androidx.compose.runtime.mutableFloatStateOf
+''',
+'''import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+''',
+"folder Hero state import")
+
+replace_once(folder,
+'''private val FolderCoverHeight = 176.dp
+''',
+'''private val FolderCoverHeight = 176.dp
+private val DesktopFolderHeroHeight = 430.dp
+''',
+"desktop full Hero sizing")
+
+replace_once(folder,
+'''    val coverImageUrl = folder?.coverImageUrl?.takeIf { it.isNotBlank() }
+''',
+'''    val coverImageUrl = folder?.coverImageUrl?.takeIf { it.isNotBlank() }
+    var hoveredHeroItem by remember(
+        folder?.id, uiState.viewMode, uiState.selectedTabIndex,
+    ) { mutableStateOf<MetaPreview?>(null) }
+''',
+"folder selected featured card per profile, view and tab")
+
+replace_once(folder,
+'''            Column(modifier = Modifier.fillMaxSize()) {
+                if (!useNativeNavigation) {
+                    NuvioScreenHeader(''',
+'''            Column(modifier = Modifier.fillMaxSize()) {
+                // These ARE the catalog screens opened inside Collections.
+                // Show the full cinematic Hero in every desktop view mode.
+                val featuredHeroItem = when (uiState.viewMode) {
+                    FolderViewMode.TABBED_GRID ->
+                        uiState.tabs.getOrNull(uiState.selectedTabIndex)?.items?.firstOrNull()
+                    FolderViewMode.ROWS,
+                    FolderViewMode.FOLLOW_LAYOUT ->
+                        FolderDetailRepository.getCatalogSectionsForRows()
+                            .firstOrNull { it.items.isNotEmpty() }
+                            ?.items?.firstOrNull()
+                }
+                if (featuredHeroItem != null) {
+                    CatalogHoverHero(
+                        selectedItem = hoveredHeroItem ?: featuredHeroItem,
+                        isHoverActive = true,
+                        pageTitle = folder?.title ?: uiState.collectionTitle,
+                        onBack = onBack,
+                        showBack = !useNativeNavigation,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(DesktopFolderHeroHeight)
+                            .padding(
+                                start = desktopPagePadding,
+                                end = desktopPagePadding,
+                                top = 10.dp,
+                                bottom = 8.dp,
+                            ),
+                    )
+                } else if (!useNativeNavigation) {
+                    NuvioScreenHeader(''',
+"mount full desktop Hero above every collection catalog instead of portrait-only header")
+
+replace_once(folder,
+'''                        onTabSelected = { FolderDetailRepository.selectTab(it) },
+                        onPosterClick = onPosterClick,
+                    )
+                    FolderViewMode.ROWS -> RowsContent(''',
+'''                        onTabSelected = { FolderDetailRepository.selectTab(it) },
+                        onPosterClick = onPosterClick,
+                        onPosterHoverChanged = { item, hovering ->
+                            if (hovering) hoveredHeroItem = item
+                            else if (hoveredHeroItem?.stableKey() == item.stableKey())
+                                hoveredHeroItem = null
+                        },
+                    )
+                    FolderViewMode.ROWS -> RowsContent(''',
+"desktop folder tabbed posters switch full Hero on hover")
+
+replace_once(folder,
+'''                    FolderViewMode.ROWS -> RowsContent(
+                        uiState = uiState,
+                        watchedKeys = watchedUiState.watchedKeys,
+                        modifier = Modifier.weight(1f),
+                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                    )
+                    FolderViewMode.FOLLOW_LAYOUT -> RowsContent(''',
+'''                    FolderViewMode.ROWS -> RowsContent(
+                        uiState = uiState,
+                        watchedKeys = watchedUiState.watchedKeys,
+                        modifier = Modifier.weight(1f),
+                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                        onPosterHoverChanged = { item, hovering ->
+                            if (hovering) hoveredHeroItem = item
+                            else if (hoveredHeroItem?.stableKey() == item.stableKey())
+                                hoveredHeroItem = null
+                        },
+                    )
+                    FolderViewMode.FOLLOW_LAYOUT -> RowsContent(''',
+"desktop folder row posters switch full Hero on hover")
+
+replace_once(folder,
+'''                    FolderViewMode.FOLLOW_LAYOUT -> RowsContent(
+                        uiState = uiState,
+                        watchedKeys = watchedUiState.watchedKeys,
+                        modifier = Modifier.weight(1f),
+                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                    )
+                }
+''',
+'''                    FolderViewMode.FOLLOW_LAYOUT -> RowsContent(
+                        uiState = uiState,
+                        watchedKeys = watchedUiState.watchedKeys,
+                        modifier = Modifier.weight(1f),
+                        onCatalogClick = onCatalogClick,
+                        onPosterClick = onPosterClick,
+                        onPosterHoverChanged = { item, hovering ->
+                            if (hovering) hoveredHeroItem = item
+                            else if (hoveredHeroItem?.stableKey() == item.stableKey())
+                                hoveredHeroItem = null
+                        },
+                    )
+                }
+''',
+"desktop folder follow-layout posters switch full Hero on hover")
+
+replace_once(folder,
+'''    onTabSelected: (Int) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+) {
+    val gridState = rememberLazyGridState()''',
+'''    onTabSelected: (Int) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+    onPosterHoverChanged: ((MetaPreview, Boolean) -> Unit)? = null,
+) {
+    val gridState = rememberLazyGridState()''',
+"folder grid optional hover callback without affecting mobile")
+
+replace_once(folder,
+'''                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+                                        onClick = { onPosterClick(item) },
+                                    )''',
+'''                                        useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+                                        useHoverPreview = onPosterHoverChanged == null,
+                                        onHoverChanged = { hovering ->
+                                            onPosterHoverChanged?.invoke(item, hovering)
+                                        },
+                                        onClick = { onPosterClick(item) },
+                                    )''',
+"folder grid's V4 cover selects cinematic Hero")
+
+replace_once(folder,
+'''private fun RowsContent(
+    uiState: FolderDetailUiState,
+    watchedKeys: Set<String>,
+    modifier: Modifier = Modifier,
+    onCatalogClick: (HomeCatalogSection) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+) {''',
+'''private fun RowsContent(
+    uiState: FolderDetailUiState,
+    watchedKeys: Set<String>,
+    modifier: Modifier = Modifier,
+    onCatalogClick: (HomeCatalogSection) -> Unit,
+    onPosterClick: (MetaPreview) -> Unit,
+    onPosterHoverChanged: ((MetaPreview, Boolean) -> Unit)? = null,
+) {''',
+"optional folder row Hero callback")
+
+replace_once(folder,
+'''                    watchedKeys = watchedKeys,
+                    onPosterClick = { onPosterClick(it) },
+                )
+''',
+'''                    watchedKeys = watchedKeys,
+                    onPosterClick = { onPosterClick(it) },
+                    onPosterHoverChanged = onPosterHoverChanged,
+                )
+''',
+"pass folder hover into row section")
+
+# Reuse the native V4 HomePosterCard in horizontal rows. No special image
+# conversion, plugin change or alternate card implementation.
+rowsection = "composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt"
+replace_once(rowsection,
+'''    onPosterLongClick: ((MetaPreview) -> Unit)? = null,
+) {
+    if (sectionPadding != null) {''',
+'''    onPosterLongClick: ((MetaPreview) -> Unit)? = null,
+    onPosterHoverChanged: ((MetaPreview, Boolean) -> Unit)? = null,
+) {
+    if (sectionPadding != null) {''',
+"row section public optional Hero callback")
+
+# This specific argument occurs in both public section invocations, so use a
+# unique one-time replacement that contains both neighboring branches.
+row_file = f(rowsection)
+row_src = row_file.read_text(encoding="utf-8")
+public_start = row_src.index("fun HomeCatalogRowSection(")
+private_start = row_src.index("private fun HomeCatalogRowSectionContent(")
+public_region = row_src[public_start:private_start]
+needle = '''            onPosterLongClick = onPosterLongClick,
+'''
+if public_region.count(needle) != 2:
+    raise RuntimeError("V10.2 row public invocations changed")
+public_region = public_region.replace(
+    needle,
+    '''            onPosterLongClick = onPosterLongClick,
+            onPosterHoverChanged = onPosterHoverChanged,
+''')
+row_src = row_src[:public_start] + public_region + row_src[private_start:]
+row_file.write_text(row_src, encoding="utf-8")
+
+replace_once(rowsection,
+'''    onPosterLongClick: ((MetaPreview) -> Unit)?,
+) {
+    val posterCardStyle''',
+'''    onPosterLongClick: ((MetaPreview) -> Unit)?,
+    onPosterHoverChanged: ((MetaPreview, Boolean) -> Unit)?,
+) {
+    val posterCardStyle''',
+"internal row content hover callback")
+
+replace_once(rowsection,
+'''            onLongClick = onPosterLongClick?.let { { it(item) } },
+        )
+''',
+'''            onLongClick = onPosterLongClick?.let { { it(item) } },
+            useHoverPreview = onPosterHoverChanged == null,
+            onHoverChanged = { hovering ->
+                onPosterHoverChanged?.invoke(item, hovering)
+            },
+        )
+''',
+"row V4 covers update active full Hero instead of small preview")
+
+# Never validate this installer's UI presence by Kotlin success alone.
+require(folder,
+    "DesktopFolderHeroHeight",
+    "CatalogHoverHero(",
+    "selectedItem = hoveredHeroItem ?: featuredHeroItem",
+    "FolderViewMode.TABBED_GRID",
+    "FolderViewMode.FOLLOW_LAYOUT",
+    "onPosterHoverChanged =")
+require(rowsection, "onPosterHoverChanged = onPosterHoverChanged",
+    "useHoverPreview = onPosterHoverChanged == null")
+require(catalog, "CatalogHoverHero(", "isHoverActive = true")
+print("V10.2: CatalogScreen + FolderDetailScreen (grid/rows/follow) now mount native Hero block")
