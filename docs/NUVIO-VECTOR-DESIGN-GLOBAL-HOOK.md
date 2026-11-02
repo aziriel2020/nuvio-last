@@ -6,17 +6,17 @@
 - `ModernHomeModels.kt` uses `landscapePoster ?: backdropUrl ?: poster` when the Nuvio landscape-card setting is enabled.
 - This hook is part of **Nuvio's native Custom Posters setting**; an independent Stremio-compatible addon manifest cannot install or change that setting by itself. There is no claim of arbitrary Android/Compose UI injection.
 
-## Shield legibility improvement — v4 (deployment pending)
+## Shield V4 — film-details-only revision (opt-in pending verification)
 
 For an opt-in test profile on Nuvio, set Custom Posters' URL pattern to:
 
 ```text
-https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4
+https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details
 ```
 
 Enable Custom Posters for **Catalogs/Home** and enable **landscape posters** in Nuvio's layout options. Keep the existing addons as they are; the native resolver requests our artwork per media identifier. No APK fork, no edits to the catalogs, and no generated JPEG artifacts are involved.
 
-The V4 SVG enlarges type, rating, release date, season and episode details and logo artwork on both films and TV. `?v=oracle-vector-v3` stays on the previous validated typography and still shows the verified latest TV episode with its original broadcast date. `?v=oracle-vector-v2` retains the original renderer. Change only the version parameter to roll back without replacing any addon. No monthly catalog context is available in the global URL.
+The approved V4 SVG remains the visual baseline. The new `oracle-vector-v4-film-details` cache revision only enlarges **film detail text** (rating/year 69→80, genres 64→75, release date 65→77) and shortens very long genre lines. Movie logos and layout are unchanged, and the V4 series SVG remains identical. The previous `?v=oracle-vector-v4` remains a direct rollback. `?v=oracle-vector-v3` stays on the previous validated typography and still shows the verified latest TV episode with its original broadcast date. `?v=oracle-vector-v2` retains the original renderer. Change only the version parameter to roll back without replacing any addon. No monthly catalog context is available in the global URL.
 
 The optional *metadata addon* can be installed separately from `/design-meta/vector/manifest.json`, but its installation **alone does not override catalog posters**. The global artwork URL pattern is the piece that intercepts existing catalog images.
 
@@ -25,17 +25,17 @@ The service resolves IMDb `tt...` and TMDB `tmdb:...` content IDs, fetches title
 Non-landscape shapes return HTTP 404 for native artwork fallback instead of cropping a 16:9 fiche into portrait or square.
 
 ## Explicit limitations
-- **Shield verification**: the user confirmed that v2 artwork renders on their Shield. The larger v3 typography and episode line still need visual testing on the device.
+- **Shield verification**: the user approved V4 series and film layout and requested only larger film detail text. The film-only revision requires a fresh Shield check before legacy JPEG cleanup.
 - **Only IMDb/TMDB IDs supported today**. A catalog using only TVDB/Kitsu/MAL IDs needs a verified ID resolver before it can receive global artwork. Other media URLs fall back.
 - Fanart.tv and TVDB are **not integrated yet**; this prototype currently downloads artwork via TMDB.
 - Nuvio determines card aspect ratio; this engine provides artwork, not UI layout code.
 - This first vector engine may download and base64-embed original TMDB image bytes into SVG; it does not create or save JPEGs. Server cache is bounded (32 entries/48 MiB).
-- The v3 change is not live until its PR is merged and Oracle deploy succeeds. Do not tell the user to switch to v3 before deployment is verified.
+- The new film-only V4 revision is not live until CI and Oracle deployment checks succeed.
 - Oracle runtime uses `oracle/server.mjs` → `runtime/index.mjs` → `runtime/router.mjs` → `api/index.js`; the integration suite tests that full path with no TMDB credentials.
 - The dynamic SVG route has a 900-second Oracle edge/disk cache, with a revisioned URL. A changed design requires changing the `v` value.
 - An identical film can appear in several catalogs: neither title ID nor TMDB watch-provider availability reliably identifies the catalog's specific brand. Provider badges are omitted when ambiguous.
 - **Monthly series context:** the global Custom Posters URL exposes only `{type}`, `{id}`, and `{shape}`, not the month or the individual episode of the catalog row. Therefore the vector overlay truthfully labels the episode as *dernier épisode* (latest confirmed airing), NOT as an episode belonging to the month on screen. Séries Monde catalog metadata already contains the month-specific `episodeCode` and `released` fields; rendering those same month-specific values inside the vector image requires a future Nuvio URL template that passes catalog context, or a per-row artwork override. Never fabricate that context.
-- The legacy server-side image treatments remain in place. Any cleanup is explicitly deferred until the user validates both readability and TV episode presentation.
+- The legacy server-side JPEG pipeline stays untouched until the user visually confirms the film-only revision, a full catalog dependency audit and a rollback snapshot.
 
 ## Verification
 - `node --test test/native-design-meta-addon.test.cjs test/native-design-svg-preview.test.cjs`
