@@ -96,6 +96,12 @@ async function readCategories(token,pid,options) {
     if(d.collections == null) d.collections=[];
     if(!Array.isArray(d.collections)) throw appError('Collections source invalides',502);
   }
+  if(options.home) {
+    const rows=await rpc(token,'sync_pull_home_catalog_settings',{p_profile_id:pid,p_platform:'home_catalog_shared'});
+    const raw=rows?.[0]?.settings_json ?? null;
+    if(raw == null) throw appError('Configuration Home source non synchronisée : impossible de garantir le miroir',409);
+    d.home=typeof raw==='string'?JSON.parse(raw):raw;
+  }
   if(options.library) d.library=await pullPaged(token,'sync_pull_library',pid,i=>({p_profile_id:pid,p_limit:500,p_offset:i*500}));
   if(options.watched) d.watched=await pullPaged(token,'sync_pull_watched_items',pid,i=>({p_profile_id:pid,p_page:i+1,p_page_size:500}));
   if(options.settings || options.posters) {
@@ -142,6 +148,10 @@ async function apply(token,pid,data,options) {
   await run(options.addons,'addons','sync_push_addons',{p_profile_id:pid,p_addons:data.addons});
   await run(options.plugins,'plugins','sync_push_plugins',{p_profile_id:pid,p_plugins:data.plugins});
   await run(options.collections,'collections','sync_push_collections',{p_profile_id:pid,p_collections_json:data.collections});
+  if(options.home){
+    await rpc(token,'sync_push_home_catalog_settings',{p_profile_id:pid,p_platform:'home_catalog_shared',p_settings_json:data.home});
+    done.home='copié';
+  }
   await run(options.library,'library','sync_push_library',{p_profile_id:pid,p_items:data.library});
   await run(options.watched,'watched','sync_push_watched_items',{p_profile_id:pid,p_items:data.watched});
   if(options.settings || options.posters) {
@@ -193,7 +203,7 @@ async function route(req,res) {
         validAccount(source);validPid(source.profileId);
         if(!Array.isArray(targets)||targets.length<1||targets.length>12)throw appError('Entre 1 et 12 destinations requises');
         const options={addons:!!opt?.addons,plugins:!!opt?.plugins,collections:!!opt?.collections,
-          library:!!opt?.library,watched:!!opt?.watched,settings:!!opt?.settings,posters:!!opt?.posters};
+          library:!!opt?.library,watched:!!opt?.watched,home:!!opt?.home,settings:!!opt?.settings,posters:!!opt?.posters};
         if(!Object.values(options).some(Boolean))throw appError('Aucune catégorie sélectionnée');
         const token=await login(source);
         await checkedProfile(token,source.profileId);
