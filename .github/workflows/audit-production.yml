@@ -23,6 +23,7 @@ jobs:
     env:
       PUBLIC_ORIGIN: https://141-145-215-202.nip.io
       VERIFY_TIMEOUT_MS: 30000
+      NUVIO_V4_COLLECTIONS: '1'
     steps:
       - uses: actions/checkout@v4
         with:

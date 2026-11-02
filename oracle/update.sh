@@ -63,25 +63,12 @@ run_nuvio "node scripts/verify-series-covers.mjs"
 run_nuvio "node scripts/verify-movie-covers.mjs"
 run_nuvio "node scripts/test-movies-runtime.mjs"
 
-# Generated collection covers are release assets consumed by the Oracle integration
-# test itself. Reuse the previous set only as a warm cache; the revisioned generator
-# invalidates and fully rebuilds it whenever the art-direction revision changes.
-if [[ -n "$PREVIOUS" && -d "$PREVIOUS/assets/generated-covers" && ! -d "$TARGET/assets/generated-covers" ]]; then
-  cp -a "$PREVIOUS/assets/generated-covers" "$TARGET/assets/generated-covers"
-  chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
-fi
-
-echo "Generating/validating Nuvio cinematic collection covers"
-(
-  cd "$TARGET"
-  npm run generate:covers
-)
-chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
-
+# V4 collection covers are served from native SVG and approved static sources.
+# No prebuilt JPEG cover generation, conversion, or copying into this release.
 # The Oracle integration test deliberately builds a local 127.0.0.1 fixture.
 # Run it AFTER cover generation so the fixture validates the exact release artwork,
 # but BEFORE the final public-origin build so localhost URLs can never be switched.
-run_nuvio "npm run test:oracle"
+run_nuvio "NUVIO_V4_COLLECTIONS=1 npm run test:oracle"
 
 if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   if [[ -z "${PUBLIC_HOST:-}" ]]; then
@@ -93,7 +80,7 @@ fi
 
 # This MUST be the last build before the atomic switch. It rewrites every static
 # Nuvio JSON/manifests URL to the real Oracle public origin.
-run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:runtime"
+run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' NUVIO_V4_COLLECTIONS=1 npm run build:runtime"
 
 # Fail closed if the final static release contains any test/legacy hosting origin.
 run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' node - <<'NODE'

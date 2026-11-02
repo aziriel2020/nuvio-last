@@ -4,16 +4,12 @@
 // No APK changes, no client CSS injection, no alteration of existing imports.
 // The original approved France renderer supplies the artwork; Android handles
 // the fallback to the original native TMDB/TVDB poster when an ID is not indexed.
-const frHandler = require('../regions/fr/api/index.js');
-const moviesHandler = require('../regions/movies/index.cjs');
-const seriesHandler = require('../regions/series/index.cjs');
-
-const VERSION = '1.0.0';
-const RENDER_REV = 'fr-design-plugin-v1';
+const VERSION = '1.1.0';
+const RENDER_REV = 'oracle-vector-v4-film-details';
 const ID_RULE = /^(?:tt\d{5,12}|tmdb:(?:movie:|tv:)?\d{1,12})$/;
 
 function posterPattern(origin) {
-  return origin + '/design-plugin/poster.jpg?type={type}&id={id}&shape={shape}';
+  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details';
 }
 
 function parsePosterQuery(url) {
@@ -26,27 +22,6 @@ function parsePosterQuery(url) {
   if (kind === 'movie' && /^tmdb:tv:/.test(id)) return null;
   if (kind === 'series' && /^tmdb:movie:/.test(id)) return null;
   return { kind, id, shape };
-}
-
-function sourceInfo(request, movieStore, seriesStore) {
-  if (!request) return null;
-  const store = request.kind === 'movie' ? movieStore : seriesStore;
-  if (!store) return null;
-  const normalizedId = request.id.replace(/^tmdb:(?:movie|tv):/, 'tmdb:');
-  const row = store.row(normalizedId);
-  if (!row) return null;
-  const poster = typeof row.poster === 'string' && row.poster.startsWith('https://image.tmdb.org/')
-    ? row.poster : null;
-  const background = typeof row.background === 'string' && row.background.startsWith('https://image.tmdb.org/')
-    ? row.background : null;
-  const landscape = request.shape === 'landscape';
-  const src = landscape ? background || poster : poster || background;
-  if (!src) return null;
-  return {
-    type: request.kind, layout: landscape ? 'landscape' : 'portrait',
-    src, fallback: landscape ? poster : background,
-    title: String(row.title || 'Film').slice(0, 135)
-  };
 }
 
 function sendJson(res, status, data) {
@@ -70,7 +45,7 @@ async function handle(req, res, origin) {
     return sendJson(res, 200, {
       name: 'Nuvio France Design Plugin', version: VERSION, method: 'Nuvio Custom Posters',
       requiresModifiedApk: false, posterPattern: posterPattern(origin),
-      notes: 'Paste posterPattern in Nuvio Custom Posters. The app loads and caches the art; unknown IDs automatically fall back to the native original. An ordinary addon manifest cannot install a global UI overlay.',
+      notes: 'Use V4 SVG via Nuvio Custom Posters. No server JPEG conversion; unsupported images fall back to native art. An addon cannot install a global UI overlay.',
       existingCollections: origin + '/movies/nuvio-collections-unified.json',
       originalBackup: origin + '/movies/nuvio-collections.json',
       artworkRevision: RENDER_REV
@@ -79,31 +54,16 @@ async function handle(req, res, origin) {
   if (url.pathname !== '/design-plugin/poster.jpg') return sendMissing(res);
   const request = parsePosterQuery(url);
   if (!request) return sendMissing(res, 400);
-  let info;
-  try {
-    info = sourceInfo(request,
-      request.kind === 'movie' ? moviesHandler._internals.reader() : null,
-      request.kind === 'series' ? seriesHandler._internals.reader() : null);
-  } catch { return sendMissing(res, 503); }
-  if (!info) return sendMissing(res);
-  const params = new URLSearchParams({
-    layout: info.layout, type: info.type, src: info.src,
-    title: info.title, provider: 'FRANCE',
-    append: info.type === 'movie' ? 'FILMS MONDE' : 'SÉRIES MONDE',
-    v: RENDER_REV
-  });
-  if (info.type === 'movie' && info.layout === 'landscape') params.set('world', '1');
-  if (info.fallback) params.set('fallback', info.fallback);
-  const oldUrl = req.url;
-  const oldHeaders = req.headers;
-  req.url = '/calendar-card.jpg?' + params.toString();
-  req.headers = { ...oldHeaders, 'x-nuvio-base-path': '/fr' };
-  try {
-    return await frHandler(req, res);
-  } finally {
-    req.url = oldUrl;
-    req.headers = oldHeaders;
-  }
+  // Old JPEG Custom Poster URLs remain as a safe redirect to the V4 SVG.
+  // Portrait/square requests intentionally fall back to Nuvio's native poster.
+  if (request.shape !== 'landscape') return sendMissing(res);
+  res.statusCode = 307;
+  res.setHeader('Location', origin + '/design-meta/art/' +
+    request.kind + '/' + encodeURIComponent(request.id) +
+    '/landscape.svg?v=' + RENDER_REV);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.end('');
+
 }
 
-module.exports = { handle, posterPattern, parsePosterQuery, sourceInfo, VERSION, RENDER_REV };
+module.exports = { handle, posterPattern, parsePosterQuery, VERSION, RENDER_REV };

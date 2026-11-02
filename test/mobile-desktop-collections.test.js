@@ -72,6 +72,24 @@ test('Mobile/Desktop alternative manifests avoid Home work while preserving ever
   }
 });
 
+test('V4 collection folders use SVG assets without any server-generated cover JPEG', () => {
+  const visual = handler._internals.v4CollectionVisualUrl;
+  const platform=visual('https://nuvio.test/fr/platform-card.jpg?provider=netflix',
+    {title:'Netflix Films'},'card','France');
+  assert.equal(new URL(platform).pathname,'/fr/platform-category-card.svg');
+  assert.equal(new URL(platform).searchParams.get('type'),'movie');
+  assert.equal(new URL(platform).searchParams.get('v'),'v4-folder-svg-1');
+  const genre=visual('https://nuvio.test/fr/genre-card.jpg?genre=action',
+    {title:'Action'},'card','Films Monde');
+  assert.equal(new URL(genre).pathname,'/fr/genre-folder-art.svg');
+  assert.equal(new URL(genre).searchParams.get('variant'),'card');
+  const backdrop=visual('https://nuvio.test/tr/platform-backdrop.jpg?provider=exxen',
+    null,'backdrop','Türkiye');
+  assert.equal(new URL(backdrop).pathname,'/tr/platform-backdrop.svg');
+  assert.equal(visual('https://nuvio.test/movies/artwork/genre/28.webp',{title:'Action'},'card','Films Monde'),
+    'https://nuvio.test/movies/artwork/genre/28.webp', 'static genre assets stay untouched');
+});
+
 test('alternative manifests leave canonical routes and visual handlers addressable',async()=>{
   for(const region of ['fr','us','tr','global']){
     const response=await request(`/${region}/mobile-desktop-collections/logo.svg`);
