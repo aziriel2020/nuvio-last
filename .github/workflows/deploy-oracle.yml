@@ -144,13 +144,10 @@ jobs:
           ANIME_VERIFY_CATALOGS: '1'
         run: node scripts/verify-anime-production.mjs
 
-      - name: Verify movie and series JPEG thumbnails on Oracle
-        shell: bash
-        run: |
-          ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
-            "cd /opt/nuvio/current && node scripts/benchmark-artwork.cjs"
-
-      - name: Verify original TMDB and TVmaze photos through Oracle
+      # Films Monde V4 must not trigger JPEG generation just to verify a release.
+      # The strict live films gate above already validates all 24 native catalogue
+      # posters, collection layout and the SVG design route.
+      - name: Verify native original film photos and unchanged series metadata
         shell: bash
         run: |
           ssh -i "$ORACLE_SSH_KEY" -o StrictHostKeyChecking=accept-new ubuntu@"$PUBLIC_IP" \
