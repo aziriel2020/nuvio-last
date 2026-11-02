@@ -25,6 +25,7 @@ const suites = [
   { name: 'Films Monde poster/cache performance regression', cwd: root, args: ['--test', 'test/films-monde-posters.test.mjs'] },
   { name: 'Nuvio plugin-only Custom Posters France design', cwd: root, args: ['--test', 'test/design-plugin.test.cjs'] },
   { name: 'Native Nuvio Metadata Design addon (no catalogs or rendered images)', cwd: root, args: ['--test', 'test/native-design-meta-addon.test.cjs'] },
+  { name: 'Nuvio experimental SVG vector artwork preview', cwd: root, args: ['--test', 'test/native-design-svg-preview.test.cjs'] },
   { name: 'Films Monde Oracle-only background image warming', cwd: root, args: ['--test', 'test/films-monde-oracle-warm.test.mjs'] },
   { name: 'Films Monde fast archives, period parity and preserved design', cwd: root, args: ['--test', 'test/films-monde-fast-collections.test.cjs'] },
   { name: 'Films Monde fully accessible year-by-year with bounded eager loads', cwd: root, args: ['--test', 'test/films-monde-year-by-year.test.cjs'] },
