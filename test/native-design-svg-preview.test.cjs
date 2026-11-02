@@ -106,6 +106,45 @@ test('v4 uses bigger text for films and series with correct episode date', () =>
   assert.notEqual(old,film);
 });
 
+test('film-only V4 detail boost keeps movie logos and series SVG unchanged', async () => {
+  const art={firstRelease:'2024-01-01',tmdbScore:7.5,seasonCount:4,
+    genres:['Science-fiction','Aventure','Fantastique'],
+    latestEpisode:{season:4,episode:5,date:'2026-10-14'}};
+  const bg='data:image/png;base64,AA==',logo='data:image/png;base64,AQ==';
+  const film={type:'movie',name:'Exemple de film'};
+  const series={type:'series',name:'Exemple de série'};
+  const v4=renderSvg(film,art,bg,logo,{large:true});
+  const boosted=renderSvg(film,art,bg,logo,{large:true,filmDetails:true});
+  assert.ok(v4.includes('font-size="69"'));
+  assert.ok(v4.includes('font-size="64"'));
+  assert.ok(v4.includes('font-size="65"'));
+  assert.ok(boosted.includes('font-size="80"'));
+  assert.ok(boosted.includes('font-size="75"'));
+  assert.ok(boosted.includes('font-size="77"'));
+  assert.ok(boosted.includes('SORTIE : 01/01/2024'));
+  assert.ok(boosted.includes('★ TMDB 7.5/10'));
+  assert.equal(v4.match(/<image x="72"[^>]+/)[0],
+    boosted.match(/<image x="72"[^>]+/)[0], 'logo unchanged');
+  assert.equal(renderSvg(series,art,bg,logo,{large:true}),
+    renderSvg(series,art,bg,logo,{large:true,filmDetails:true}),
+    'series V4 SVG remains byte-for-byte identical');
+  const addon=createAddon({
+    tmdb:async(route)=>route.startsWith('/tv/')?
+      {...movie(),name:'Exemple de série',first_air_date:'2024-01-01',number_of_seasons:4}:
+      movie(),
+    imageFetcher:fakeImageResponse
+  });
+  const result=response();
+  await addon.handle({url:'/design-meta/art/movie/tmdb%3Amovie%3A456/landscape.svg?v=oracle-vector-v4-film-details'},result,'https://example.test');
+  assert.equal(result.statusCode,200);
+  assert.ok(result.body.includes('font-size="80"'));
+  const tv=response();
+  await addon.handle({url:'/design-meta/art/series/tmdb%3Atv%3A456/landscape.svg?v=oracle-vector-v4-film-details'},tv,'https://example.test');
+  assert.equal(tv.statusCode,200);
+  assert.ok(tv.body.includes('font-size="69"'));
+  assert.ok(!tv.body.includes('font-size="80"'));
+});
+
 test('multiple services must not be mislabeled as one platform', async () => {
   const addon = createAddon({
     tmdb: async () => {
@@ -191,7 +230,7 @@ test('old v2 URL retains its original design while v3 uses large-screen typograp
 test('one global vector poster URL pattern renders art for any catalog source ID', async () => {
   const { vectorPosterPattern } = require('../runtime/native-design-meta-addon.cjs');
   assert.equal(vectorPosterPattern('https://example.test'),
-    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4');
+    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details');
   let lookupCalls = 0;
   const addon = createAddon({
     tmdb: async (route) => {
