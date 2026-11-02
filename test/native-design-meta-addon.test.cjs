@@ -99,7 +99,7 @@ test('series addon uses real TMDB episodes, not synthetic season placeholders', 
     [1,1,'Début'],[2,1,'Retour']
   ]);
   assert.equal(meta.videos[0].id,'tt1234567:1:1');
-  assert.match(meta.description,/2 saisons/);
+  assert.match(meta.description,/Nombre de saisons : 2\./);
 });
 test('failed season fetch returns HTTP 503 so Nuvio can fall back instead of losing episodes', async () => {
   const addon=createAddon({tmdb:async route => {
