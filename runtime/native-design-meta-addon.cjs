@@ -273,7 +273,9 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
           name: safeString(isMovie ? data.title || data.original_title : data.name || data.original_name, 200)
         };
         if (!meta.name) return respond(res, 404, { error: 'No title' });
-        const svg = await svgService.make(meta, artwork);
+        const svg = await svgService.make(meta, artwork, {
+          legacy: url.searchParams.get('v') === 'oracle-vector-v2'
+        });
         res.statusCode = 200;
         res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
         res.setHeader('Access-Control-Allow-Origin', '*');
