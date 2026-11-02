@@ -81,7 +81,7 @@ test('mobile and mouse sorting handlers compile, preserve existing save flow',as
   new Script(script,{filename:'home-manager-inline.js'});
   for(const term of ['touch-action:none','setPointerCapture','pointercancel',
     'pointermove','moveTo(list,old','reorderHandle(rows,r',
-    'reorderHandle(state.collections,c','reorderHandle(collection.folders,folder)',
+    'reorderHandle(state.collections,c','reorderHandle(collection.folders,folder,',
     'Enregistrer les modifications']) {
     assert((html+script).includes(term),'Missing expected drag feature: '+term);
   }
