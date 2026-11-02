@@ -51,6 +51,8 @@ export function edgeTtl(input) {
   if (path === '/design-meta/manifest.json' || path === '/design-meta/vector/manifest.json') return 300;
 
   if (/^\/images\/original\.(?:jpg|png)$/.test(path)) return GENERATED_ART_TTL;
+  // Films Monde legacy routes must never serve stale cached JPEGs after removal.
+  if (/^\/movies\/(?:cover|backdrop|content-card)\.jpg$/.test(path)) return 0;
 
   // Films Monde artwork uses immutable revisioned URLs, but all /movies/* was
   // previously excluded from Oracle disk caching (including the 21 genre covers).
@@ -58,8 +60,7 @@ export function edgeTtl(input) {
   // No manifest, catalog, meta, timeline or missing-art response gets cached.
   if (url.searchParams.has('v') &&
       /^[-a-zA-Z0-9]{1,100}$/.test(url.searchParams.get('v') || '') &&
-      (/^\/movies\/artwork\/(?:genre\/[a-z0-9]+\.webp|backdrop\/[a-z0-9]+\.jpg)$/.test(path) ||
-       /^\/movies\/(?:cover|backdrop)\.jpg$/.test(path))) {
+      /^\/movies\/artwork\/(?:genre\/[a-z0-9]+\.webp|backdrop\/[a-z0-9]+\.jpg)$/.test(path)) {
     return GENERATED_ART_TTL;
   }
 

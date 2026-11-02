@@ -157,6 +157,27 @@ for (const [name,catalog] of [['canonical',raw],['native bridge',native]]) {
   assert(catalog.metas.every(m=>!forbiddenArt.test(JSON.stringify(m))),
     name+' still references old server-side JPEG renderers');
 }
+
+// All populated image fields must be upstream, not only the first poster.
+// Modern Home may fetch landscapePoster and background before poster.
+for (const [name, catalog] of [['canonical',raw],['native bridge',native]]) {
+  for (const item of catalog.metas) {
+    for (const key of ['poster','background','landscapePoster','banner']) {
+      if (item[key]) assert(/^https:\/\/(?:image\.tmdb\.org|artworks\.thetvdb\.com)\//.test(item[key]),
+        name+' '+key+' is not direct TMDB/TVDB for '+item.id);
+    }
+  }
+}
+const obsoleteCard=await fetch(ORIGIN+'/movies/content-card.jpg?title=retired', {
+  redirect:'manual',signal:AbortSignal.timeout(15000)
+});
+assert.equal(obsoleteCard.status,410,'Films Monde still serves generated JPEG content cards');
+const obsoleteCover=await fetch(ORIGIN+'/movies/cover.jpg', {
+  redirect:'manual',signal:AbortSignal.timeout(15000)
+});
+assert.equal(obsoleteCover.status,302,'Films Monde still re-encodes JPEG parent covers');
+assert.match(obsoleteCover.headers.get('location')||'',/\/movies\/artwork\/genre\/all\.webp/);
+
 const canonicalDirect=raw.metas.filter(m=>/^https:\/\/(?:image\.tmdb\.org|artworks\.thetvdb\.com)\//.test(m.poster||'')).length;
 assert(canonicalDirect>=Math.min(3,raw.metas.length),
   'Films Monde canonical catalog still emits Oracle posters instead of TMDB/TVDB originals');

@@ -78,3 +78,28 @@ test('Films Monde bypasses old original.jpg Sharp relay even with V4 env flag di
     else process.env.NUVIO_V4_NATIVE_ART=env;
   }
 });
+
+test('Films Monde cannot dynamically generate JPEGs even from obsolete installed links',async()=>{
+  const movies=require('../regions/movies/index.cjs');
+  const invoke=(uri)=>new Promise((resolve,reject)=>{
+    const req={url:uri,headers:{host:'nuvio.example','x-forwarded-proto':'https'}};
+    const headers={};
+    const res={
+      statusCode:200,setHeader(k,v){headers[k.toLowerCase()]=v;},
+      end(body){resolve({status:this.statusCode,headers,body:body||''});}
+    };
+    Promise.resolve(movies(req,res)).catch(reject);
+  });
+  const legacy=await invoke('/content-card.jpg?title=old-film');
+  assert.equal(legacy.status,410);
+  assert.equal(legacy.headers['cache-control'],'no-store');
+  const parent=await invoke('/cover.jpg?title=old-film');
+  assert.equal(parent.status,302);
+  assert.match(parent.headers.location,/\/movies\/artwork\/genre\/all\.webp\?/);
+  assert.equal(parent.headers['cache-control'],'no-store');
+  const backdrop=await invoke('/backdrop.jpg?title=old-film');
+  assert.equal(backdrop.status,302);
+  assert.match(backdrop.headers.location,/\.webp\?/);
+  assert.ok(!Object.hasOwn(require('../regions/movies/src/artwork.cjs'),'fallbackCard'),
+    'Sharp/JPEG fallback must be deleted from Films Monde');
+});

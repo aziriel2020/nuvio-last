@@ -29,11 +29,13 @@ test('Films Monde versioned genre posters and backdrops stay in Oracle disk cach
   const prefix = 'https://nuvio.example';
   const paths = [
     '/movies/artwork/genre/28.webp?v=movies-premium-20261025-v2',
-    '/movies/artwork/backdrop/28.jpg?v=movies-premium-20261025-v2',
-    '/movies/cover.jpg?v=movies-premium-20261025-v2',
-    '/movies/backdrop.jpg?v=movies-premium-20261025-v2'
+    '/movies/artwork/backdrop/28.jpg?v=movies-premium-20261025-v2'
   ];
   for (const path of paths) assert.equal(edgeTtl(prefix + path), 604800, path);
+  for (const old of ['/movies/cover.jpg', '/movies/backdrop.jpg', '/movies/content-card.jpg']) {
+    assert.equal(edgeTtl(prefix + old + '?v=movies-premium-20261025-v2'), 0,
+      'Removed Films Monde JPEG endpoints must bypass old edge artwork cache');
+  }
   assert.equal(edgeTtl(prefix + '/movies/catalog/movie/movies-fr-all-all-today.json'), 60);
   assert.equal(edgeTtl(prefix + '/movies/catalog/movie/movies-fr-all-all-2026-09/skip=24.json'), 300);
   assert.equal(edgeTtl(prefix + '/movies/collections-only/catalog/movie/movies-fr-all-all-today.json'), 60);

@@ -92,8 +92,10 @@ function renderSvgLegacy(meta,art,bgData,logoData=null){
 }
 function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
   const cache=new Map();
-  const MAX_ENTRIES=32;
-  const MAX_BYTES=48*1024*1024; // bound Oracle memory even if the TMDB assets are large
+  // One Films Monde scroll can display 24 different cards. A 32-entry SVG LRU
+  // thrashes as soon as the next page is opened, triggering fresh TMDB downloads.
+  const MAX_ENTRIES=128;
+  const MAX_BYTES=96*1024*1024; // strict Oracle RAM bound (no disk JPEG cache)
   let cachedBytes=0;
   function remove(key){
     const entry=cache.get(key);
@@ -111,8 +113,12 @@ function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
     }
     if(hit)remove(key);
     const promise=(async()=>{
-      const bg=await remoteImage(art.backdrop,fetcher);
-      const logo=validImage(art.logo)?await remoteImage(art.logo,fetcher).catch(()=>null):null;
+      // Fetch background and optional transparent wordmark concurrently. Before
+      // this, a slow TMDB logo delayed the entire artwork by up to 3.5 seconds.
+      const [bg,logo]=await Promise.all([
+        remoteImage(art.backdrop,fetcher),
+        validImage(art.logo)?remoteImage(art.logo,fetcher).catch(()=>null):Promise.resolve(null)
+      ]);
       return legacy?renderSvgLegacy(meta,art,bg,logo):renderSvg(meta,art,bg,logo,{large,filmDetails});
     })();
     const entry={promise,until:now()+15*60*1000,bytes:0};
