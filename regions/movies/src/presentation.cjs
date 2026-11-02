@@ -5,7 +5,7 @@
 // Never construct a /fr/calendar-card.jpg, desktop-content-card.jpg or other
 // server JPEG: even the *canonical* addon must avoid that legacy pipeline.
 // The original calendar/catalog selection, IDs, periods and dates stay intact.
-const { resolveNativeImage } = require('../../runtime/native-bridge.cjs');
+const { resolveNativeImage } = require('../../../runtime/native-bridge.cjs');
 
 // Real film logos are reserved for the V4 vector, so Nuvio Modern Home must
 // not draw a second title above the approved composition. This lightweight
