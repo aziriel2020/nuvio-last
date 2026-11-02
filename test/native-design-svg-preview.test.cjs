@@ -157,6 +157,21 @@ test('an optional installable vector manifest produces SVG poster URLs, while na
 });
 
 
+test('old v2 URL retains its original design while v3 uses large-screen typography', async () => {
+  const addon = createAddon({
+    tmdb: async () => movie(),
+    imageFetcher: async url => fakeImageResponse(url)
+  });
+  const legacy=response(), improved=response();
+  await addon.handle({url:'/design-meta/art/movie/tmdb%3Amovie%3A456/landscape.svg?v=oracle-vector-v2'},legacy,'https://example.test');
+  await addon.handle({url:'/design-meta/art/movie/tmdb%3Amovie%3A456/landscape.svg?v=oracle-vector-v3'},improved,'https://example.test');
+  assert.equal(legacy.statusCode,200);
+  assert.equal(improved.statusCode,200);
+  assert.match(legacy.body,/font-size="44"/,'original v2 text size stays unchanged');
+  assert.match(improved.body,/font-size="60"/,'v3 text is enlarged for television');
+  assert.notEqual(legacy.body,improved.body);
+});
+
 test('one global vector poster URL pattern renders art for any catalog source ID', async () => {
   const { vectorPosterPattern } = require('../runtime/native-design-meta-addon.cjs');
   assert.equal(vectorPosterPattern('https://example.test'),
