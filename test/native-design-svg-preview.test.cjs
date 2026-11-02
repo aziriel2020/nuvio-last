@@ -130,3 +130,50 @@ test('an optional installable vector manifest produces SVG poster URLs, while na
   const nativeMeta = JSON.parse(native.body).meta;
   assert.equal(nativeMeta.poster,'https://image.tmdb.org/t/p/w780/landscape.jpg');
 });
+
+
+test('one global vector poster URL pattern renders art for any catalog source ID', async () => {
+  const { vectorPosterPattern } = require('../runtime/native-design-meta-addon.cjs');
+  assert.equal(vectorPosterPattern('https://example.test'),
+    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg');
+  let lookupCalls = 0;
+  const addon = createAddon({
+    tmdb: async (route) => {
+      lookupCalls++;
+      if (route === '/find/tt1234567') return {movie_results:[{id:456}]};
+      if (route === '/movie/456') return movie();
+      throw Error('Unexpected TMDB route: ' + route);
+    },
+    imageFetcher: async url => fakeImageResponse(url)
+  });
+  const status = response();
+  await addon.handle({url:'/design-meta/status.json'},status,'https://example.test');
+  assert.equal(JSON.parse(status.body).vectorPosterPattern,
+    vectorPosterPattern('https://example.test'));
+
+  // Simulates the Nuvio CustomPosterUrlResolver replacements on a third-party catalog card.
+  const svg = response();
+  await addon.handle({url:'/design-meta/art/movie/tt1234567/landscape.svg'},svg,'https://example.test');
+  assert.equal(svg.statusCode,200);
+  assert.match(svg.headers['content-type'],/image\/svg\+xml/);
+  assert.match(svg.body,/viewBox="0 0 1600 900"/);
+  assert.match(svg.body,/NETFLIX/);
+  assert.equal(lookupCalls,2,'the artwork comes from TMDB independently of any catalog provider');
+
+  const portrait = response();
+  await addon.handle({url:'/design-meta/art/movie/tt1234567/poster.svg'},portrait,'https://example.test');
+  assert.equal(portrait.statusCode,404,'portrait should fall back to its original art');
+  assert.equal(lookupCalls,2,'non-landscape requests should not trigger an upstream fetch');
+});
+test('global art rejects unsupported IDs and never fetches untrusted artwork URLs', async () => {
+  const addon=createAddon({
+    tmdb: async () => { throw Error('TMDB not expected'); },
+    imageFetcher: async () => { throw Error('image fetch not expected'); }
+  });
+  const res=response();
+  await addon.handle({url:'/design-meta/art/movie/tvdb%3A123/landscape.svg'},res,'https://example.test');
+  assert.equal(res.statusCode,400);
+  const invalid=response();
+  await addon.handle({url:'/design-meta/art/movie/https%3A%2F%2Fevil.example/landscape.svg'},invalid,'https://example.test');
+  assert.equal(invalid.statusCode,404);
+});
