@@ -475,7 +475,7 @@ async function handler(req, res) {
     }
     return image(res, await imageCache.get(url.pathname), 'image/jpeg');
   }
-  if (url.pathname === '/content-card.jpg') return image(res, await art.fallbackCard((url.searchParams.get('title') || 'Film').slice(0, 110), (url.searchParams.get('label') || 'FILMS FRANCE').slice(0, 60)), 'image/jpeg');
+  // Films Monde never renders per-film JPEG cards. Legacy requests now receive 404.
   const store = reader();
   if (url.pathname === '/status.json') return send(res, 200, { addonId: ADDON_ID, version: VERSION, genreArtwork: art.progress(),
     ...(store ? { ok: true, ...store.stats({ curated: true }) } : { ok: false, market: 'FR', eligible: 0, state: 'index-not-created' }) });
