@@ -81,7 +81,7 @@ chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
 # The Oracle integration test deliberately builds a local 127.0.0.1 fixture.
 # Run it AFTER cover generation so the fixture validates the exact release artwork,
 # but BEFORE the final public-origin build so localhost URLs can never be switched.
-run_nuvio "npm run test:oracle"
+run_nuvio "NUVIO_V4_COLLECTIONS=1 npm run test:oracle"
 
 if [[ -z "${PUBLIC_ORIGIN:-}" ]]; then
   if [[ -z "${PUBLIC_HOST:-}" ]]; then
