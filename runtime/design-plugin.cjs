@@ -1,18 +1,26 @@
 'use strict';
 
 // Plugin-only adapter for Nuvio's built-in Custom Posters feature.
-// No APK changes, no client CSS injection, no alteration of existing imports.
-// The original approved France renderer supplies the artwork; Android handles
-// the fallback to the original native TMDB/TVDB poster when an ID is not indexed.
+// V4 is selected by the public config; old server JPEG is rollback-only.
+// No APK changes or client CSS injection; an SVG-capable renderer is required.
 const frHandler = require('../regions/fr/api/index.js');
 const moviesHandler = require('../regions/movies/index.cjs');
 const seriesHandler = require('../regions/series/index.cjs');
+const { vectorPosterPattern } = require('./native-design-meta-addon.cjs');
 
-const VERSION = '1.0.0';
-const RENDER_REV = 'fr-design-plugin-v1';
+const VERSION = '1.1.0';
+const LEGACY_RENDER_REV = 'fr-design-plugin-v1';
+const RENDER_REV = 'oracle-vector-v4-film-details';
 const ID_RULE = /^(?:tt\d{5,12}|tmdb:(?:movie:|tv:)?\d{1,12})$/;
 
+// V4 is the primary Custom Posters profile. The legacy JPEG route remains
+// addressable ONLY as a rollback for clients without working SVG support.
+// V4 embeds original TMDB image bytes into vector markup; it never encodes
+// a new JPEG. Rendering/decoding happens in the SVG-capable client.
 function posterPattern(origin) {
+  return vectorPosterPattern(origin);
+}
+function legacyPosterPattern(origin) {
   return origin + '/design-plugin/poster.jpg?type={type}&id={id}&shape={shape}';
 }
 
@@ -68,9 +76,11 @@ async function handle(req, res, origin) {
   const url = new URL(req.url, origin);
   if (url.pathname === '/design-plugin/config.json') {
     return sendJson(res, 200, {
-      name: 'Nuvio France Design Plugin', version: VERSION, method: 'Nuvio Custom Posters',
+      name: 'Nuvio France Design Plugin V4', version: VERSION, method: 'Nuvio Custom Posters / SVG V4',
       requiresModifiedApk: false, posterPattern: posterPattern(origin),
-      notes: 'Paste posterPattern in Nuvio Custom Posters. The app loads and caches the art; unknown IDs automatically fall back to the native original. An ordinary addon manifest cannot install a global UI overlay.',
+      legacyPosterPattern: legacyPosterPattern(origin),
+      format: 'image/svg+xml', jpegConversion: false, requiresClientSvgSupport: true,
+      notes: 'Use posterPattern in Nuvio Custom Posters with landscape cards enabled. V4 returns a vector composition containing original TMDB image bytes: no JPEG resize/transcode. Portrait and missing IDs return 404 so Nuvio can use its native original. legacyPosterPattern is rollback only. An addon cannot inject an arbitrary UI overlay into Nuvio without client support.',
       existingCollections: origin + '/movies/nuvio-collections-unified.json',
       originalBackup: origin + '/movies/nuvio-collections.json',
       artworkRevision: RENDER_REV
@@ -90,7 +100,7 @@ async function handle(req, res, origin) {
     layout: info.layout, type: info.type, src: info.src,
     title: info.title, provider: 'FRANCE',
     append: info.type === 'movie' ? 'FILMS MONDE' : 'SÉRIES MONDE',
-    v: RENDER_REV
+    v: LEGACY_RENDER_REV
   });
   if (info.type === 'movie' && info.layout === 'landscape') params.set('world', '1');
   if (info.fallback) params.set('fallback', info.fallback);
@@ -106,4 +116,4 @@ async function handle(req, res, origin) {
   }
 }
 
-module.exports = { handle, posterPattern, parsePosterQuery, sourceInfo, VERSION, RENDER_REV };
+module.exports = { handle, posterPattern, legacyPosterPattern, parsePosterQuery, sourceInfo, VERSION, RENDER_REV };

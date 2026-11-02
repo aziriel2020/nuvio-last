@@ -662,7 +662,21 @@ module.exports = async function handler(req, res) {
       version: VERSION,
       designPluginConfig: `${origin}/design-plugin/config.json`,
       designPluginPosterPattern: designPlugin.posterPattern(origin),
+      designPluginLegacyPosterPattern: designPlugin.legacyPosterPattern(origin),
       designPluginNoApk: true,
+      nativeV4Mode: 'native-upstream-artwork-with-svg-v4-custom-posters',
+      nativeV4RequiresSvgSupport: true,
+      // Both profiles keep addon IDs, catalog IDs, periods and all collection imports.
+      // Their catalog JSON contains direct upstream image URLs: no raster art requests.
+      nativeV4ShieldManifests: Object.fromEntries(
+        ['fr', 'global', 'tr', 'us', 'movies', 'series-v2']
+          .map((region) => [region, `${origin}/${region}/native-bridge/manifest.json`])
+      ),
+      nativeV4MobileDesktopManifests: Object.fromEntries(
+        ['fr', 'global', 'tr', 'us', 'movies', 'series-v2']
+          .map((region) => [region, `${origin}/${region}/native-bridge/mobile/manifest.json`])
+      ),
+      nativeV4Note: 'Install the native-bridge manifest profile for direct TMDB/TVDB images, then set designPluginPosterPattern in Nuvio Custom Posters for V4 artwork on landscape cards. V4 SVG composition still embeds TMDB image bytes server-side, but never JPEG-reencodes them; native images without vector overlays go directly to CDNs. The old manifests and JPEG pattern remain as rollback.',
       seriesAddonId: seriesHandler._internals.releaseForOrigin(`${origin}/series-v2`).id,
       seriesVersion: seriesHandler._internals.releaseForOrigin(`${origin}/series-v2`).version,
       seriesManifest: `${origin}/series-v2/manifest.json`,
