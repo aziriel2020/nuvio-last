@@ -1622,3 +1622,76 @@ require(rowsection, "onPosterHoverChanged = onPosterHoverChanged",
     "useHoverPreview = onPosterHoverChanged == null")
 require(catalog, "CatalogHoverHero(", "isHoverActive = true")
 print("V10.2: CatalogScreen + FolderDetailScreen (grid/rows/follow) now mount native Hero block")
+
+
+# V10.3 — the native V4 link existed in settings but did not affect the images:
+#  (1) old Windows profiles could store disabled Custom Posters/screens;
+#  (2) "Always show landscape clearlogo" nulled item.landscapePoster.
+# Migrate each Windows profile ONCE and use V4 artwork regardless of the
+# clearlogo setting, while preserving later manual edits and safe fallback.
+
+storage = "composeApp/src/desktopMain/kotlin/com/nuvio/app/core/poster/CustomPosterUrlStorage.desktop.kt"
+replace_once(storage,
+'''    actual fun loadPattern(): String? =
+        store.getString(ProfileScopedKey.of("custom_poster_url_pattern"))''',
+'''    // One-time profile-scoped Windows migration: intentionally upgrade even
+    // previously disabled or legacy custom artwork to the approved Oracle V4.
+    // Explicit user edits AFTER the migration are kept and not overwritten.
+    private fun seedApprovedV4Once() {
+        if (!com.nuvio.app.isWindows) return
+        val migratedKey = ProfileScopedKey.of("oracle_design_v4_seeded_windows_20261102")
+        if (store.getString(migratedKey) == "yes") return
+        store.putString(
+            ProfileScopedKey.of("custom_poster_url_pattern"),
+            "https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details",
+        )
+        store.putStringSet(
+            ProfileScopedKey.of("custom_poster_enabled_screens"),
+            CustomPosterScreen.toKeys(CustomPosterScreen.ALL),
+        )
+        store.putString(migratedKey, "yes")
+    }
+
+    actual fun loadPattern(): String? {
+        seedApprovedV4Once()
+        return store.getString(ProfileScopedKey.of("custom_poster_url_pattern"))
+    }''',
+"migrate existing Windows profiles to active custom V4 artwork")
+
+replace_once(storage,
+'''    actual fun loadEnabledScreens(): Set<String>? =
+        store.getStringSet(ProfileScopedKey.of("custom_poster_enabled_screens"))''',
+'''    actual fun loadEnabledScreens(): Set<String>? {
+        seedApprovedV4Once()
+        return store.getStringSet(ProfileScopedKey.of("custom_poster_enabled_screens"))
+    }''',
+"enable V4 across Home, Collections, Library, Search and Details for Windows")
+
+# Correct V4 precedence in the original reusable HomePosterCard: "logo always"
+# is for a logo overlay on provider photography, NOT for replacing custom
+# artwork that already embeds title/logo/rating in the V4 landscape SVG.
+replace_once(poster,
+'''import com.nuvio.app.features.home.PosterShape
+
+@OptIn(ExperimentalComposeUiApi::class)''',
+'''import com.nuvio.app.features.home.PosterShape
+import com.nuvio.app.isWindows
+
+@OptIn(ExperimentalComposeUiApi::class)''',
+"Windows V4 artwork card import")
+
+replace_once(poster,
+'''    val effectiveLandscapePoster = if (posterCardStyle.alwaysShowLandscapeClearlogo) null else item.landscapePoster
+    val imageUrl = if (isLandscapeMode) {''',
+'''    val approvedV4Artwork = isWindows &&
+        item.landscapePoster?.contains("/design-meta/art/") == true
+    val effectiveLandscapePoster =
+        if (approvedV4Artwork || !posterCardStyle.alwaysShowLandscapeClearlogo)
+            item.landscapePoster
+        else null
+    val imageUrl = if (isLandscapeMode) {''',
+"never suppress approved V4 image with logo overlay setting")
+
+require(storage, "seedApprovedV4Once", "oracle_design_v4_seeded_windows_20261102", "CustomPosterScreen.ALL")
+require(poster, "approvedV4Artwork", "effectiveLandscapePoster", "item.landscapePoster")
+print("V10.3: Oracle V4 SVG is applied to actual cards on existing Windows profiles; Hero from V10.2 preserved")
