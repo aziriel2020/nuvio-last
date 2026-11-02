@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nuvio · Gestion de l’accueil et des collections</title>
+<style>
+:root{font:15px/1.45 system-ui,Arial;color-scheme:dark;background:#090d17;color:#e5ecfc}
+*{box-sizing:border-box}main{max-width:1160px;padding:0 16px;margin:25px auto 60px}
+a{color:#abc1ff}.nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:22px}
+.pill{border:1px solid #374561;padding:6px 12px;border-radius:30px;text-decoration:none;color:#d8e6ff}
+h1{font-size:2rem;margin:0 0 5px}h2{font-size:1.17rem;margin:0 0 16px}
+p{color:#9eafc7}.panel{background:#131b2d;border:1px solid #2f3b53;border-radius:15px;padding:22px;margin:17px 0}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:end}.field{flex:1;min-width:170px;display:flex;flex-direction:column;gap:5px}
+label{color:#bccce5}input,select,textarea{background:#091222;color:#e5edff;border:1px solid #3a4860;border-radius:9px;padding:10px;font:inherit;width:100%}
+input[type=checkbox]{width:auto;accent-color:#839aff}textarea{min-height:95px}
+button{cursor:pointer;background:#5573e9;color:white;border:1px solid #6c86ff;border-radius:9px;padding:10px 14px;font:inherit}
+button.secondary{background:#253049;border-color:#3c4c65}button.warn{background:#582a38;border-color:#824152}
+button:disabled{opacity:.45;cursor:default}
+button.small{padding:5px 10px;font-size:.85rem}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.status{padding:10px 14px;background:#102036;border:1px solid #263b55;border-radius:9px;white-space:pre-wrap;margin:15px 0}
+.note{border-left:3px solid #cfaa69;padding:8px 12px;background:#272319;color:#e6cfa0;margin:13px 0}
+.tabs{display:flex;gap:8px;margin-top:20px}
+.tabs button[aria-selected=true]{background:#4c6ad8;border-color:#839aff}
+.item{background:#0d1627;border:1px solid #2b3b56;border-radius:12px;padding:13px;margin:9px 0;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+.identity{color:#8497b4;font-size:.83rem;word-break:break-all}
+.item .left{display:flex;flex-direction:column;gap:8px}
+.item .actions{display:flex;gap:6px;align-items:center}
+.item .checkline{display:flex;gap:8px;align-items:center}
+.item input[type=text]{max-width:520px}
+.collection{padding:18px;margin:12px 0;border:1px solid #39465d;border-radius:14px;background:#0d1627}
+.sub{background:#172338;border:1px solid #334663;border-radius:9px;padding:13px;margin:10px 0}
+.muted{color:#93a9c9;font-size:.88rem}.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:680px){.split{grid-template-columns:1fr}.panel{padding:15px}.item{grid-template-columns:1fr}.item .actions{justify-content:flex-end}h1{font-size:1.6rem}}
+[hidden]{display:none!important}
+</style></head><body><main>
+<nav class="nav"><a class="pill" href="/cloner/">← Cloneur de profils</a><strong>NUVIO · ORACLE</strong></nav>
+<h1>Gestionnaire de l’accueil & des collections</h1>
+<p>Personnalise les rangées du Home Screen de ton profil Nuvio, puis organise ses collections et leurs dossiers. Le moteur de catalogues Oracle et le cloneur restent indépendants.</p>
+<div class="note">Le nom et la photo du profil, « Continuer à regarder », les positions de lecture, les addons et les réglages V4 ne sont jamais modifiés par cet outil. Les modifications ne sont enregistrées qu’après confirmation.</div>
+<section class="panel">
+<h2>1 · Compte et profil Nuvio</h2>
+<div class="row">
+<div class="field"><label for="email">E-mail Nuvio</label><input id="email" type="email" autocomplete="off"></div>
+<div class="field"><label for="password">Mot de passe Nuvio</label><input id="password" type="password" autocomplete="off"></div>
+<div class="field"><label for="profile">Profil</label><select id="profile"><option value="">Charge les profils…</option></select></div>
+</div>
+<div class="toolbar" style="margin-top:15px">
+<button id="profiles">Charger les profils</button><button class="secondary" id="load">Ouvrir la configuration</button>
+<button class="secondary" id="backup" disabled>Exporter une sauvegarde JSON</button>
+</div>
+<div class="status" id="status" role="status" aria-live="polite">Connecte-toi avec les identifiants Nuvio habituels.</div>
+</section>
+<section class="panel" id="editor" hidden>
+<div class="toolbar" style="justify-content:space-between">
+<div class="tabs" role="tablist"><button id="tab-home" role="tab" aria-selected="true">Accueil</button><button id="tab-collections" class="secondary" role="tab" aria-selected="false">Collections</button></div>
+<div class="toolbar"><button id="reload" class="secondary">Recharger</button><button id="save">Enregistrer les modifications</button></div>
+</div>
+<div id="view-home">
+<h2>2 · Rangées du Home Screen</h2>
+<p>Réordonne les catalogues, masque les rangées inutiles et renomme leurs titres. Les rangées masquées restent disponibles pour réactivation.</p>
+<label class="toolbar"><input id="hide-unreleased" type="checkbox" style="width:auto"> Masquer les contenus non encore sortis</label>
+<div class="field" style="max-width:420px;margin-top:14px"><label for="home-filter">Rechercher un catalogue ou une collection</label><input id="home-filter" type="search" placeholder="Titre, addon, identifiant…"></div>
+<div id="home-items"></div>
+</div>
+<div id="view-collections" hidden>
+<h2>3 · Collections</h2>
+<p>Réorganise les collections, modifie leurs titres, leurs dossiers et leurs sources. La configuration de chaque collection est conservée, sauf les champs que tu changes.</p>
+<div class="row"><div class="field"><label for="new-source">Catalogue de départ (pour une nouvelle collection)</label><select id="new-source"></select></div>
+<button id="new-collection" class="secondary">+ Créer une collection</button></div>
+<div id="collections-items"></div>
+</div>
+<div class="note">Avant de changer beaucoup de rangées, utilise « Exporter une sauvegarde JSON ». Si Nuvio a été modifié sur un autre appareil depuis l’ouverture, l’enregistrement sera refusé et demandera de recharger.</div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let state=null,baseline=null,hashes=null,active='home',busy=false;
+const copied=x=>structuredClone(x);
+const say=(s)=>{$('status').textContent=s;};
+const account=()=>({email:$('email').value.trim(),password:$('password').value});
+const profileId=()=>Number($('profile').value);
+function btn(label,callback,kind='secondary'){const b=document.createElement('button');b.type='button';b.className=kind+' small';b.textContent=label;b.onclick=callback;return b;}
+function el(tag,txt,css){const e=document.createElement(tag);if(txt!=null)e.textContent=txt;if(css)e.className=css;return e;}
+function field(label,value,oninput,kind='text'){
+ const wrap=el('div',null,'field'),l=el('label',label),input=document.createElement('input');
+ input.type=kind;input.value=value??'';input.oninput=()=>oninput(input.value);wrap.append(l,input);return wrap;
+}
+function check(label,checked,callback){
+ const wrap=el('label',null,'checkline');const input=document.createElement('input');input.type='checkbox';input.checked=!!checked;
+ input.onchange=()=>callback(input.checked);wrap.append(input,document.createTextNode(label));return wrap;
+}
+async function call(action,payload){
+ const res=await fetch('/cloner/api/manage/'+action,{method:'POST',credentials:'same-origin',
+ headers:{'Content-Type':'application/json','X-Requested-With':'NuvioMirror'},body:JSON.stringify(payload)});
+ let data;try{data=await res.json();}catch{throw Error('Réponse Oracle invalide : '+res.status);}
+ if(!res.ok)throw Error(data.error||'Erreur HTTP '+res.status);return data;
+}
+function setBusy(flag){busy=flag;for(const id of ['profiles','load','reload','save'])$(id).disabled=flag;}
+function showTab(tab){
+ active=tab;
+ $('view-home').hidden=tab!=='home';$('view-collections').hidden=tab!=='collections';
+ $('tab-home').setAttribute('aria-selected',String(tab==='home'));
+ $('tab-collections').setAttribute('aria-selected',String(tab==='collections'));
+ $('tab-home').className=tab==='home'?'':'secondary';
+ $('tab-collections').className=tab==='collections'?'':'secondary';
+}
+$('tab-home').onclick=()=>showTab('home');$('tab-collections').onclick=()=>showTab('collections');
+$('profiles').onclick=async()=>{try{
+ setBusy(true);say('Connexion et chargement des profils…');
+ const data=await fetch('/cloner/api/profiles',{method:'POST',credentials:'same-origin',
+ headers:{'Content-Type':'application/json','X-Requested-With':'NuvioMirror'},body:JSON.stringify({account:account()})});
+ const result=await data.json();if(!data.ok)throw Error(result.error||'Connexion refusée');
+ $('profile').replaceChildren();
+ for(const p of result.profiles)$('profile').append(new Option(p.name+' · '+p.id,String(p.id)));
+ if(!result.profiles.length)throw Error('Aucun profil accessible');
+ say(result.profiles.length+' profil(s) chargés. Choisis un profil, puis ouvre la configuration.');
+ }catch(e){say('Erreur : '+e.message);}finally{setBusy(false);}};
+function installData(data){
+ state={home:data.home,collections:data.collections};hashes=data.hashes;
+ if(state.home?.items)state.home.items.sort((a,b)=>(a.order??0)-(b.order??0));
+ baseline=copied(state);
+ $('editor').hidden=false;$('backup').disabled=false;
+ $('hide-unreleased').checked=!!state.home?.hide_unreleased_content;
+ renderAll();
+}
+async function load(){
+ if(!profileId())throw Error('Choisis un profil Nuvio');
+ setBusy(true);say('Lecture de la configuration synchronisée…');
+ try{const d=await call('load',{account:account(),profileId:profileId()});installData(d);
+ say('Configuration chargée : '+(state.home?.items.length??0)+' rangées, '+state.collections.length+' collections. Aucune donnée modifiée.');
+ }finally{setBusy(false);}
+}
+$('load').onclick=()=>load().catch(e=>say('Erreur : '+e.message));
+$('reload').onclick=()=>{if(dirty()&&!confirm('Abandonner les modifications non enregistrées ?'))return;load().catch(e=>say('Erreur : '+e.message));};
+$('home-filter').oninput=renderHome;
+$('hide-unreleased').onchange=e=>{if(state?.home)state.home.hide_unreleased_content=e.target.checked;};
+function catalogLabel(x){
+ if(x.is_collection){const c=state.collections.find(c=>c.id===x.collection_id);return 'Collection · '+(c?.title||x.collection_id);}
+ return [x.addon_id,x.type,x.catalog_id].join(' · ');
+}
+function move(list,index,delta){const target=index+delta;if(target<0||target>=list.length)return;
+ [list[index],list[target]]=[list[target],list[index]];
+ if(list===state.home?.items)list.forEach((r,i)=>{r.order=i;});
+ renderAll();
+}
+function renderHome(){
+ const root=$('home-items');root.replaceChildren();
+ if(!state?.home){root.append(el('div','Aucun accueil synchronisé pour ce profil. Configure-le depuis Nuvio avant de pouvoir le modifier ici.','note'));$('hide-unreleased').disabled=true;return;}
+ $('hide-unreleased').disabled=false;
+ const query=$('home-filter').value.toLowerCase().trim();
+ const rows=state.home.items;let shown=0;
+ rows.forEach((r,index)=>{
+  const name=catalogLabel(r);
+  if(query&&!([name,r.custom_title].join(' ').toLowerCase().includes(query)))return;shown++;
+  const card=el('div',null,'item'),left=el('div',null,'left'),actions=el('div',null,'actions');
+  left.append(check(name,r.enabled,v=>{r.enabled=v;}),el('div',name,'identity'));
+  left.append(field('Titre affiché (vide = titre d’origine)',r.custom_title,v=>{r.custom_title=v;}));
+  actions.append(btn('↑',()=>move(rows,index,-1)),btn('↓',()=>move(rows,index,1)));
+  card.append(left,actions);root.append(card);
+ });
+ if(!shown)root.append(el('p','Aucune rangée correspondante.'));
+}
+function catalogs(){return state.home?.items.filter(x=>!x.is_collection)||[];}
+function sourceSelect(value,callback){
+ const sel=document.createElement('select');
+ for(const c of catalogs()){
+  const o=new Option([c.addon_id,c.type,c.catalog_id].join(' / '),JSON.stringify([c.addon_id,c.type,c.catalog_id]));
+  sel.append(o);
+ }
+ if(value)sel.value=value;
+ sel.onchange=()=>callback(JSON.parse(sel.value));
+ return sel;
+}
+function addSource(folder){
+ const list=catalogs();if(!list.length){alert('Aucun catalogue disponible dans l’accueil.');return;}
+ const chosen=list[0];
+ folder.sources??=[];
+ folder.sources.push({provider:'addon',addonId:chosen.addon_id,type:chosen.type,catalogId:chosen.catalog_id});
+ renderCollections();
+}
+function renderFolder(collection,folder,index){
+ const box=el('div',null,'sub'),top=el('div',null,'toolbar');
+ top.append(el('strong','Dossier '+(index+1)),btn('Supprimer le dossier',()=>{
+  if(!confirm('Supprimer ce dossier et ses sources ?'))return;
+  collection.folders.splice(index,1);renderCollections();
+ },'warn'));
+ box.append(top,field('Nom du dossier',folder.title,v=>folder.title=v));
+ const srcs=folder.sources||folder.catalogSources||[];
+ srcs.forEach((s,i)=>{
+  const row=el('div',null,'toolbar');row.style.marginTop='8px';
+  const name=s.provider==='tmdb'?'TMDB · '+(s.title||s.tmdbId||''):s.provider==='trakt'?'Trakt · '+(s.title||s.traktListId||''):[s.addonId,s.type,s.catalogId].filter(Boolean).join(' / ');
+  row.append(el('span',name||'Source '+(i+1),'identity'),btn('Retirer',()=>{
+   if(!confirm('Retirer cette source du dossier ?'))return;
+   srcs.splice(i,1);renderCollections();
+  },'warn'));box.append(row);
+ });
+ const addRow=el('div',null,'row');addRow.style.marginTop='10px';
+ const picker=sourceSelect(null,()=>{});
+ picker.style.minWidth='190px';
+ addRow.append(picker,btn('+ Ajouter ce catalogue',()=>{
+  if(!picker.value){alert('Aucun catalogue disponible.');return;}
+  const [addonId,type,catalogId]=JSON.parse(picker.value);
+  folder.sources??=[];folder.sources.push({provider:'addon',addonId,type,catalogId});
+  renderCollections();
+ }));
+ box.append(addRow);
+ return box;
+}
+function renderCollections(){
+ const root=$('collections-items');root.replaceChildren();
+ const source=$('new-source');source.replaceChildren();
+ for(const c of catalogs())source.append(new Option(catalogLabel(c),JSON.stringify([c.addon_id,c.type,c.catalog_id])));
+ if(!source.options.length)source.append(new Option('Aucun catalogue disponible',''));
+ state.collections.forEach((c,i)=>{
+  const box=el('div',null,'collection'),bar=el('div',null,'toolbar');
+  bar.append(el('strong','Collection '+(i+1)),
+   btn('↑',()=>move(state.collections,i,-1)),btn('↓',()=>move(state.collections,i,1)),
+   btn('Supprimer',()=>{
+    if(!confirm('Supprimer définitivement la collection « '+c.title+' » pour ce profil ?'))return;
+    state.collections.splice(i,1);
+    if(state.home)state.home.items=state.home.items.filter(r=>!r.is_collection||r.collection_id!==c.id);
+    renderAll();
+   },'warn'));
+  box.append(bar,field('Titre de la collection',c.title,v=>{c.title=v;renderHome();}));
+  box.append(field('Image de fond (URL, facultatif)',c.backdropImageUrl||'',v=>{c.backdropImageUrl=v||null;}));
+  const setting=el('div',null,'toolbar');
+  setting.append(check('Épinglée en tête',c.pinToTop,v=>c.pinToTop=v),
+                 check('Effet de lumière',c.focusGlowEnabled!==false,v=>c.focusGlowEnabled=v),
+                 check('Onglet Tous',c.showAllTab!==false,v=>c.showAllTab=v));
+  box.append(setting);
+  const title=el('div','Dossiers ('+c.folders.length+')','muted');title.style.marginTop='12px';box.append(title);
+  c.folders.forEach((f,j)=>box.append(renderFolder(c,f,j)));
+  box.append(btn('+ Ajouter un dossier depuis un catalogue',()=>{
+   if(!catalogs().length){alert('Aucun catalogue disponible.');return;}
+   const chosen=$('new-source').value||JSON.stringify([catalogs()[0].addon_id,catalogs()[0].type,catalogs()[0].catalog_id]);
+   const [addonId,type,catalogId]=JSON.parse(chosen);
+   c.folders.push({id:crypto.randomUUID(),title:'Nouveau dossier',tileShape:'SQUARE',
+    sources:[{provider:'addon',addonId,type,catalogId}]});
+   renderCollections();
+  }));
+  root.append(box);
+ });
+ if(!state.collections.length)root.append(el('p','Aucune collection enregistrée pour ce profil.'));
+}
+$('new-collection').onclick=()=>{
+ if(!state)return;
+ const s=$('new-source').value;if(!s){alert('Aucun catalogue disponible.');return;}
+ const [addonId,type,catalogId]=JSON.parse(s);
+ const id=crypto.randomUUID();state.collections.push({id,title:'Nouvelle collection',folders:[{
+  id:crypto.randomUUID(),title:'Catalogue',tileShape:'SQUARE',
+  sources:[{provider:'addon',addonId,type,catalogId}]
+ }]});
+ if(state.home)state.home.items.push({addon_id:'',type:'',catalog_id:'',enabled:true,
+  order:state.home.items.length,custom_title:'',is_collection:true,collection_id:id});
+ renderAll();showTab('collections');
+};
+function renderAll(){renderHome();renderCollections();}
+function dirty(){return state&&(
+ JSON.stringify(state.home)!==JSON.stringify(baseline.home)||
+ JSON.stringify(state.collections)!==JSON.stringify(baseline.collections));}
+$('backup').onclick=()=>{
+ if(!state)return;
+ const obj={exportedAt:new Date().toISOString(),profileId:profileId(),home:state.home,collections:state.collections};
+ const url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));
+ const a=document.createElement('a');a.href=url;a.download='nuvio-home-profile-'+profileId()+'-'+new Date().toISOString().slice(0,10)+'.json';
+ a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+$('save').onclick=async()=>{
+ if(!state||busy)return;
+ const changes={home:JSON.stringify(state.home)!==JSON.stringify(baseline.home),
+ collections:JSON.stringify(state.collections)!==JSON.stringify(baseline.collections)};
+ if(!changes.home&&!changes.collections){say('Aucune modification à enregistrer.');return;}
+ if(changes.home&& !state.home){say('Aucun accueil synchronisé.');return;}
+ const summary=(changes.home?'Accueil ':'')+(changes.collections?'Collections':'');
+ if(!confirm('Enregistrer les modifications de « '+summary+' » sur le profil '+profileId()+' ? Une sauvegarde JSON est recommandée.'))return;
+ setBusy(true);say('Enregistrement dans Nuvio…');
+ try{
+  const data=await call('save',{account:account(),profileId:profileId(),
+    expected:hashes,changes,home:state.home,collections:state.collections});
+  installData(data);
+  say('Enregistré et relu depuis Nuvio : '+data.saved.join(' + ')+'. Tu peux synchroniser ton appareil.');
+ }catch(e){say('Enregistrement non confirmé : '+e.message+'\nNe relance pas avant d’avoir vérifié le profil.');}
+ finally{setBusy(false);}
+};
+window.addEventListener('beforeunload',e=>{if(dirty()){e.preventDefault();e.returnValue='';}});
+</script></body></html>

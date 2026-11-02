@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createMirrorProfileUpdate } from './profile-mirror-fields.mjs';
+import { createHomeManagerApi } from './home-manager-api.mjs';
 
 const PREFIX = '/cloner';
 const PORT = Number(process.env.CLONER_PORT || '3001');
@@ -10,6 +11,7 @@ const ANON_KEY = process.env.NUVIO_SUPABASE_ANON_KEY || '';
 const DEPLOY_REVISION = process.env.CLONER_REVISION || 'unknown';
 const API = 'https://api.nuvio.tv';
 const PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.html');
+const MANAGER_PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'home-manager.html');
 if (!ANON_KEY) throw new Error('Missing NUVIO_SUPABASE_ANON_KEY');
 function json(res, code, body) {
   res.writeHead(code, {
@@ -20,11 +22,11 @@ function json(res, code, body) {
   res.end(JSON.stringify(body));
 }
 function appError(message, status=400) { const e = new Error(message); e.status=status; return e; }
-async function bodyJson(req) {
+async function bodyJson(req,maxBytes=128*1024) {
   let size=0, parts=[];
   for await (const part of req) {
     size+=part.length;
-    if (size>128*1024) throw appError('Requête trop volumineuse',413);
+    if (size>maxBytes) throw appError('Requête trop volumineuse',413);
     parts.push(part);
   }
   try { return JSON.parse(Buffer.concat(parts).toString('utf8')); }
@@ -220,6 +222,7 @@ async function apply(token,pid,data,options) {
   }
   return done;
 }
+const managerApi=createHomeManagerApi({login,checkedProfile,rpc,appError});
 const loginAttempts = new Map();
 let running=false;
 async function route(req,res) {
@@ -227,6 +230,11 @@ async function route(req,res) {
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
       'Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"});
     return res.end(await readFile(PAGE));
+  }
+  if(req.method==='GET' && (req.url===PREFIX+'/manage' || req.url===PREFIX+'/manage/')) {
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
+      'Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"});
+    return res.end(await readFile(MANAGER_PAGE));
   }
   if(req.method==='GET' && req.url===PREFIX+'/health') return json(res,200,{ok:true,app:'nuvio-mirror',revision:DEPLOY_REVISION});
   if(req.method!=='POST'|| !req.url?.startsWith(PREFIX+'/api/'))return json(res,404,{error:'Not found'});
@@ -242,7 +250,13 @@ async function route(req,res) {
     prior.count+=1;loginAttempts.set(ip,prior);
     if(loginAttempts.size>5000) loginAttempts.clear();
     if(prior.count>60) throw appError('Trop de requêtes, réessayer plus tard',429);
-    const payload=await bodyJson(req);
+    const payload=await bodyJson(req,req.url===PREFIX+'/api/manage/save'?2*1024*1024:128*1024);
+    if(req.url===PREFIX+'/api/manage/load') return json(res,200,await managerApi.load(payload));
+    if(req.url===PREFIX+'/api/manage/save') {
+      if(running)throw appError('Une autre opération est en cours',409);
+      running=true;
+      try {return json(res,200,await managerApi.save(payload));}finally{running=false;}
+    }
     if(req.url===PREFIX+'/api/profiles') {
       const token=await login(payload.account);
       return json(res,200,{profiles:await profiles(token)});

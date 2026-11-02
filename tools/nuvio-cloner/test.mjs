@@ -4,6 +4,8 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createMirrorProfileUpdate } from './profile-mirror-fields.mjs';
+import { fingerprint,validateHome,validateCollections,parseHome,parseCollections } from './home-manager-logic.mjs';
+import { createHomeManagerApi } from './home-manager-api.mjs';
 
 test('profile mirror preserves target name and avatar, copying only background and inheritance settings',()=>{
   const src={name:'Compte source',avatar_id:'src-avatar',avatar_url:'src-photo',avatar_color_hex:'#ff0000',profile_background_id:'source-background',profile_background_url:'source-bg-url',uses_primary_addons:true,uses_primary_plugins:true,unrelated:'not allowed'};
@@ -17,6 +19,57 @@ test('profile mirror preserves target name and avatar, copying only background a
   assert.equal(mirrored.avatar_color_hex,dst.avatar_color_hex);
   assert.equal(mirrored.profile_background_id,src.profile_background_id);
   assert.deepEqual(createMirrorProfileUpdate({name:'source',avatar_url:'source-picture'}),{uses_primary_addons:false,uses_primary_plugins:false});
+});
+
+
+const row=(addon_id,catalog_id,order=0)=>({addon_id,type:'movie',catalog_id,enabled:true,
+ order,custom_title:'',is_collection:false,collection_id:''});
+const sampleHome={hide_unreleased_content:false,items:[row('myaddon','popular',0),row('myaddon','latest',1)],
+  v4_unrelated_setting:'keep unchanged'};
+const sampleCollections=[{id:'f1',title:'Films Monde',pinToTop:true,folders:[
+  {id:'f2',title:'Catégorie',sources:[{provider:'addon',addonId:'myaddon',type:'movie',catalogId:'popular'}]}
+]}];
+
+test('Home editor validates catalogs without touching other keys and rejects fabricated rows',()=>{
+  const updated=structuredClone(sampleHome);
+  updated.items.reverse();updated.items[0].enabled=false;updated.items[0].custom_title='Films récents';
+  const normalized=validateHome(updated,sampleHome,sampleCollections);
+  assert.equal(normalized.v4_unrelated_setting,'keep unchanged');
+  assert.deepEqual(normalized.items.map(i=>i.order),[0,1]);
+  assert.equal(normalized.items[0].custom_title,'Films récents');
+  assert.throws(()=>validateHome({...updated,items:[row('fakeaddon','bad')]},sampleHome,sampleCollections),
+    /catalogue|Masque/);
+  assert.deepEqual(parseHome([{settings_json:sampleHome}]),sampleHome);
+  assert.deepEqual(parseCollections([{collections_json:sampleCollections}]),sampleCollections);
+  assert.equal(fingerprint(sampleHome),fingerprint(structuredClone(sampleHome)));
+});
+
+test('Collections editor saves only target Home/collections and rejects stale concurrent edits',async()=>{
+  let remoteHome=structuredClone(sampleHome),remoteCollections=structuredClone(sampleCollections);
+  const called=[];
+  const rpc=async (_token,name,body)=>{
+    called.push(name);
+    if(name==='sync_pull_home_catalog_settings')return [{settings_json:remoteHome}];
+    if(name==='sync_pull_collections')return [{collections_json:remoteCollections}];
+    if(name==='sync_push_home_catalog_settings'){remoteHome=structuredClone(body.p_settings_json);return null;}
+    if(name==='sync_push_collections'){remoteCollections=structuredClone(body.p_collections_json);return null;}
+    throw Error('Unexpected RPC '+name);
+  };
+  const appError=(msg,status)=>Object.assign(new Error(msg),{status});
+  const manage=createHomeManagerApi({login:async()=> 'token',checkedProfile:async()=>{},rpc,appError});
+  const auth={account:{email:'a@b.com',password:'x'},profileId:1};
+  const initial=await manage.load(auth);
+  const home=structuredClone(initial.home),collections=structuredClone(initial.collections);
+  home.items[0].enabled=false;collections[0].title='Films et séries';
+  const result=await manage.save({...auth,expected:initial.hashes,changes:{home:true,collections:true},home,collections});
+  assert.deepEqual(result.saved,['collections','home']);
+  assert.equal(remoteCollections[0].title,'Films et séries');
+  assert.equal(remoteHome.items[0].enabled,false);
+  assert.equal(remoteHome.v4_unrelated_setting,'keep unchanged');
+  assert(!called.some(x=>/profile|watch|addon|plugin|library/i.test(x)));
+  await assert.rejects(()=>manage.save({...auth,expected:initial.hashes,changes:{home:true},
+    home,collections}),/changé sur un autre appareil/);
+  assert.throws(()=>validateCollections([{id:'x',title:' ',folders:[]}]),/Titre/);
 });
 
 const port=41000+Math.floor(Math.random()*10000);
@@ -42,6 +95,11 @@ test('Nuvio login only, isolated clone route, CSRF protection',async()=>{
     assert.match(html,/Continuer à regarder/);
     assert.match(html,/data-opt="home"/);
     assert.match(html,/data-opt="profile"/);
+    const manager=await fetch(base+'/cloner/manage/');
+    assert.equal(manager.status,200);
+    const managerHtml=await manager.text();
+    assert.match(managerHtml,/Gestionnaire de l’accueil/);
+    assert.match(managerHtml,/Continuer à regarder/);
     const forbidden=await fetch(base+'/fr/manifest.json');
     assert.equal(forbidden.status,404,'cannot serve catalog paths');
     const attacker=await fetch(base+'/cloner/api/mirror',{method:'POST',headers:{
@@ -54,5 +112,9 @@ test('Nuvio login only, isolated clone route, CSRF protection',async()=>{
       'Origin':base,'Host':'127.0.0.1:'+port
     },body:JSON.stringify({source:{email:'',password:'',profileId:1},targets:[],options:{home:true}})});
     assert.equal(noPassword.status,400,'Nuvio login required before cloning');
+    const badManager=await fetch(base+'/cloner/api/manage/load',{method:'POST',headers:{
+      'Content-Type':'application/json','X-Requested-With':'NuvioMirror','Origin':base,
+    },body:JSON.stringify({account:{email:'',password:''},profileId:1})});
+    assert.equal(badManager.status,400,'Nuvio account login required before Home editing');
   }finally {child.kill('SIGTERM');}
 });
