@@ -280,3 +280,36 @@ test('Oracle routing caches artwork 15 minutes while status is always fresh', as
   assert.equal(edgeTtl('https://oracle.test/design-meta/status.json'), 0);
   assert.equal(edgeTtl('https://oracle.test/design-meta/vector/manifest.json'), 300);
 });
+
+test('V4 batches concurrent TMDB artwork requests and reuses image and details cache',async()=>{
+  let detailsCalls=0, activeImages=0, maximumImages=0, imageCalls=0;
+  const addon=createAddon({
+    tmdb:async route=>{
+      detailsCalls++;
+      assert.equal(route,'/movie/456');
+      return movie();
+    },
+    imageFetcher:async url=>{
+      imageCalls++;
+      activeImages++;
+      maximumImages=Math.max(maximumImages,activeImages);
+      await new Promise(resolve=>setImmediate(resolve));
+      activeImages--;
+      return fakeImageResponse(url);
+    }
+  });
+  const url='/design-meta/art/movie/tmdb%3Amovie%3A456/landscape.svg?v=oracle-vector-v4-film-details';
+  const a=response(),b=response();
+  await Promise.all([addon.handle({url},a,'https://example.test'),
+    addon.handle({url},b,'https://example.test')]);
+  assert.equal(a.statusCode,200);
+  assert.equal(b.statusCode,200);
+  assert.equal(a.body,b.body);
+  assert.equal(detailsCalls,1,'parallel requests must not repeat TMDB API lookups');
+  assert.equal(imageCalls,2,'one backdrop and one wordmark only');
+  assert.equal(maximumImages,2,'backdrop and wordmark should download in parallel');
+  const repeated=response();
+  await addon.handle({url},repeated,'https://example.test');
+  assert.equal(detailsCalls,1);
+  assert.equal(imageCalls,2);
+});
