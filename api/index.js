@@ -13,6 +13,7 @@ const moviesHandler = require('../regions/movies/index.cjs');
 const { handleOriginalImage } = require('../regions/fr/api/original-images.cjs');
 const { nativeBridgePayload } = require('../runtime/native-bridge.cjs');
 const designPlugin = require('../runtime/design-plugin.cjs');
+const nativeDesignMetaAddon = require('../runtime/native-design-meta-addon.cjs').createAddon();
 const { ADDON_ID: MOVIES_ADDON_ID, VERSION: MOVIES_VERSION } = require('../regions/movies/src/model.cjs');
 
 const VERSION = '1.4.1';
@@ -581,6 +582,9 @@ function landing(req) {
 module.exports = async function handler(req, res) {
   const url = new URL(req.url, originFromRequest(req));
   const path = url.pathname;
+
+  if (path.startsWith('/design-meta/'))
+    return nativeDesignMetaAddon.handle(req, res, originFromRequest(req));
 
   if (path === '/design-plugin/config.json' || path === '/design-plugin/poster.jpg')
     return designPlugin.handle(req, res, originFromRequest(req));

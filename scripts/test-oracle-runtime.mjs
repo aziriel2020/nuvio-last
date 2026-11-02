@@ -102,6 +102,30 @@ try {
   if (oracleHealthBody.runtime !== 'oracle-vm') throw new Error('Wrong Oracle runtime marker');
   if (oracleHealthBody.publicOrigin !== origin) throw new Error('Wrong Oracle public origin');
 
+  // The production Oracle adapter must route vector images into the addon
+  // instead of silently serving only its statically built catalogs.
+  const vectorStatusResponse = await retry('/design-meta/status.json');
+  requireHeader(vectorStatusResponse, 'x-nuvio-origin', 'oracle-vm');
+  const vectorStatus = await vectorStatusResponse.json();
+  const expectedPosterPattern =
+    origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v2';
+  if (vectorStatus.vectorPosterPattern !== expectedPosterPattern) {
+    throw new Error('Oracle vector artwork hook is not routed or revisioned correctly');
+  }
+  const vectorManifestResponse = await retry('/design-meta/vector/manifest.json');
+  const vectorManifest = await vectorManifestResponse.json();
+  if (!Array.isArray(vectorManifest.catalogs) || vectorManifest.catalogs.length !== 0 ||
+      !vectorManifest.resources?.some(resource => resource.name === 'meta')) {
+    throw new Error('Oracle vector metadata addon manifest invalid');
+  }
+  const portraitFallback = await fetch(origin + '/design-meta/art/movie/tt1234567/poster.svg',
+    { signal: AbortSignal.timeout(5000) });
+  if (portraitFallback.status !== 404) throw new Error('Oracle portrait fallback should return HTTP 404');
+  const invalidVector = await fetch(origin + '/design-meta/art/movie/tvdb%3A123/landscape.svg',
+    { signal: AbortSignal.timeout(5000) });
+  if (invalidVector.status !== 400) throw new Error('Oracle vector invalid ID should return HTTP 400');
+
+
   const health = await retry('/health');
   requireHeader(health, 'x-nuvio-origin', 'oracle-vm');
   requireHeader(health, 'x-nuvio-edge', 'oracle-node');
