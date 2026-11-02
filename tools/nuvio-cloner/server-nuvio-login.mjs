@@ -117,26 +117,39 @@ async function readCategories(token,pid,options) {
 function filteredSettings(source,target,postersOnly) {
   const incoming=source?.features || {};
   const previous=target?.features || {};
-  const safe={...previous};
   if(postersOnly) {
     const keys=['custom_poster_url_pattern','custom_poster_enabled_screens'];
-    if(incoming.layout_settings) {
-      const layout={...previous.layout_settings};
-      for(const key of keys) if(Object.hasOwn(incoming.layout_settings,key)) layout[key]=incoming.layout_settings[key];
-      safe.layout_settings=layout;
-    }
-  } else {
-    for(const [feature,values] of Object.entries(incoming)) {
-      if (!values || typeof values!=='object' || Array.isArray(values)) continue;
-      const kept={...previous[feature]};
-      for(const [key,value] of Object.entries(values)) {
-        if (/(?:progress|continue_watching|watch_position|session|token|secret|password|api_key|credential|auth)/i.test(key)) continue;
-        kept[key]=value;
+    const next=structuredClone(previous);
+    if(incoming.layout_settings){
+      next.layout_settings={...previous.layout_settings};
+      for(const key of keys){
+        if(Object.hasOwn(incoming.layout_settings,key))
+          next.layout_settings[key]=incoming.layout_settings[key];
+        else delete next.layout_settings[key];
       }
-      safe[feature]=kept;
+    }
+    return {...(target||{}),features:next};
+  }
+  // Full replace: target-only layout/theme/player keys do not survive.
+  // Only excluded resume-position settings may be carried forward.
+  const next=structuredClone(incoming);
+  const exempt=/^(?:continue_watching|watch_progress|resume_position|playback_position)(?:_|$)/i;
+  for(const [feature,values] of Object.entries(previous)){
+    if(!values || typeof values!=='object' || Array.isArray(values))continue;
+    for(const [key,value] of Object.entries(values)){
+      if(exempt.test(key)) {
+        if(!next[feature] || typeof next[feature]!=='object')next[feature]={};
+        next[feature][key]=value;
+      }
     }
   }
-  return {...(target||{}),features:safe};
+  for(const values of Object.values(next)){
+    if(!values || typeof values!=='object' || Array.isArray(values))continue;
+    for(const key of Object.keys(values)){
+      if(exempt.test(key) && !Object.hasOwn(previous,key)) delete values[key];
+    }
+  }
+  return {...(source||{}),features:next};
 }
 async function apply(token,pid,data,options) {
   const done={};
