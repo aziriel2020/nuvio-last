@@ -107,3 +107,25 @@ test('native metadata remains the default; experimental SVG is opt-in and cannot
   assert.ok(meta.poster.startsWith('https://image.tmdb.org/'));
   assert.ok(!meta.poster.endsWith('.svg'));
 });
+
+
+test('an optional installable vector manifest produces SVG poster URLs, while native one stays unchanged', async () => {
+  const addon = createAddon({ tmdb: async () => movie() });
+  const manifestResponse = response();
+  await addon.handle({url:'/design-meta/vector/manifest.json'}, manifestResponse,'https://example.test');
+  const manifest = JSON.parse(manifestResponse.body);
+  assert.deepEqual(manifest.catalogs,[]);
+  assert.equal(manifest.resources[0].name,'meta');
+  assert.match(manifest.id,/vector\.preview$/);
+  const vector = response();
+  await addon.handle({url:'/design-meta/vector/meta/movie/tmdb%3Amovie%3A456.json'}, vector, 'https://example.test');
+  const vectorMeta = JSON.parse(vector.body).meta;
+  assert.equal(vector.statusCode,200);
+  assert.equal(vectorMeta.posterShape,'landscape');
+  assert.equal(vectorMeta.poster,'https://example.test/design-meta/preview/movie/tmdb%3Amovie%3A456.svg');
+  assert.equal(vectorMeta.landscapePoster, vectorMeta.poster);
+  const native = response();
+  await addon.handle({url:'/design-meta/meta/movie/tmdb%3Amovie%3A456.json'}, native,'https://example.test');
+  const nativeMeta = JSON.parse(native.body).meta;
+  assert.equal(nativeMeta.poster,'https://image.tmdb.org/t/p/w780/landscape.jpg');
+});
