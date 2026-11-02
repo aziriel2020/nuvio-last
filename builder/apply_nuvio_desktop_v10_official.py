@@ -995,13 +995,20 @@ replace_once(custom,
 '''package com.nuvio.app.core.poster
 
 import com.nuvio.app.isWindows
+''',
+"Desktop Windows V4 import")
+replace_once(custom,
+'''import kotlinx.coroutines.flow.asStateFlow
+
+object CustomPosterUrlRepository''',
+'''import kotlinx.coroutines.flow.asStateFlow
 
 private const val NUVIO_DESKTOP_V4_ARTWORK_PATTERN =
     "https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details"
 private const val NUVIO_DESKTOP_POSTER_DISABLED = "nuvio:custom-posters-disabled"
 
-''',
-"Desktop native V4 artwork URL")
+object CustomPosterUrlRepository''',
+"Desktop native V4 artwork URL below imports")
 replace_once(custom,
 '''        val trimmed = pattern.trim()
         if (_pattern.value == trimmed) return
