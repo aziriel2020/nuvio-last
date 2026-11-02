@@ -216,6 +216,29 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
   // Experimental SVG preview is isolated from the normal metadata/poster paths.
   // It cannot override cards belonging to a different addon.
   const svgService = createSvgService({ fetcher: imageFetcher, now });
+  // An IMDb film artwork previously repeated /find/<id> plus /movie/<tmdbId>
+  // on every scroll/cache eviction. Cache both metadata and in-flight lookups.
+  // Use a separate cache from the installable metadata addon: preserve the
+  // approved series metadata and all client-visible catalogue fields.
+  const artworkDetails = new Map();
+  const ARTWORK_DETAILS_TTL = 60 * 60 * 1000;
+  const ARTWORK_DETAILS_MAX = 768;
+  function artworkData(request) {
+    const key = request.type + ':' + request.id;
+    const cached = artworkDetails.get(key);
+    if (cached && cached.until > now()) {
+      artworkDetails.delete(key);
+      artworkDetails.set(key, cached);
+      return cached.promise;
+    }
+    if (cached) artworkDetails.delete(key);
+    const promise = Promise.resolve().then(() => fetchDetails(request, load));
+    const entry = { promise, until: now() + ARTWORK_DETAILS_TTL };
+    artworkDetails.set(key, entry);
+    promise.catch(() => { if (artworkDetails.get(key) === entry) artworkDetails.delete(key); });
+    while (artworkDetails.size > ARTWORK_DETAILS_MAX) artworkDetails.delete(artworkDetails.keys().next().value);
+    return promise;
+  }
   async function handle(req, res, origin) {
     const url = new URL(req.url, origin);
     const route = url.pathname;
@@ -251,7 +274,7 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
       const request = parseId(artworkRequest[1], id);
       if (!request) return respond(res, 400, { error: 'Invalid ID or media type' });
       try {
-        const data = await fetchDetails(request, load);
+        const data = await artworkData(request);
         if (!data?.id) return respond(res, 404, { error: 'Metadata unavailable' });
         const isMovie = request.type === 'movie';
         const background = tmdbImage(data.backdrop_path, 'w1280');
