@@ -16,6 +16,8 @@ https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-
 
 Enable Custom Posters for **Catalogs/Home** and enable **landscape posters** in Nuvio's layout options. Keep the existing addons as they are; the native resolver requests our artwork per media identifier. No APK fork, no edits to the catalogs, and no generated JPEG artifacts are involved.
 
+The original `?v=oracle-vector-v2` URL is deliberately routed to the preserved v2 SVG renderer; only `?v=oracle-vector-v3` receives enlarged text and episode metadata. Switching back to the v2 URL is the visual rollback, without replacing any addon.
+
 The optional *metadata addon* can be installed separately from `/design-meta/vector/manifest.json`, but its installation **alone does not override catalog posters**. The global artwork URL pattern is the piece that intercepts existing catalog images.
 
 The service resolves IMDb `tt...` and TMDB `tmdb:...` content IDs, fetches title metadata and native artwork from TMDB, and dynamically returns a 1600×900 SVG with enlarged TV-legible type, cinematic backdrop, selected TMDB logo (when present), title/type, TMDB rating, season count and a single unambiguous French streaming provider. For series, it also shows the most recently confirmed aired episode, its season and episode number, and its actual airing date; if none is confirmed, it shows the original premiere date. Multiple FR watch providers cannot identify which collection a title belongs to, so no arbitrary platform badge is fabricated.
