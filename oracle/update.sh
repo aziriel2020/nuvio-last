@@ -93,7 +93,7 @@ fi
 
 # This MUST be the last build before the atomic switch. It rewrites every static
 # Nuvio JSON/manifests URL to the real Oracle public origin.
-run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' npm run build:runtime"
+run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' NUVIO_RUNTIME='oracle-vm' NUVIO_V4_COLLECTIONS=1 npm run build:runtime"
 
 # Fail closed if the final static release contains any test/legacy hosting origin.
 run_nuvio "PUBLIC_ORIGIN='$PUBLIC_ORIGIN' node - <<'NODE'
