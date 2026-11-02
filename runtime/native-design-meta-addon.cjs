@@ -285,7 +285,7 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
         const svg = origin + '/design-meta/preview/' +
           request.type + '/' + encodeURIComponent(request.id) + '.svg';
         return respond(res, 200, {
-          meta: { ...meta, poster: svg, landscapePoster: svg, posterShape: 'landscape' }
+          meta: { ...meta, poster: svg, landscapePoster: svg, background: svg, posterShape: 'landscape' }
         }, TTL_MS);
       }
       return respond(res, 200, { meta }, TTL_MS);
