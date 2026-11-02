@@ -149,7 +149,7 @@ async function resolveInfo(request, movieStore, seriesStore, fetcher = frHandler
       ? remote.number_of_seasons : seasonCountFromStore(store, row)) : null;
   const genres = (Array.isArray(remote?.genres) ? remote.genres : [])
     .map(g => String(g?.name || '').trim()).filter(Boolean).slice(0, 3);
-  const logo = selectMovieLogo(remote?.images, remote?.original_language)?.url || null;
+  const logo = selectMovieLogo(remote?.images, remote?.original_language)?.url || (typeof row?.logo === 'string' && row.logo.startsWith('https://image.tmdb.org/') ? row.logo : null);
   return {
     type: request.kind, layout: request.shape, src, fallback,
     title: String(local?.title || remote?.title || remote?.name || '').slice(0, 135),
@@ -231,10 +231,15 @@ async function renderCard(info) {
     if (logo && logoInfo) composites.push({
       input: logo, left: 78, top: 600 - (logoInfo.height || 185)
     });
-    const data = await artworkCache.raster(() => sharp(image.bytes)
-      .resize(1600, 900, { fit: 'cover', position: 'attention' })
-      .composite(composites).resize(960, 540)
-      .jpeg({ quality: 85, progressive: true }).toBuffer());
+    // Resize/composite at the same resolution; resize only the finished image.
+    // Sharp otherwise resizes the base before composition, rejecting a 1600px overlay.
+    const data = await artworkCache.raster(async () => {
+      const composed = await sharp(image.bytes)
+        .resize(1600, 900, { fit: 'cover', position: 'attention' })
+        .composite(composites).png().toBuffer();
+      return sharp(composed).resize(960, 540)
+        .jpeg({ quality: 85, progressive: true }).toBuffer();
+    });
     return { data, cacheable: true, photo: true };
   });
 }
