@@ -54,15 +54,15 @@ test('Oracle release tests run before the final public build and atomic switch',
   assert.ok(
     testIndex >= 0 &&
     runtimeTestIndex > testIndex &&
-    coverIndex > runtimeTestIndex &&
-    oracleTestIndex > coverIndex &&
+    coverIndex === -1 &&
+    oracleTestIndex > runtimeTestIndex &&
     buildIndex > oracleTestIndex &&
     originGuardIndex > buildIndex &&
     switchIndex > originGuardIndex,
-    'Oracle tests and generated covers must run in release order before the final production-origin build and switch'
+    'Oracle tests must run before production build, without generating JPEG covers'
   );
-  assert.match(updater, /assets\/generated-covers/);
-  assert.match(updater, /Generating\/validating Nuvio cinematic collection covers/);
+  assert.doesNotMatch(updater, /npm run generate:covers/);
+  assert.doesNotMatch(updater, /Generating\/validating Nuvio cinematic collection covers/);
   assert.ok(updater.includes('127.0.0.1'), 'local integration fixture guard must be present');
   assert.ok(updater.includes('pages') && updater.includes('workers') && updater.includes('vercel') && updater.includes('sslip'), 'legacy-host final-build guard must be present');
   assert.match(updater, /Rolling back to/);
