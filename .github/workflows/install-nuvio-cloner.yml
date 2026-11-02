@@ -42,5 +42,19 @@ jobs:
           origin='https://141-145-215-202.nip.io'
           code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "$origin/cloner/")
           test "$code" = 200
+          # Diagnose both entrypoint variants and the real browser API path,
+          # without using or logging any Nuvio credentials.
+          root_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "$origin/cloner")
+          test "$root_code" = 200 || test "$root_code" = 301 || test "$root_code" = 308
+          curl -fsS --max-time 12 "$origin/cloner/health" | jq -e '.ok == true and .app == "nuvio-mirror"' >/dev/null
+          api_code=$(curl -sS -o "$RUNNER_TEMP/cloner-profiles-check.json" -w '%{http_code}' --max-time 15 \
+            -X POST -H 'Content-Type: application/json' -H 'X-Requested-With: NuvioMirror' \
+            -H "Origin: $origin" -d '{"account":{"email":"invalid","password":""}}' \
+            "$origin/cloner/api/profiles")
+          if [[ "$api_code" != "400" ]] || ! jq -e '.error == "Identifiants Nuvio invalides"' "$RUNNER_TEMP/cloner-profiles-check.json" >/dev/null; then
+            echo "Nuvio cloner API routing mismatch: HTTP $api_code (expected 400)" >&2
+            jq -r '.error // "unexpected response"' "$RUNNER_TEMP/cloner-profiles-check.json" 2>/dev/null >&2 || true
+            exit 1
+          fi
           curl -fsS "$origin/_oracle/health" | jq -e '.ok == true' >/dev/null
           curl -fsS "$origin/fr/manifest.json" >/dev/null
