@@ -175,5 +175,5 @@ test('global art rejects unsupported IDs and never fetches untrusted artwork URL
   assert.equal(res.statusCode,400);
   const invalid=response();
   await addon.handle({url:'/design-meta/art/movie/https%3A%2F%2Fevil.example/landscape.svg'},invalid,'https://example.test');
-  assert.equal(invalid.statusCode,404);
+  assert.equal(invalid.statusCode,400);
 });
