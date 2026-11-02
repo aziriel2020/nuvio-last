@@ -4,7 +4,6 @@ const { withHeroTitles } = require('../../runtime/collection-titles.cjs');
 
 const fs = require('node:fs');
 const path = require('node:path');
-const sharp = require('sharp');
 const { ADDON_ID, VERSION, GENRES, VIEWS, catalogId, parseCatalog, periods, catalogWindowForMovie, displayDateForPremiere, WESTERN_GENRE } = require('./src/model.cjs');
 const { MovieStore, defaultPath } = require('./src/store.cjs');
 const catalogPolicy = require('../series/src/catalog-policy.cjs');
@@ -135,7 +134,6 @@ function pagedMovieCatalog(store, descriptor, now, skip, search, pageSize = WORL
 }
 
 let cachedStore, cachedPath;
-const imageCache = new Map();
 // Manifest and native-collection JSON are large and stable during a Brussels
 // calendar day. Build and serialize once per day/origin/mode. Original URLs,
 // collection IDs, cover links, period names and daily rollover are unchanged.
@@ -464,18 +462,20 @@ async function handler(req, res) {
     const parent = path.join(GENRE_BACKDROP_DIR, '_parent.jpg');
     return fs.existsSync(parent) ? image(res, fs.readFileSync(parent), 'image/jpeg') : send(res, 404, { error: 'Backdrop en préparation' });
   }
+  // Old Films Monde JPEG routes must never run Sharp or re-render a card.
+  // Existing legacy cover links get a cheap HTTP redirect to the approved
+  // prebuilt WebP, while per-film JPEG renderers are permanently unavailable.
   if (['/cover.jpg', '/backdrop.jpg'].includes(url.pathname)) {
-    const size = url.pathname === '/cover.jpg' ? [1600, 900] : [1920, 1080];
-    if (!imageCache.has(url.pathname)) {
-      const parent = path.join(GENRE_BACKDROP_DIR, '_parent.jpg');
-      const isBackdrop = url.pathname === '/backdrop.jpg' && fs.existsSync(parent);
-      const bytes = isBackdrop ? fs.readFileSync(parent) : art.genreBytes('all');
-      if (!bytes) return send(res, 503, { error: 'Illustration en préparation' });
-      imageCache.set(url.pathname, sharp(bytes).resize(...size, { fit: 'cover' }).jpeg({ quality: 92 }).toBuffer());
-    }
-    return image(res, await imageCache.get(url.pathname), 'image/jpeg');
+    res.statusCode = 302;
+    res.setHeader('Location', origin + '/artwork/genre/all.webp?v=' + art.REVISION);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.end();
   }
-  if (url.pathname === '/content-card.jpg') return image(res, await art.fallbackCard((url.searchParams.get('title') || 'Film').slice(0, 110), (url.searchParams.get('label') || 'FILMS FRANCE').slice(0, 60)), 'image/jpeg');
+  if (url.pathname === '/content-card.jpg') {
+    res.statusCode = 410;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.end('Legacy Films Monde JPEG rendering removed; use direct TMDB artwork.');
+  }
   const store = reader();
   if (url.pathname === '/status.json') return send(res, 200, { addonId: ADDON_ID, version: VERSION, genreArtwork: art.progress(),
     ...(store ? { ok: true, ...store.stats({ curated: true }) } : { ok: false, market: 'FR', eligible: 0, state: 'index-not-created' }) });
