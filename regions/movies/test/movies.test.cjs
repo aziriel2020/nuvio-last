@@ -473,20 +473,23 @@ test('all genre covers use the approved 16:9 design and include three previously
   for (const id of ['36', '10770', '10752']) assert(genreBytes(id));
 });
 
-test('movie cards preserve custom Modern/desktop targeting and detail art, including no-photo fallback', (t) => {
+test('movie cards use native TMDB artwork in Modern/desktop, with safe no-photo fallback', (t) => {
   const s = memory(t); s.upsert(record(1, { poster_path: '/poster.jpg', backdrop_path: '/backdrop.jpg' }));
   const raw = s.query({ now: NOW })[0];
   const [decorated] = decorateMovieMetas('https://example.test/movies', [raw], { period: 'all' });
   assert.equal(decorated.posterShape, 'landscape');
-  assert.equal(new URL(decorated.background).pathname, '/fr/calendar-card.jpg');
-  assert.equal(new URL(decorated.banner).pathname, '/fr/desktop-content-card.jpg');
-  assert.equal(new URL(decorated.background).searchParams.get('type'), 'movie');
+  assert.equal(decorated.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
+  assert.equal(decorated.banner, 'https://image.tmdb.org/t/p/w780/backdrop.jpg');
+  assert.equal(decorated.poster, decorated.banner);
+  assert.doesNotMatch(JSON.stringify(decorated), /calendar-card|desktop-content-card|generated-covers/);
   assert.equal(raw.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
   const [fallback] = decorateMovieMetas('https://example.test/movies', [{ ...raw, poster: undefined, background: undefined }], { period: 'all' });
-  assert.equal(new URL(fallback.background).pathname, '/fr/calendar-card.jpg');
+  assert.equal(fallback.poster, undefined);
+  assert.equal(fallback.background, undefined);
+  assert.equal(fallback.id, raw.id);
 });
 
-test('streaming and VOD cards display a provider for that offer type', (t) => {
+test('streaming and VOD movie cards preserve distinct source-specific provider metadata', (t) => {
   const s = memory(t);
   s.upsert(record(1, { poster_path: '/poster.jpg', backdrop_path: '/backdrop.jpg', 'watch/providers': { results: { FR: {
     flatrate: [{ provider_id: 8, provider_name: 'Netflix' }], rent: [{ provider_id: 10, provider_name: 'Amazon Video' }]
@@ -494,7 +497,10 @@ test('streaming and VOD cards display a provider for that offer type', (t) => {
   for (const [view, expected] of [['streaming', 'Netflix'], ['vod', 'Amazon Video']]) {
     const metas = s.query({ view, now: NOW });
     const card = decorateMovieMetas('https://example.test/movies', metas, { view, period: 'all' })[0];
-    assert.equal(new URL(card.background).searchParams.get('provider'), expected);
+    assert.deepEqual(card.providersByKind,metas[0].providersByKind);
+    assert.ok(card.providersByKind[view].includes(expected));
+    assert.match(card.poster,/^https:\/\/image\.tmdb\.org\//);
+    assert.doesNotMatch(JSON.stringify(card),/\/calendar-card\.jpg/);
   }
 });
 
