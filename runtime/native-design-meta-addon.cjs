@@ -202,10 +202,18 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
     const url = new URL(req.url, origin);
     const route = url.pathname;
     if (route === '/design-meta/manifest.json') return respond(res, 200, manifest(origin), 15 * 60 * 1000);
+    // Deliberately separate opt-in install URL. Never rewrite existing addons.
+    if (route === '/design-meta/vector/manifest.json') return respond(res, 200, {
+      ...manifest(origin),
+      id: ADDON_ID + '.vector.preview',
+      name: 'Nuvio Native Design Vector Preview',
+      description: 'Addon de métadonnées expérimentales avec affiches SVG 16:9 ; compatibilité Nuvio/Shield à valider.'
+    }, 15 * 60 * 1000);
     if (route === '/design-meta/status.json') return respond(res, 200, {
       addon: ADDON_ID, version: VERSION, catalogs: 0, imageRendering: false, mode: 'native-tmdb-urls',
       svgPreview: '/design-meta/preview/{movie|series}/{id}.svg',
       svgEnabledForMetadata: false,
+      vectorPreviewManifest: '/design-meta/vector/manifest.json',
       limitation: 'Metadata addon does not inject a Compose/UI overlay into Nuvio.'
     });
     const preview = /^\/design-meta\/preview\/(movie|series)\/([^/]+)\.svg$/.exec(route);
@@ -249,7 +257,8 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
         return respond(res, 503, { error: 'SVG preview temporarily unavailable' });
       }
     }
-    const hit = /^\/design-meta\/meta\/(movie|series)\/([^/]+)\.json$/.exec(route);
+    const vectorHit = /^\/design-meta\/vector\/meta\/(movie|series)\/([^/]+)\.json$/.exec(route);
+    const hit = /^\/design-meta\/meta\/(movie|series)\/([^/]+)\.json$/.exec(route) || vectorHit;
     if (!hit) return respond(res, 404, { error: 'Not found' });
     let id;
     try { id = decodeURIComponent(hit[2]); }
@@ -269,6 +278,16 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
     try {
       const meta = await promise;
       if (!meta) return respond(res, 404, { error: 'Metadata unavailable' });
+      if (vectorHit && typeof meta.background === 'string' &&
+          meta.background.includes('/t/p/w1280/')) {
+        // Optional visual addon: the user installs this manifest instead of the
+        // native one. Nuvio still owns card layout and any competing source.
+        const svg = origin + '/design-meta/preview/' +
+          request.type + '/' + encodeURIComponent(request.id) + '.svg';
+        return respond(res, 200, {
+          meta: { ...meta, poster: svg, landscapePoster: svg, posterShape: 'landscape' }
+        }, TTL_MS);
+      }
       return respond(res, 200, { meta }, TTL_MS);
     } catch {
       // Never publish incomplete metadata or fictitious episodes.
