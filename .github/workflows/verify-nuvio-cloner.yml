@@ -1,0 +1,37 @@
+name: Verify isolated Nuvio Profile Mirror
+on:
+  push:
+    branches: [feature/nuvio-account-mirror-oracle]
+    paths:
+      - 'tools/nuvio-cloner/**'
+      - '.github/workflows/verify-nuvio-cloner.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate server syntax
+        run: node --check tools/nuvio-cloner/server.mjs
+      - name: Run isolated security tests
+        run: node --test tools/nuvio-cloner/test.mjs
+      - name: Confirm protected catalog files were not edited
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          changed="$(git diff --name-only origin/main...HEAD)"
+          echo "$changed"
+          if printf '%s\n' "$changed" | grep -Ev '^(tools/nuvio-cloner/|\.github/workflows/verify-nuvio-cloner\.yml)' | grep -q .; then
+            echo 'Changes outside isolated cloner module detected'
+            exit 1
+          fi
