@@ -47,18 +47,42 @@ function renderSvg(meta,art,bgData,logoData=null){
 }
 function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
   const cache=new Map();
+  const MAX_ENTRIES=32;
+  const MAX_BYTES=48*1024*1024; // bound Oracle memory even if the TMDB assets are large
+  let cachedBytes=0;
+  function remove(key){
+    const entry=cache.get(key);
+    if(!entry)return;
+    cachedBytes-=entry.bytes||0;
+    cache.delete(key);
+  }
   async function make(meta,art){
     const key=JSON.stringify([meta.id,meta.type,meta.name,art]);
     const hit=cache.get(key);
-    if(hit&&hit.until>now())return hit.promise;
+    if(hit&&hit.until>now()){
+      cache.delete(key);
+      cache.set(key,hit); // LRU on successful hits
+      return hit.promise;
+    }
+    if(hit)remove(key);
     const promise=(async()=>{
       const bg=await remoteImage(art.backdrop,fetcher);
       const logo=validImage(art.logo)?await remoteImage(art.logo,fetcher).catch(()=>null):null;
       return renderSvg(meta,art,bg,logo);
     })();
-    cache.set(key,{promise,until:now()+6*60*60*1000});
-    promise.catch(()=>{if(cache.get(key)?.promise===promise)cache.delete(key)});
-    if(cache.size>400)cache.delete(cache.keys().next().value);
+    const entry={promise,until:now()+15*60*1000,bytes:0};
+    cache.set(key,entry);
+    promise.then(svg=>{
+      if(cache.get(key)!==entry)return;
+      entry.bytes=Buffer.byteLength(svg,'utf8');
+      cachedBytes+=entry.bytes;
+      while(cache.size>MAX_ENTRIES||cachedBytes>MAX_BYTES){
+        remove(cache.keys().next().value);
+      }
+    }).catch(()=>{
+      if(cache.get(key)===entry)remove(key);
+    });
+    while(cache.size>MAX_ENTRIES)remove(cache.keys().next().value);
     return promise;
   }
   return {make,cache};
