@@ -1,15 +1,15 @@
 'use strict';
 
 // Plugin-only adapter for Nuvio's built-in Custom Posters feature.
-// No APK changes, no client CSS injection, no alteration of existing imports.
-// The original approved France renderer supplies the artwork; Android handles
-// the fallback to the original native TMDB/TVDB poster when an ID is not indexed.
+// V4 is selected by the public config; old server JPEG is rollback-only.
+// No APK changes or client CSS injection; an SVG-capable renderer is required.
 const frHandler = require('../regions/fr/api/index.js');
 const moviesHandler = require('../regions/movies/index.cjs');
 const seriesHandler = require('../regions/series/index.cjs');
 const { vectorPosterPattern } = require('./native-design-meta-addon.cjs');
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
+const LEGACY_RENDER_REV = 'fr-design-plugin-v1';
 const RENDER_REV = 'oracle-vector-v4-film-details';
 const ID_RULE = /^(?:tt\d{5,12}|tmdb:(?:movie:|tv:)?\d{1,12})$/;
 
@@ -100,7 +100,7 @@ async function handle(req, res, origin) {
     layout: info.layout, type: info.type, src: info.src,
     title: info.title, provider: 'FRANCE',
     append: info.type === 'movie' ? 'FILMS MONDE' : 'SÉRIES MONDE',
-    v: RENDER_REV
+    v: LEGACY_RENDER_REV
   });
   if (info.type === 'movie' && info.layout === 'landscape') params.set('world', '1');
   if (info.fallback) params.set('fallback', info.fallback);
