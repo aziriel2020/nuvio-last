@@ -70,6 +70,15 @@ test('Oracle release tests run before the final public build and atomic switch',
   assert.doesNotMatch(updater, /build:cloudflare|test:cloudflare|wrangler/i);
 });
 
+test('V4 production removes JPEG prewarmer and disables legacy France card generation', () => {
+  const service = readFileSync(new URL('../oracle/nuvio.service', import.meta.url), 'utf8');
+  assert.match(service, /Environment=CALENDAR_CARDS=false/);
+  assert.match(updater, /systemctl disable nuvio-movies-warm.timer/);
+  assert.match(updater, /systemctl stop nuvio-movies-warm.timer/);
+  assert.doesNotMatch(updater, /systemctl enable nuvio-movies-warm.timer/);
+  assert.doesNotMatch(updater, /systemctl start nuvio-movies-warm.timer/);
+});
+
 test('Oracle bootstrap exposes only SSH, HTTP and HTTPS', () => {
   assert.match(bootstrap, /ufw allow OpenSSH/);
   assert.match(bootstrap, /ufw allow 80\/tcp/);
