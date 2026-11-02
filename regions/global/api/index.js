@@ -1312,7 +1312,10 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
       // Modern Home draws a logo/title overlay on landscape cards. A valid but
       // transparent logo freezes that overlay slot so our card artwork remains
       // the single source of truth. Detail metadata later restores the real logo.
-      logo: (homeVisible || animeCinematic) && getConfig().calendarCards
+      // Anime still uses its approved cinematic card when CALENDAR_CARDS=0
+      // (native V4 setting). Suppress the extra Nuvio native title regardless
+      // of the legacy calendarCards flag; other services are unchanged.
+      logo: animeCinematic || (homeVisible && getConfig().calendarCards)
         ? transparentModernLogoUrl(origin)
         : meta?.logo,
       // Classic Home can still render this as a native second line when labels
