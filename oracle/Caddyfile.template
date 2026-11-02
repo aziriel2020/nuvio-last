@@ -11,7 +11,14 @@ __PUBLIC_HOST__ {
   # sole backend unavailable until the next 30-second probe, creating 503s
   # even after Nuvio recovered. The deployment workflow already checks local
   # and public health, with rollback on failure. Proxy requests directly.
-  reverse_proxy 127.0.0.1:3000
+  # Isolated profile cloner (dedicated service). No catalog route changes.
+  @nuvio_cloner path /cloner /cloner/*
+  handle @nuvio_cloner {
+    reverse_proxy 127.0.0.1:3001
+  }
+  handle {
+    reverse_proxy 127.0.0.1:3000
+  }
 
   log {
     output file /var/log/caddy/nuvio-access.log {
