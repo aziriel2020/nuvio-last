@@ -15,9 +15,17 @@ const VERIFIED_WORLD = VERIFIED_PREMIERES.filter(p => p.market === 'FR' && p.typ
   && p.worldPremiereDate && p.worldPremiereSource);
 const WORLD_PAGE_SIZE = 24; // One immediate row + pagination, rather than 100 posters per period.
 const annualPreviewCache = new Map();
+// A cached 12-month preview belongs to ONE SQLite snapshot. Without the
+// reader identity + SQLite data_version, older film IDs survive index refreshes
+// and can contaminate new/rebuilt movie catalogs while still appearing cached.
+const annualReaderIds = new WeakMap();
+let nextAnnualReaderId = 0;
 function annualYearPage(store, descriptor, now, skip, search, size = WORLD_PAGE_SIZE) {
-  const key = JSON.stringify([descriptor.view,descriptor.genre,descriptor.period,
-    search,new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels'}).format(now)]);
+  if (!annualReaderIds.has(store)) annualReaderIds.set(store, ++nextAnnualReaderId);
+  const version = store.db.prepare('PRAGMA data_version').get().data_version;
+  const key = JSON.stringify([annualReaderIds.get(store),version,descriptor.view,
+    descriptor.genre,descriptor.period,search,
+    new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels'}).format(now)]);
   const cached = annualPreviewCache.get(key);
   let highlighted;
   if (cached && Date.now()-cached.storedAt < 60000) highlighted=cached.metas;
