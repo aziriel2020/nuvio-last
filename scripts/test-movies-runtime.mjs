@@ -85,7 +85,11 @@ try {
     assert.equal(meta.width, 1600); assert.equal(meta.height, 900);
   }
   const fallback = await get('/movies/content-card.jpg?title=Film%20sans%20photo&label=VOD');
-  assert.equal((await sharp(Buffer.from(await fallback.arrayBuffer())).metadata()).width, 1600);
+  assert.equal(fallback.status, 410, 'Film Mondiaux must never generate old JPEG cards');
+  assert.equal(fallback.headers.get('cache-control'), 'no-store');
+  const oldCover = await get('/movies/cover.jpg', { redirect: 'manual' });
+  assert.equal(oldCover.status, 302);
+  assert.match(oldCover.headers.get('location') || '', /\/movies\/artwork\/genre\/all\.webp/);
   const status = await (await get('/movies/status.json')).json(); assert.equal(status.eligible, 204); assert(status.genreArtwork.ready);
   const replay = { results: { FR: { free: [{provider_id:1967,provider_name:'Molotov TV'}] } } };
   store.upsert(fixture(2001,{title:'Cleanup replay fiction',release_dates:{results:[]},'watch/providers':replay}));
