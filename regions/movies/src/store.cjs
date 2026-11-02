@@ -1,6 +1,7 @@
 'use strict';
 
 const { SeriesStore } = require('../../series/src/store.cjs');
+const { fastMovieMetas } = require('./catalog-fast.cjs');
 const { AVAILABILITY_TTL } = require('../../series/src/france.cjs');
 const { GENRES, VIEWS, catalogWindowForMovie, displayDateForPremiere } = require('./model.cjs');
 const content = require('./content-policy.cjs');
@@ -137,7 +138,7 @@ class MovieStore extends SeriesStore {
       : `COALESCE(${digital},${original})`;
     return cases.length ? `(CASE ${cases} ELSE ${eligibleDigital} END)` : eligibleDigital;
   }
-  query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false, limit = 100, monthSample = 0, excludeIds = [] } = {}) {
+  query({ view = 'all', genre = 'all', period = 'all', skip = 0, search = '', now = new Date(), curated = false, limit = 100, monthSample = 0, excludeIds = [], cardOnly = false } = {}) {
     if (!VIEWS.some((v) => v.id === view) || !GENRES.some((g) => g.id === genre)) throw new Error('Invalid catalog');
     if (!Number.isSafeInteger(skip) || skip < 0) throw new Error('Invalid skip');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid limit');
@@ -180,7 +181,10 @@ class MovieStore extends SeriesStore {
     // Annual overview: at most two newest films from EACH calendar month,
     // sampled in one SQL query. A 24-item year row previously showed only
     // December because a whole month's films saturated the initial page.
-    const base = `SELECT s.*, ${content.sqlKind()} AS content_kind,
+    const columns = cardOnly ? `s.id,s.title,s.poster,s.background,s.genres,s.first_air_date,s.description,
+      (SELECT src.source_id FROM sources src WHERE src.show_id=s.id AND src.source='tmdb' LIMIT 1) AS catalog_tmdb_id,
+      (SELECT src.imdb_id FROM sources src WHERE src.show_id=s.id AND src.source='tmdb' LIMIT 1) AS catalog_imdb_id` : 's.*';
+    const base = `SELECT ${columns}, ${content.sqlKind()} AS content_kind,
       ${eventDate} AS event_date,'original' AS event_kind
       FROM shows s WHERE ${where.join(' AND ')}`;
     let rows;
@@ -198,6 +202,10 @@ class MovieStore extends SeriesStore {
         ? `CASE WHEN ${this.verifiedStreamingClause('s',now)} THEN 0 ELSE 1 END,` : '';
       rows = this.db.prepare(`${base} ORDER BY ${priority}${eventDate} DESC,s.id ASC LIMIT ? OFFSET ?`)
         .all(...args,limit,skip);
+    }
+    if (cardOnly) {
+      const metas = fastMovieMetas(this, rows, { curated, genre, view, now });
+      return metas.map((meta, i) => monthSample ? { ...meta, _sourceId: rows[i].id } : meta);
     }
     return rows.map(row => {
       const meta = this.meta(row, { curated, genre, view, now });
