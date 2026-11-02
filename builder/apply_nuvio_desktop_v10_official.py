@@ -977,3 +977,354 @@ replace_once(catalog,
 "preserve full-width catalog Hero trailer")
 
 print("V10 official Dev patch applied: native Windows Hero, gradients, official V4 and Watch Party intact")
+
+
+# V10.1: the official Windows MSI built successfully but lacked an active Home
+# Hero Trailer and a configured V4 native Custom Posters URL. The earlier
+# source-only checks did not exercise either integration. Keep the official
+# player, Party and catalog wiring above; this is an additive desktop patch.
+
+# 1. Enable V4 in the existing native Custom Posters mechanism. This is an
+# artwork URL template, NOT a Stremio addon / manifest, and never JPEG renders.
+# Preserve manual user patterns and explicit per-profile disable across restarts.
+custom="composeApp/src/commonMain/kotlin/com/nuvio/app/core/poster/CustomPosterUrlRepository.kt"
+replace_once(custom,
+'''package com.nuvio.app.core.poster
+
+''',
+'''package com.nuvio.app.core.poster
+
+import com.nuvio.app.isWindows
+
+private const val NUVIO_DESKTOP_V4_ARTWORK_PATTERN =
+    "https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details"
+private const val NUVIO_DESKTOP_POSTER_DISABLED = "nuvio:custom-posters-disabled"
+
+''',
+"Desktop native V4 artwork URL")
+replace_once(custom,
+'''        val trimmed = pattern.trim()
+        if (_pattern.value == trimmed) return
+        _pattern.value = trimmed
+        CustomPosterUrlStorage.savePattern(trimmed.ifBlank { null })''',
+'''        val trimmed = pattern.trim()
+        if (trimmed.isBlank()) {
+            clearPattern()
+            return
+        }
+        if (_pattern.value == trimmed) return
+        _pattern.value = trimmed
+        CustomPosterUrlStorage.savePattern(trimmed)''',
+"V4 preference explicit custom pattern")
+replace_once(custom,
+'''        CustomPosterUrlStorage.savePattern(null)
+        com.nuvio.app.features.home.HomeRepository.applyCurrentSettings()
+    }
+
+    fun patternForScreen''',
+'''        CustomPosterUrlStorage.savePattern(if (isWindows) NUVIO_DESKTOP_POSTER_DISABLED else null)
+        com.nuvio.app.features.home.HomeRepository.applyCurrentSettings()
+    }
+
+    fun patternForScreen''',
+"V4 preference durable disable")
+replace_once(custom,
+'''        _pattern.value = CustomPosterUrlStorage.loadPattern().orEmpty().trim()
+        _enabledScreens.value = CustomPosterScreen.fromKeys(CustomPosterUrlStorage.loadEnabledScreens())''',
+'''        val storedPattern = CustomPosterUrlStorage.loadPattern()
+        _pattern.value = when {
+            storedPattern == NUVIO_DESKTOP_POSTER_DISABLED -> ""
+            storedPattern == null && isWindows -> NUVIO_DESKTOP_V4_ARTWORK_PATTERN
+            else -> storedPattern.orEmpty().trim()
+        }
+        _enabledScreens.value = CustomPosterScreen.fromKeys(CustomPosterUrlStorage.loadEnabledScreens())''',
+"V4 artwork loaded automatically for Windows profiles")
+
+# 2. Migrate the older official desktop preferences that default to OFF.
+# Existing opt-outs remain authoritative after a user toggles a control.
+style="composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterCardStyleRepository.kt"
+replace_once(style,
+'''package com.nuvio.app.core.ui
+
+''',
+'''package com.nuvio.app.core.ui
+
+import com.nuvio.app.isWindows
+
+''',
+"desktop Windows preference resolution")
+replace_once(style,
+'''    val catalogLandscapeModeEnabled: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,''',
+'''    val catalogLandscapeModeEnabled: Boolean = false,
+    val catalogLandscapeModeConfigured: Boolean = false,
+    val hideLabelsEnabled: Boolean = false,
+    val hoverPreviewEnabled: Boolean = true,''',
+"V4 stored explicit landscape preference")
+replace_once(style,
+'''    val hoverPreviewTrailerEnabled: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,''',
+'''    val hoverPreviewTrailerEnabled: Boolean = false,
+    val hoverPreviewTrailerConfigured: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,''',
+"Hero stored explicit trailer preference")
+replace_once(style,
+'''    val alwaysShowLandscapeClearlogo: Boolean = false,
+    val animatedArtworkMode: String = AnimatedArtworkMode.Always.name,''',
+'''    val alwaysShowLandscapeClearlogo: Boolean = false,
+    val alwaysShowLandscapeClearlogoConfigured: Boolean = false,
+    val animatedArtworkMode: String = AnimatedArtworkMode.Always.name,''',
+"V4 stored explicit logo preference")
+
+# The first occurrences above are in the stored DTO, while these changes use
+# the UI DTO and require a unique nearby anchor.
+replace_once(style,
+'''data class PosterCardStyleUiState(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = false,''',
+'''data class PosterCardStyleUiState(
+    val widthDp: Int = DefaultPosterCardWidthDp,
+    val heightDp: Int = DefaultPosterCardHeightDp,
+    val cornerRadiusDp: Int = DefaultPosterCardCornerRadiusDp,
+    val catalogLandscapeModeEnabled: Boolean = isWindows,''',
+"V4 enabled for Windows fresh profiles")
+replace_once(style,
+'''    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = false,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,''',
+'''    val hoverPreviewOpenDelayMillis: Int = DefaultHoverPreviewOpenDelayMillis,
+    val hoverPreviewTrailerEnabled: Boolean = isWindows,
+    val hoverPreviewTrailerSoundEnabled: Boolean = false,''',
+"Hero enabled for Windows fresh profiles")
+replace_once(style,
+'''    val alwaysShowLandscapeClearlogo: Boolean = false,
+    val animatedArtworkMode: AnimatedArtworkMode = AnimatedArtworkMode.Always,''',
+'''    val alwaysShowLandscapeClearlogo: Boolean = isWindows,
+    val animatedArtworkMode: AnimatedArtworkMode = AnimatedArtworkMode.Always,''',
+"V4 native logos for Windows fresh profiles")
+replace_once(style,
+'''    private var hasLoaded = false
+
+    fun ensureLoaded()''',
+'''    private var hasLoaded = false
+    private var catalogLandscapeModeConfigured = false
+    private var hoverPreviewTrailerConfigured = false
+    private var alwaysShowLandscapeClearlogoConfigured = false
+
+    fun ensureLoaded()''',
+"per-profile explicit preference state")
+replace_once(style,
+'''        hasLoaded = false
+        _uiState.value = PosterCardStyleUiState()
+    }''',
+'''        hasLoaded = false
+        catalogLandscapeModeConfigured = false
+        hoverPreviewTrailerConfigured = false
+        alwaysShowLandscapeClearlogoConfigured = false
+        _uiState.value = PosterCardStyleUiState()
+    }''',
+"clear cached explicit preference state")
+replace_once(style,
+'''    fun setCatalogLandscapeModeEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.catalogLandscapeModeEnabled == enabled) return
+        _uiState.value = _uiState.value.copy(catalogLandscapeModeEnabled = enabled)
+        persist()
+    }''',
+'''    fun setCatalogLandscapeModeEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.catalogLandscapeModeEnabled == enabled && catalogLandscapeModeConfigured) return
+        catalogLandscapeModeConfigured = true
+        _uiState.value = _uiState.value.copy(catalogLandscapeModeEnabled = enabled)
+        persist()
+    }''',
+"respect Windows V4 landscape opt out")
+replace_once(style,
+'''    fun setHoverPreviewTrailerEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.hoverPreviewTrailerEnabled == enabled) return
+        _uiState.value = _uiState.value.copy(hoverPreviewTrailerEnabled = enabled)
+        persist()
+    }''',
+'''    fun setHoverPreviewTrailerEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.hoverPreviewTrailerEnabled == enabled && hoverPreviewTrailerConfigured) return
+        hoverPreviewTrailerConfigured = true
+        _uiState.value = _uiState.value.copy(hoverPreviewTrailerEnabled = enabled)
+        persist()
+    }''',
+"respect Windows Hero opt out")
+replace_once(style,
+'''    fun setAlwaysShowLandscapeClearlogo(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.alwaysShowLandscapeClearlogo == enabled) return
+        _uiState.value = _uiState.value.copy(alwaysShowLandscapeClearlogo = enabled)
+        persist()
+    }''',
+'''    fun setAlwaysShowLandscapeClearlogo(enabled: Boolean) {
+        ensureLoaded()
+        if (_uiState.value.alwaysShowLandscapeClearlogo == enabled && alwaysShowLandscapeClearlogoConfigured) return
+        alwaysShowLandscapeClearlogoConfigured = true
+        _uiState.value = _uiState.value.copy(alwaysShowLandscapeClearlogo = enabled)
+        persist()
+    }''',
+"respect Windows V4 logo opt out")
+replace_once(style,
+'''        val stored = runCatching {
+            json.decodeFromString<StoredPosterCardStylePreferences>(payload)
+        }.getOrNull()
+
+        _uiState.value = if (stored != null) {''',
+'''        val stored = runCatching {
+            json.decodeFromString<StoredPosterCardStylePreferences>(payload)
+        }.getOrNull()
+        catalogLandscapeModeConfigured = stored?.catalogLandscapeModeConfigured ?: false
+        hoverPreviewTrailerConfigured = stored?.hoverPreviewTrailerConfigured ?: false
+        alwaysShowLandscapeClearlogoConfigured = stored?.alwaysShowLandscapeClearlogoConfigured ?: false
+
+        _uiState.value = if (stored != null) {''',
+"load explicit stored flags")
+replace_once(style,
+'''                catalogLandscapeModeEnabled = stored.catalogLandscapeModeEnabled,
+                hideLabelsEnabled = stored.hideLabelsEnabled,''',
+'''                catalogLandscapeModeEnabled =
+                    if (isWindows && !catalogLandscapeModeConfigured) true
+                    else stored.catalogLandscapeModeEnabled,
+                hideLabelsEnabled = stored.hideLabelsEnabled,''',
+"V4 legacy Windows profiles landscape migration")
+replace_once(style,
+'''                hoverPreviewTrailerEnabled = stored.hoverPreviewTrailerEnabled,
+                hoverPreviewTrailerSoundEnabled = stored.hoverPreviewTrailerSoundEnabled,''',
+'''                hoverPreviewTrailerEnabled =
+                    if (isWindows && !hoverPreviewTrailerConfigured) true
+                    else stored.hoverPreviewTrailerEnabled,
+                hoverPreviewTrailerSoundEnabled = stored.hoverPreviewTrailerSoundEnabled,''',
+"Hero legacy Windows profiles migration")
+replace_once(style,
+'''                alwaysShowLandscapeClearlogo = stored.alwaysShowLandscapeClearlogo,
+                animatedArtworkMode = AnimatedArtworkMode.entries''',
+'''                alwaysShowLandscapeClearlogo =
+                    if (isWindows && !alwaysShowLandscapeClearlogoConfigured) true
+                    else stored.alwaysShowLandscapeClearlogo,
+                animatedArtworkMode = AnimatedArtworkMode.entries''',
+"V4 legacy Windows logos migration")
+replace_once(style,
+'''                    catalogLandscapeModeEnabled = _uiState.value.catalogLandscapeModeEnabled,
+                    hideLabelsEnabled = _uiState.value.hideLabelsEnabled,''',
+'''                    catalogLandscapeModeEnabled = _uiState.value.catalogLandscapeModeEnabled,
+                    catalogLandscapeModeConfigured = catalogLandscapeModeConfigured,
+                    hideLabelsEnabled = _uiState.value.hideLabelsEnabled,''',
+"persist explicit landscape setting")
+replace_once(style,
+'''                    hoverPreviewTrailerEnabled = _uiState.value.hoverPreviewTrailerEnabled,
+                    hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,''',
+'''                    hoverPreviewTrailerEnabled = _uiState.value.hoverPreviewTrailerEnabled,
+                    hoverPreviewTrailerConfigured = hoverPreviewTrailerConfigured,
+                    hoverPreviewTrailerSoundEnabled = _uiState.value.hoverPreviewTrailerSoundEnabled,''',
+"persist explicit Hero setting")
+replace_once(style,
+'''                    alwaysShowLandscapeClearlogo = _uiState.value.alwaysShowLandscapeClearlogo,
+                    animatedArtworkMode = _uiState.value.animatedArtworkMode.name,''',
+'''                    alwaysShowLandscapeClearlogo = _uiState.value.alwaysShowLandscapeClearlogo,
+                    alwaysShowLandscapeClearlogoConfigured = alwaysShowLandscapeClearlogoConfigured,
+                    animatedArtworkMode = _uiState.value.animatedArtworkMode.name,''',
+"persist explicit V4 logo setting")
+
+# 3. Connect the fullscreen Home Hero banner to the EXISTING Windows native
+# playback Surface, with a poster fallback and the approved left/bottom blends.
+home="composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt"
+replace_once(home,
+'''import com.nuvio.app.core.ui.NuvioTokens
+''',
+'''import com.nuvio.app.core.ui.NuvioTokens
+import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
+import com.nuvio.app.features.trailer.TrailerPlaybackSource
+import kotlinx.coroutines.CancellationException
+''',
+"home Hero source and settings imports")
+replace_once(home,
+'''    val backgroundColor = colorScheme.background
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(backgroundColor),
+    ) {
+        HeroBackgroundLayers(''',
+'''    val backgroundColor = colorScheme.background
+    val heroStyle = rememberPosterCardStyleUiState()
+    val heroItem = currentHeroItem(items, pagerState)
+    val homeTrailerEnabled = isWindows &&
+        AppFeaturePolicy.heroTrailerPlaybackSupported &&
+        heroStyle.hoverPreviewTrailerEnabled
+    var homeTrailerSource by remember(heroItem.type, heroItem.id) {
+        mutableStateOf<TrailerPlaybackSource?>(null)
+    }
+    LaunchedEffect(heroItem.type, heroItem.id, homeTrailerEnabled) {
+        homeTrailerSource = null
+        if (!homeTrailerEnabled) return@LaunchedEffect
+        delay(heroStyle.hoverPreviewOpenDelayMillis.toLong())
+        homeTrailerSource = try {
+            resolveHomePosterHoverTrailerPlaybackSource(heroItem)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(backgroundColor),
+    ) {
+        HeroBackgroundLayers(''',
+"connect native trailer with Home Hero selected item")
+replace_once(home,
+'''            includePagerNeighbors = includePagerNeighbors,
+            desktopFrame = true,
+        )
+
+        Box(''',
+'''            includePagerNeighbors = includePagerNeighbors,
+            desktopFrame = true,
+        )
+
+        // Keep the cinematic poster visible until native playback reports
+        // the first frame. The player covers ONLY the right-hand background.
+        if (homeTrailerEnabled && homeTrailerSource != null) {
+            HomePosterHoverTrailer(
+                playbackSource = homeTrailerSource,
+                soundEnabled = heroStyle.hoverPreviewTrailerSoundEnabled,
+                startPositionSeconds = heroStyle.hoverPreviewTrailerStartSeconds,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxWidth(0.68f)
+                    .fillMaxHeight(),
+            )
+        }
+
+        Box(''',
+"render native Hero Trailer inside Home Hero background")
+
+# 4. The catalog hero previously only loaded a video while hovering a card,
+# so its default selected item was never playing. Use the selected item even
+# without hover and preserve the existing hover switch when scrolling.
+replace_once(
+    "composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogScreen.kt",
+'''                    isHoverActive = hoveredHeroItem != null,
+                    pageTitle = title,''',
+'''                    isHoverActive = true,
+                    pageTitle = title,''',
+"start catalog Hero Trailer for default featured item"
+)
+
+# 5. Build-time assertions catch the regression even when Kotlin compiles.
+require(home, "HomePosterHoverTrailer(", "homeTrailerEnabled", "resolveHomePosterHoverTrailerPlaybackSource")
+require(custom, "oracle-vector-v4-film-details", "NUVIO_DESKTOP_V4_ARTWORK_PATTERN")
+require(style, "hoverPreviewTrailerConfigured", "catalogLandscapeModeConfigured")
+print("V10.1: native Home/Catalog Hero and original Oracle V4 poster link connected for Windows MSI")
