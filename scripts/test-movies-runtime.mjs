@@ -55,7 +55,12 @@ try {
     assert.match(r.headers.get('cache-control') || '', /public/, 'Nonempty catalog pages can be served from Oracle cache');
     const data = await r.json(); ids.push(...data.metas.map((m) => m.id));
     assert(data.metas.length > 0 && data.metas.length <= firstCatalog.pageSize);
-    assert(data.metas.every((m) => m.posterShape === 'landscape' && new URL(m.background).pathname === '/fr/calendar-card.jpg'));
+    assert(data.metas.every((m) => m.posterShape === 'landscape'
+      && m.poster === 'https://image.tmdb.org/t/p/w780/backdrop.jpg'
+      && m.background === 'https://image.tmdb.org/t/p/w1280/backdrop.jpg'
+      && m.landscapePoster === m.poster && m.banner === m.poster
+      && !JSON.stringify(m).includes('/calendar-card.jpg')),
+      'canonical Films Monde must deliver direct TMDB artwork, without server JPEG processing');
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
   const cached = await get('/movies/catalog/movie/movies-fr-all-all-all/skip=0.json');
@@ -68,8 +73,9 @@ try {
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A998.json')).status, 404);
   assert.equal((await get('/movies/meta/movie/tmdb%3Amovie%3A999.json')).status, 404);
   const detail = await (await get('/movies/meta/movie/tmdb%3Amovie%3A1.json')).json();
-  assert.equal(new URL(detail.meta.background).pathname, '/images/original.jpg');
-  assert.equal(new URL(detail.meta.background).searchParams.get('src'), 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
+  assert.equal(detail.meta.background, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg',
+    'film metadata must also bypass legacy /images/original.jpg conversion');
+  assert.equal(detail.meta.poster, 'https://image.tmdb.org/t/p/w500/portrait.jpg');
   store.upsert(fixture(1, { genres: [{ id: 16 }] }));
   const refreshed = await (await get('/movies/catalog/movie/movies-fr-all-all-all/search=Film%20HTTP%201.json')).json();
   assert(!refreshed.metas.some((m) => m.id === 'tmdb:movie:1'));

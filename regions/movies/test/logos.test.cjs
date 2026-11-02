@@ -65,9 +65,13 @@ test('Films Monde public cards never overlay a film title logo, but keep approve
     assert.notEqual(decorated.logo,logo,'TMDB title logo must never be published');
     if (decorated.logo) assert.match(decorated.logo,/\/fr\/calendar-transparent-logo\.svg\?/,
       'only the invisible original Modern layout slot is allowed');
-    assert.match(decorated.poster,/\/fr\/calendar-card\.jpg\?/,'premium card renderer unchanged');
-    assert.match(decorated.poster, /title=Film/, 'original design typography still present');
-    assert.equal(decorated.poster,decorated.background,'reuse the same cached thumbnail');
+    assert.equal(decorated.poster,'https://image.tmdb.org/t/p/w780/b.jpg',
+      'canonical film catalog must provide upstream landscape artwork');
+    assert.equal(decorated.background,base.background,'original TMDB backdrop remains direct');
+    assert.equal(decorated.landscapePoster,decorated.poster);
+    assert.equal(decorated.banner,decorated.poster);
+    assert.doesNotMatch(JSON.stringify(decorated),/calendar-card|desktop-content-card/,
+      'no server-generated JPEG routes in catalog');
     assert.equal(decorated.id,base.id);
     assert.equal(decorated.released,base.released);
     const noLogo=decorateMovieMetas('https://example.test/movies',[{...base,logo:null}],{view,period:'2026-10'})[0];

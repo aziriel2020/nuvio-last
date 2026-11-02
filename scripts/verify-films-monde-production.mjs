@@ -150,27 +150,40 @@ assert.deepEqual(native.metas.map(m=>[m.id,m.released,m.originalReleaseDate]),
   'Native Bridge changed film IDs or original dates');
 const direct=native.metas.filter(m=>/^https:\/\/(?:image\.tmdb\.org|artworks\.thetvdb\.com)\//.test(m.poster||'')).length;
 assert(direct>=Math.min(3,native.metas.length),'Native Bridge still sends Oracle posters instead of provider images');
-// The Design Plugin is a standalone Custom Posters URL, not an APK patch.
-// Check the real image pipeline from an indexed movie in Oracle production.
+// Canonical Films Monde must no longer load Oracle-generated content JPEGs.
+// Nuvio Custom Posters applies V4 after fetching these direct image URLs.
+const forbiddenArt=/\/(?:calendar-card|desktop-content-card|content-card|shield-content-card)\.jpg|\/static\/assets\/generated-covers\//;
+for (const [name,catalog] of [['canonical',raw],['native bridge',native]]) {
+  assert(catalog.metas.every(m=>!forbiddenArt.test(JSON.stringify(m))),
+    name+' still references old server-side JPEG renderers');
+}
+const canonicalDirect=raw.metas.filter(m=>/^https:\/\/(?:image\.tmdb\.org|artworks\.thetvdb\.com)\//.test(m.poster||'')).length;
+assert(canonicalDirect>=Math.min(3,raw.metas.length),
+  'Films Monde canonical catalog still emits Oracle posters instead of TMDB/TVDB originals');
+// Check the actual production V4 vector route, not the old JPEG plugin.
 const {data:designConfig}=await get('/design-plugin/config.json');
 assert.equal(designConfig.requiresModifiedApk,false);
-assert.equal(designConfig.posterPattern, ORIGIN+'/design-plugin/poster.jpg?type={type}&id={id}&shape={shape}');
+assert.equal(designConfig.jpegConversion,false);
+assert.equal(designConfig.posterPattern,
+  ORIGIN+'/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details');
 assert.equal(designConfig.originalBackup,ORIGIN+'/movies/nuvio-collections.json');
 let designPosterLoaded=false;
 for(const meta of raw.metas.slice(0,10)){
-  const url=ORIGIN+'/design-plugin/poster.jpg?type=movie&shape=landscape&id='+encodeURIComponent(meta.id);
+  const url=designConfig.posterPattern.replace('{type}','movie')
+    .replace('{id}',encodeURIComponent(meta.id)).replace('{shape}','landscape');
   const response=await fetch(url,{signal:AbortSignal.timeout(18000)});
   if(response.status!==200){await response.body?.cancel();continue;}
-  assert.match(response.headers.get('content-type')||'',/^image\/jpeg/,
-    'plugin must deliver genuine cinematic artwork');
-  const bytes=Buffer.from(await response.arrayBuffer());
-  assert(bytes.length>1000&&bytes[0]===255&&bytes[1]===216,
-    'plugin must return JPEG bytes, not error HTML');
+  assert.match(response.headers.get('content-type')||'',/^image\/svg\+xml/,
+    'V4 plugin must serve vector artwork, not a JPEG');
+  const svg=await response.text();
+  assert(svg.length>1000&&svg.includes('<svg')&&svg.includes('viewBox="0 0 1600 900"'),
+    'V4 plugin produced invalid SVG');
   designPosterLoaded=true;break;
 }
-assert(designPosterLoaded,'design plugin failed to resolve any indexed Films Monde movie');
-const invalidPoster=await fetch(ORIGIN+'/design-plugin/poster.jpg?type=movie&id=invalid&shape=landscape');
-assert.equal(invalidPoster.status,400,'invalid Custom Posters ID should fall back to native art');
+assert(designPosterLoaded,'V4 plugin failed to resolve any indexed Films Monde movie');
+const invalidPoster=await fetch(
+  ORIGIN+'/design-meta/art/movie/invalid/landscape.svg?v=oracle-vector-v4-film-details');
+assert.equal(invalidPoster.status,400,'invalid V4 ID should fall back to native art');
 await invalidPoster.body?.cancel();
 const summary={ok:true,eligible:status.eligible,collections:regular.length,
   periodRefs:regular.reduce((s,c)=>s+ids(c).length,0),
@@ -181,5 +194,5 @@ const summary={ok:true,eligible:status.eligible,collections:regular.length,
   maxUnifiedGenreSources:Math.max(...recentYears.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxYearByYearSourceLoad:Math.max(...yearByYear.flatMap(c=>c.folders.map(f=>f.sources.length))),
   maxSourcesPerFolder:Math.max(...fast.flatMap(c=>c.folders.map(f=>f.sources.length))),
-  annualCoverage,designPluginPoster:designPosterLoaded,sampleMovies:native.metas.length,directPosters:direct,sha:process.env.GITHUB_SHA||null};
+  annualCoverage,designPluginV4:designPosterLoaded,sampleMovies:native.metas.length,directPosters:direct,canonicalDirect,sha:process.env.GITHUB_SHA||null};
 console.log('FILMS_MONDE_PRODUCTION_GATE='+JSON.stringify(summary));

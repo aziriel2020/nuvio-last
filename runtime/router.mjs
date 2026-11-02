@@ -585,6 +585,9 @@ function cacheKeyFor(request, timeZone) {
     }).formatToParts(new Date());
     const get = kind => parts.find(x => x.type === kind)?.value;
     url.searchParams.set('__nuvio_movie_day', `${get('year')}-${get('month')}-${get('day')}`);
+    // Drop only Films Monde's previous cached JSON poster URLs after the native V4 migration.
+    // Public catalog IDs, URL paths and independent country caches remain unchanged.
+    url.searchParams.set('__nuvio_movie_art_rev', 'direct-tmdb-v4-20261102');
   }
 
   if (
