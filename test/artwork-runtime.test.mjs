@@ -8,6 +8,27 @@ import sharp from 'sharp';
 import router from '../runtime/router.mjs';
 import { relayOriginalImages } from '../runtime/original-images.mjs';
 
+test('Oracle V4 native artwork passes provider URLs without any JPEG proxy rewrite', async () => {
+  const previous = process.env.NUVIO_V4_NATIVE_ART;
+  process.env.NUVIO_V4_NATIVE_ART = '1';
+  try {
+    const raw = { metas: [{ id: 'tt1234567', poster: 'https://image.tmdb.org/t/p/w780/example.jpg',
+      background: 'https://image.tmdb.org/t/p/w1280/example.jpg' }] };
+    const response = new Response(JSON.stringify(raw), {
+      headers: { 'content-type':'application/json' }
+    });
+    const result = await relayOriginalImages(
+      new Request('https://nuvio.example/fr/catalog/movie/test.json'), response);
+    assert.equal(result, response, 'no cloning, processing, or image rewrite');
+    const data = await result.json();
+    assert.equal(data.metas[0].poster, raw.metas[0].poster);
+    assert.equal(data.metas[0].background, raw.metas[0].background);
+  } finally {
+    if (previous === undefined) delete process.env.NUVIO_V4_NATIVE_ART;
+    else process.env.NUVIO_V4_NATIVE_ART = previous;
+  }
+});
+
 test('original image relay covers cached metadata and nested episode thumbnails after runtime recovery', async () => {
   const raw = { meta: { id: 'tt42', poster: 'https://image.tmdb.org/t/p/w500/p42.jpg',
     videos: [{ id: 'tt42:1:1', thumbnail: 'https://static.tvmaze.com/uploads/images/original_untouched/1/42.jpg' }] } };
