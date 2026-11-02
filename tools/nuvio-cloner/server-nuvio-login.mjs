@@ -152,8 +152,25 @@ async function apply(token,pid,data,options) {
     await rpc(token,'sync_push_home_catalog_settings',{p_profile_id:pid,p_platform:'home_catalog_shared',p_settings_json:data.home});
     done.home='copié';
   }
+  // sync_push_library is a full-snapshot RPC: it also removes target-only titles.
   await run(options.library,'library','sync_push_library',{p_profile_id:pid,p_items:data.library});
-  await run(options.watched,'watched','sync_push_watched_items',{p_profile_id:pid,p_items:data.watched});
+  if(options.watched){
+    // sync_push_watched_items upserts, so target-only items must be deleted explicitly.
+    // These RPCs operate on 'watched_items', NEVER on 'watch_progress'.
+    const existing=await pullPaged(token,'sync_pull_watched_items',pid,i=>({p_profile_id:pid,p_page:i+1,p_page_size:500}));
+    const key=x=>JSON.stringify([String(x.content_id),x.season??null,x.episode??null]);
+    const desired=new Set(data.watched.map(key));
+    const obsolete=existing.filter(x=>!desired.has(key(x)))
+      .map(x=>({content_id:x.content_id,...(x.season==null?{}:{season:x.season}),
+        ...(x.episode==null?{}:{episode:x.episode})}));
+    for(let i=0;i<obsolete.length;i+=250){
+      await rpc(token,'sync_delete_watched_items',{p_profile_id:pid,p_keys:obsolete.slice(i,i+250)});
+    }
+    for(let i=0;i<data.watched.length;i+=250){
+      await rpc(token,'sync_push_watched_items',{p_profile_id:pid,p_items:data.watched.slice(i,i+250)});
+    }
+    done.watched=data.watched.length;
+  }
   if(options.settings || options.posters) {
     for(const platform of ['tv','mobile']) {
       const src=data.settings?.[platform];
