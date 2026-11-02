@@ -114,20 +114,34 @@ jobs:
             data=path.read_text(encoding="utf-8")
             for token in required[name]:
               if token not in data: raise SystemExit(f"Missing {name} contract: {token}")
-          print("V10 source contracts passed")
+          folder=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt").read_text(encoding="utf-8")
+          catalog=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogScreen.kt").read_text(encoding="utf-8")
+          storage=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/core/poster/CustomPosterUrlStorage.desktop.kt").read_text(encoding="utf-8")
+          row=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt").read_text(encoding="utf-8")
+          cover=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt").read_text(encoding="utf-8")
+          for label,content,tokens in [
+            ("folder Hero",folder,["DesktopFolderHeroHeight", "CatalogHoverHero(", "FolderViewMode.TABBED_GRID", "FolderViewMode.FOLLOW_LAYOUT","onPosterHoverChanged"]),
+            ("catalog Hero",catalog,["CatalogHoverHero(","isHoverActive = true"]),
+            ("V4 profile migration",storage,["oracle_design_v4_seeded_windows_20261102", "CustomPosterScreen.ALL", "design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details"]),
+            ("V4 card priority",cover,["approvedV4Artwork", "approvedV4Artwork || !posterCardStyle.alwaysShowLandscapeClearlogo", "effectiveLandscapePoster ?: item.banner ?: item.poster"]),
+            ("V4 folder row",row,["onPosterHoverChanged = onPosterHoverChanged", "useHoverPreview = onPosterHoverChanged == null"])
+          ]:
+            for token in tokens:
+              if token not in content: raise SystemExit(f"Missing {label} runtime contract: {token}")
+          print("V10.3 Hero + actual V4 Windows source contracts passed")
           '@ | python -
 
       - name: Compile official Desktop Kotlin with our Windows Hero
         working-directory: NuvioDesktop
         shell: pwsh
         run: |
-          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.35" "-Pnuvio.desktop.versionCode=35" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.36" "-Pnuvio.desktop.versionCode=36" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
 
       - name: Package Windows MSI
         working-directory: NuvioDesktop
         shell: pwsh
         run: |
-          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.35" "-Pnuvio.desktop.versionCode=35" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.36" "-Pnuvio.desktop.versionCode=36" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
 
       - name: Collect and install MSI
         shell: pwsh
@@ -143,7 +157,7 @@ jobs:
           $record = $query.Fetch()
           $version = if ($record) { $record.StringData(1) } else { "" }
           $query.Close()
-          if ($version -ne "0.1.35") { throw "MSI ProductVersion is $version; expected 0.1.35 for real Windows upgrade" }
+          if ($version -ne "1.1.36") { throw "MSI ProductVersion is $version; expected 1.1.36 for real Windows upgrade" }
           Write-Host "Verified MSI ProductVersion=$version"
           Copy-Item $msi.FullName "NuvioDesktop-V10-Official-WatchParty-Hero-V4.msi"
           $path = (Resolve-Path "NuvioDesktop-V10-Official-WatchParty-Hero-V4.msi").Path
