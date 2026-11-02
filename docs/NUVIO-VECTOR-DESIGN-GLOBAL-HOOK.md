@@ -6,17 +6,17 @@
 - `ModernHomeModels.kt` uses `landscapePoster ?: backdropUrl ?: poster` when the Nuvio landscape-card setting is enabled.
 - This hook is part of **Nuvio's native Custom Posters setting**; an independent Stremio-compatible addon manifest cannot install or change that setting by itself. There is no claim of arbitrary Android/Compose UI injection.
 
-## Shield legibility improvement — v3 (deployment pending)
+## Shield legibility improvement — v4 (deployment pending)
 
 For an opt-in test profile on Nuvio, set Custom Posters' URL pattern to:
 
 ```text
-https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3
+https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4
 ```
 
 Enable Custom Posters for **Catalogs/Home** and enable **landscape posters** in Nuvio's layout options. Keep the existing addons as they are; the native resolver requests our artwork per media identifier. No APK fork, no edits to the catalogs, and no generated JPEG artifacts are involved.
 
-The original `?v=oracle-vector-v2` URL is deliberately routed to the preserved v2 SVG renderer; only `?v=oracle-vector-v3` receives enlarged text and episode metadata. Switching back to the v2 URL is the visual rollback, without replacing any addon.
+The V4 SVG enlarges type, rating, release date, season and episode details and logo artwork on both films and TV. `?v=oracle-vector-v3` stays on the previous validated typography and still shows the verified latest TV episode with its original broadcast date. `?v=oracle-vector-v2` retains the original renderer. Change only the version parameter to roll back without replacing any addon. No monthly catalog context is available in the global URL.
 
 The optional *metadata addon* can be installed separately from `/design-meta/vector/manifest.json`, but its installation **alone does not override catalog posters**. The global artwork URL pattern is the piece that intercepts existing catalog images.
 
