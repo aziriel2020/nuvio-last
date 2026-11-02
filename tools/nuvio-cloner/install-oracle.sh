@@ -35,7 +35,7 @@ p=Path('/etc/caddy/Caddyfile')
 s=p.read_text()
 old='  reverse_proxy 127.0.0.1:3000'
 assert s.count(old)==1, 'Unexpected Caddy configuration; refusing to patch'
-new='  route {\n    @nuvio_cloner path /cloner /cloner/*\n    reverse_proxy @nuvio_cloner 127.0.0.1:3001\n    reverse_proxy 127.0.0.1:3000\n  }'
+new='  @nuvio_cloner path /cloner /cloner/*\n  handle @nuvio_cloner {\n    reverse_proxy 127.0.0.1:3001\n  }\n  handle {\n    reverse_proxy 127.0.0.1:3000\n  }'
 p.with_name('Caddyfile.cloner.new').write_text(s.replace(old,new))
 PY
  caddy validate --config /etc/caddy/Caddyfile.cloner.new
