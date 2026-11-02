@@ -3,6 +3,7 @@
 // Metadata-only addon. No catalogs, no JPEG/SVG processing, no APK changes.
 // All artwork URLs point directly to TMDB's native image CDN.
 const { selectMovieLogo } = require('../regions/movies/src/logos.cjs');
+const { createSvgService } = require('./native-design-svg.cjs');
 
 const ADDON_ID = 'com.nuvio.native.metadata.design';
 const VERSION = '0.1.0';
@@ -191,17 +192,63 @@ function respond(res, status, payload, ttl = 0) {
   res.end(JSON.stringify(payload));
 }
 
-function createAddon({ tmdb, now = Date.now } = {}) {
+function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } = {}) {
   const load = tmdb || ((path, params) => require('../regions/fr/api/index.js')._internals.tmdbFetch(path, params));
   const cache = new Map();
+  // Experimental SVG preview is isolated from the normal metadata/poster paths.
+  // It cannot override cards belonging to a different addon.
+  const svgService = createSvgService({ fetcher: imageFetcher, now });
   async function handle(req, res, origin) {
     const url = new URL(req.url, origin);
     const route = url.pathname;
     if (route === '/design-meta/manifest.json') return respond(res, 200, manifest(origin), 15 * 60 * 1000);
     if (route === '/design-meta/status.json') return respond(res, 200, {
       addon: ADDON_ID, version: VERSION, catalogs: 0, imageRendering: false, mode: 'native-tmdb-urls',
+      svgPreview: '/design-meta/preview/{movie|series}/{id}.svg',
+      svgEnabledForMetadata: false,
       limitation: 'Metadata addon does not inject a Compose/UI overlay into Nuvio.'
     });
+    const preview = /^\/design-meta\/preview\/(movie|series)\/([^/]+)\.svg$/.exec(route);
+    if (preview) {
+      let id;
+      try { id = decodeURIComponent(preview[2]); }
+      catch { return respond(res, 400, { error: 'Invalid ID' }); }
+      const request = parseId(preview[1], id);
+      if (!request) return respond(res, 400, { error: 'Invalid ID or media type' });
+      try {
+        const data = await fetchDetails(request, load);
+        if (!data?.id) return respond(res, 404, { error: 'Metadata unavailable' });
+        const isMovie = request.type === 'movie';
+        const background = tmdbImage(data.backdrop_path, 'w1280');
+        if (!background) return respond(res, 404, { error: 'No landscape artwork' });
+        const logo = selectMovieLogo(data.images, data.original_language)?.url || null;
+        const artwork = {
+          backdrop: background,
+          logo,
+          genres: (data.genres || []).map(g => safeString(g?.name, 60)).filter(Boolean),
+          platforms: streamingPlatforms(data),
+          firstRelease: isMovie ? earliestMovieRelease(data) : validDate(data.first_air_date),
+          tmdbScore: data.vote_average,
+          seasonCount: isMovie ? 0 : data.number_of_seasons,
+        };
+        const meta = {
+          id: request.id,
+          type: request.type,
+          name: safeString(isMovie ? data.title || data.original_title : data.name || data.original_name, 200)
+        };
+        if (!meta.name) return respond(res, 404, { error: 'No title' });
+        const svg = await svgService.make(meta, artwork);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'public, max-age=21600');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:");
+        return res.end(svg);
+      } catch {
+        return respond(res, 503, { error: 'SVG preview temporarily unavailable' });
+      }
+    }
     const hit = /^\/design-meta\/meta\/(movie|series)\/([^/]+)\.json$/.exec(route);
     if (!hit) return respond(res, 404, { error: 'Not found' });
     let id;
