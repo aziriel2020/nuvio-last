@@ -15,7 +15,7 @@ async function remoteImage(url,fetcher=globalThis.fetch){
   if(!TYPES.has(mime)||Number(r.headers.get('content-length')||0)>3750000)throw Error('Invalid image MIME/size');
   return imageData(Buffer.from(await r.arrayBuffer()),mime);
 }
-function renderSvg(meta,art,bgData,logoData=null){
+function renderSvg(meta,art,bgData,logoData=null,{large=false}={}){
   const isMovie=meta.type==='movie';
   const services=Array.isArray(art.platforms)?art.platforms:[];
   const provider=services.length===1?clip(services[0],24).toUpperCase():null;
@@ -31,7 +31,7 @@ function renderSvg(meta,art,bgData,logoData=null){
   const properties=[date?.slice(0,4),rating,seasons].filter(Boolean).join('  •  ');
   const genres=(Array.isArray(art.genres)?art.genres:[]).slice(0,3).map(x=>clip(x,24)).join('  •  ');
   const title=clip(meta.name,37);
-  const titleSize=title.length>29?75:title.length>20?93:120;
+  const titleSize=large?(title.length>29?84:title.length>20?105:136):(title.length>29?75:title.length>20?93:120);
   // The global URL has no catalog-month placeholder. Show only the actual
   // latest confirmed episode, never claim it belongs to the browsed month.
   const episode=!isMovie&&art.latestEpisode&&
@@ -41,20 +41,20 @@ function renderSvg(meta,art,bgData,logoData=null){
     ?art.latestEpisode:null;
   const episodeDate=episode?episode.date.slice(8,10)+'/'+episode.date.slice(5,7)+'/'+episode.date.slice(0,4):null;
   const episodeLabel=episode?'DERNIER ÉPISODE  •  S'+String(episode.season).padStart(2,'0')+' E'+String(episode.episode).padStart(2,'0'):null;
-  const badge=provider?'<rect x="'+platformX+'" y="42" width="'+platformWidth+'" height="108" rx="23" fill="#03112a" stroke="#38bdf8" stroke-width="5"/><text x="'+(platformX+platformWidth/2)+'" y="115" font-family="sans-serif" font-weight="bold" font-size="51" fill="#fff" text-anchor="middle">'+escapeXml(provider)+'</text>':'';
-  const logo=logoData?'<image x="72" y="383" width="750" height="238" preserveAspectRatio="xMinYMid meet" href="'+escapeXml(logoData)+'"/>':'<text x="74" y="619" font-size="'+titleSize+'" font-family="sans-serif" font-weight="bold" fill="#fff">'+escapeXml(title)+'</text>';
-  const propertyText=properties?'<text x="78" y="721" font-family="sans-serif" font-size="60" fill="#fff" font-weight="bold">'+escapeXml(properties)+'</text>':'';
+  const badge=provider?'<rect x="'+platformX+'" y="42" width="'+platformWidth+'" height="'+(large?122:108)+'" rx="23" fill="#03112a" stroke="#38bdf8" stroke-width="5"/><text x="'+(platformX+platformWidth/2)+'" y="'+(large?123:115)+'" font-family="sans-serif" font-weight="bold" font-size="'+(large?57:51)+'" fill="#fff" text-anchor="middle">'+escapeXml(provider)+'</text>':'';
+  const logo=logoData?'<image x="72" y="'+(large?336:383)+'" width="'+(large?900:750)+'" height="'+(large?282:238)+'" preserveAspectRatio="xMinYMid meet" href="'+escapeXml(logoData)+'"/>':'<text x="74" y="'+(large?613:619)+'" font-size="'+titleSize+'" font-family="sans-serif" font-weight="bold" fill="#fff">'+escapeXml(title)+'</text>';
+  const propertyText=properties?'<text x="78" y="'+(large?715:721)+'" font-family="sans-serif" font-size="'+(large?69:60)+'" fill="#fff" font-weight="bold">'+escapeXml(properties)+'</text>':'';
   const secondaryText=episodeLabel
-    ?'<text x="78" y="801" font-size="67" font-family="sans-serif" font-weight="bold" fill="#fff">'+escapeXml(episodeLabel)+'</text>'
-    :genres?'<text x="78" y="800" font-family="sans-serif" font-size="54" font-weight="bold" fill="#e7f1ff">'+escapeXml(clip(genres,55))+'</text>':'';
+    ?'<text x="78" y="'+(large?799:801)+'" font-size="'+(large?77:67)+'" font-family="sans-serif" font-weight="bold" fill="#fff">'+escapeXml(episodeLabel)+'</text>'
+    :genres?'<text x="78" y="'+(large?798:800)+'" font-family="sans-serif" font-size="'+(large?64:54)+'" font-weight="bold" fill="#e7f1ff">'+escapeXml(clip(genres,large?42:55))+'</text>':'';
   const bottomLabel=episodeDate?'DIFFUSION : '+episodeDate:
     formattedDate?(isMovie?'SORTIE : ':'1RE DIFFUSION : ')+formattedDate:'';
-  const bottomText=bottomLabel?'<text x="78" y="868" font-size="56" font-family="sans-serif" font-weight="bold" fill="#8edfff">'+escapeXml(bottomLabel)+'</text>':'';
+  const bottomText=bottomLabel?'<text x="78" y="'+(large?873:868)+'" font-size="'+(large?65:56)+'" font-family="sans-serif" font-weight="bold" fill="#8edfff">'+escapeXml(bottomLabel)+'</text>':'';
   return '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">'+
     '<defs><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#071525" stop-opacity=".13"/><stop offset="43%" stop-color="#071525" stop-opacity=".19"/><stop offset="100%" stop-color="#041a3e" stop-opacity=".99"/></linearGradient></defs>'+
     '<image x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid slice" href="'+escapeXml(bgData)+'"/>'+
     '<rect width="1600" height="900" fill="url(#blue)"/>'+badge+
-    '<rect x="'+typeX+'" y="42" width="193" height="108" rx="23" fill="#0788c5"/><text x="'+(typeX+96.5)+'" y="115" font-size="55" font-family="sans-serif" font-weight="bold" fill="#fff" text-anchor="middle">'+(isMovie?'FILM':'SÉRIE')+'</text>'+
+    '<rect x="'+typeX+'" y="42" width="193" height="'+(large?122:108)+'" rx="23" fill="#0788c5"/><text x="'+(typeX+96.5)+'" y="'+(large?123:115)+'" font-size="'+(large?62:55)+'" font-family="sans-serif" font-weight="bold" fill="#fff" text-anchor="middle">'+(isMovie?'FILM':'SÉRIE')+'</text>'+
     logo+propertyText+secondaryText+bottomText+
     '<rect width="1600" height="900" fill="none" stroke="#d6f0ff" stroke-opacity=".16" stroke-width="5"/></svg>';
 }
@@ -99,8 +99,8 @@ function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
     cachedBytes-=entry.bytes||0;
     cache.delete(key);
   }
-  async function make(meta,art,{legacy=false}={}){
-    const key=JSON.stringify([meta.id,meta.type,meta.name,art,legacy]);
+  async function make(meta,art,{legacy=false,large=false}={}){
+    const key=JSON.stringify([meta.id,meta.type,meta.name,art,legacy,large]);
     const hit=cache.get(key);
     if(hit&&hit.until>now()){
       cache.delete(key);
@@ -111,7 +111,7 @@ function createSvgService({fetcher=globalThis.fetch,now=Date.now}={}){
     const promise=(async()=>{
       const bg=await remoteImage(art.backdrop,fetcher);
       const logo=validImage(art.logo)?await remoteImage(art.logo,fetcher).catch(()=>null):null;
-      return legacy?renderSvgLegacy(meta,art,bg,logo):renderSvg(meta,art,bg,logo);
+      return legacy?renderSvgLegacy(meta,art,bg,logo):renderSvg(meta,art,bg,logo,{large});
     })();
     const entry={promise,until:now()+15*60*1000,bytes:0};
     cache.set(key,entry);
