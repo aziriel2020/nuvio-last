@@ -11,7 +11,7 @@ WorkingDirectory=/opt/nuvio-cloner/source/tools/nuvio-cloner
 Environment=NODE_ENV=production
 Environment=CLONER_PORT=3001
 EnvironmentFile=/etc/nuvio-cloner/cloner.env
-ExecStart=/usr/bin/node /opt/nuvio-cloner/source/tools/nuvio-cloner/server.mjs
+ExecStart=/usr/bin/node /opt/nuvio-cloner/source/tools/nuvio-cloner/server-nuvio-login.mjs
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
