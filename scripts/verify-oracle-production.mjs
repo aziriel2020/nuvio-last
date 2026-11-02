@@ -9,6 +9,7 @@ const TIMEOUT_MS = Math.max(5000, Number(process.env.VERIFY_TIMEOUT_MS || 25000)
 const FORBIDDEN = /pages\.dev|workers\.dev|vercel(?:\.app)?|sslip\.io/i;
 const EXTERNAL_ART_HOSTS = /^(?:image\.tmdb\.org|static\.tvmaze\.com|s[1-4]\.anilist\.co|img\.anili\.st)$/i;
 const IMAGE_PATH = /\.(?:jpe?g|png|webp|svg)(?:$|\?)/i;
+const V4_COLLECTIONS = process.env.NUVIO_V4_COLLECTIONS === '1';
 const stats = { requests: 0, json: 0, images: 0, catalogs: 0, metas: 0, visualBytes: 0 };
 const visualDigests = new Map();
 
@@ -266,9 +267,13 @@ const tr = payloads['/nuvio-collections-tr.json'];
 assert(Array.isArray(standard) && standard.length > 0, 'standard collection import empty');
 const shieldAlias = payloads['/nuvio-collections-shield.json'];
 assert(Array.isArray(shieldAlias) && shieldAlias.length === standard.length, `Shield count ${shieldAlias?.length} != standard ${standard.length}`);
+let generatedManifest = {};
+let generatedShieldVisualUrls = [], generatedGenreShieldUrls = [];
+let generatedDesktopVisualUrls = [], generatedGenreDesktopUrls = [];
+if (!V4_COLLECTIONS) {
 const generatedManifestResult = await request('/static/assets/generated-covers/manifest.json', { attempts: 3 });
 stats.json += 1;
-const generatedManifest = generatedManifestResult.data;
+generatedManifest = generatedManifestResult.data;
 assert(generatedManifest?.revision === 'generated-v11-genre-photo-frames-period-labels', `generated cover revision mismatch: ${generatedManifest?.revision}`);
 assert(generatedManifest?.complete === true, 'generated cover manifest is not complete');
 assert(generatedManifest?.artDirection === 'netflix-rounded-unified-v9', `wrong art direction: ${generatedManifest?.artDirection}`);
@@ -397,7 +402,7 @@ for (const sample of canonicalVisualSamples) {
   await verifyVisual(new URL(sample, ORIGIN).toString(), 'canonical library ' + sample);
 }
 
-const generatedShieldVisualUrls = flattenStrings(standard).filter((value) => {
+generatedShieldVisualUrls = flattenStrings(standard).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-shield\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
 assert(generatedShieldVisualUrls.length >= 40, `too few generated Shield service covers in collection payload: ${generatedShieldVisualUrls.length}`);
@@ -407,7 +412,7 @@ for (const value of generatedShieldVisualUrls) {
   assert(visualUrl.searchParams.get('v') === 'generated-v11-genre-photo-frames-period-labels', `generated Shield cover has stale revision: ${value}`);
 }
 
-const generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
+generatedGenreShieldUrls = flattenStrings(standard).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-shield\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
 assert(generatedGenreShieldUrls.length >= 20, `too few generated Shield genre covers in collection payload: ${generatedGenreShieldUrls.length}`);
@@ -416,6 +421,18 @@ for (const value of generatedGenreShieldUrls) {
   assert(visualUrl.searchParams.get('v') === 'generated-v11-genre-photo-frames-period-labels', `generated genre Shield cover has stale revision: ${value}`);
 }
 
+ } else {
+  const allUrls = [...flattenStrings(standard), ...flattenStrings(desktop)];
+  assert(!allUrls.some(value => typeof value === 'string' && value.includes('/static/assets/generated-covers/')),
+    'V4 collections still reference the legacy generated JPEG cover library');
+  const folderSvgUrls = allUrls.filter(value => {
+    try { return /\/(?:platform-category-card|genre-folder-art|platform-backdrop)\.svg$/.test(new URL(value).pathname); }
+    catch { return false; }
+  });
+  assert(folderSvgUrls.length >= 20, 'V4 folder SVG coverage is insufficient: ' + folderSvgUrls.length);
+  const distinct = [...new Set(folderSvgUrls)];
+  await mapLimit(distinct.slice(0, 6), 3, (url, i) => verifyVisual(url, 'V4 folder SVG #' + (i + 1)));
+}
 const frNetflixReal = standard.find((collection) => collection.title === '🇫🇷 Netflix');
 assert(frNetflixReal, 'France Netflix collection missing for approved-board verification');
 const frNetflixSeriesReal = (frNetflixReal.folders || []).find((folder) => /séries|series/i.test(String(folder.title || ''))) || frNetflixReal.folders?.[0];
@@ -433,7 +450,8 @@ const frNetflixHeroProbe = await verifyVisual(frNetflixHero, 'France Netflix app
 assert(frNetflixHeroProbe.digest === approvedFrServices.images.netflix.backdrop.sha256, 'France Netflix approved backdrop checksum mismatch');
 
 assert(Array.isArray(desktop) && desktop.length === standard.length, `Desktop count ${desktop?.length} != standard ${standard.length}`);
-const generatedDesktopVisualUrls = flattenStrings(desktop).filter((value) => {
+if (!V4_COLLECTIONS) {
+generatedDesktopVisualUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/[a-z0-9-]+\/(?:series|movie)-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
 assert(generatedDesktopVisualUrls.length >= 40, `too few generated Desktop service covers in collection payload: ${generatedDesktopVisualUrls.length}`);
@@ -442,10 +460,11 @@ for (const value of generatedDesktopVisualUrls) {
   assert(visualUrl.origin === ORIGIN, `generated Desktop cover escaped Oracle: ${value}`);
   assert(visualUrl.searchParams.get('v') === 'generated-v11-genre-photo-frames-period-labels', `generated Desktop cover has stale revision: ${value}`);
 }
-const generatedGenreDesktopUrls = flattenStrings(desktop).filter((value) => {
+generatedGenreDesktopUrls = flattenStrings(desktop).filter((value) => {
   try { return /\/static\/assets\/generated-covers\/(?:fr|global|tr|us)\/genres\/[a-z0-9-]+-desktop\.jpg$/.test(new URL(value).pathname); } catch { return false; }
 });
 assert(generatedGenreDesktopUrls.length >= 20, `too few generated Desktop genre covers in collection payload: ${generatedGenreDesktopUrls.length}`);
+}
 assert(Array.isArray(tr) && tr.length > 0, 'Türkiye import empty');
 assert(health.data.collectionCount === standard.length, `health collectionCount ${health.data.collectionCount} != ${standard.length}`);
 assert(health.data.trCollectionCount === tr.length, `health trCollectionCount ${health.data.trCollectionCount} != ${tr.length}`);
@@ -611,13 +630,12 @@ const liveDesktopContentVisual = flattenStrings([
     return false;
   }
 });
-assert(liveDesktopContentVisual, 'No emitted Desktop content-card URL with a real source was discovered');
+if (!V4_COLLECTIONS) assert(liveDesktopContentVisual, 'No emitted Desktop content-card URL with a real source was discovered');
 
 const explicitVisuals = [
   '/tr/platform-category-card.svg?provider=exxen&category=series',
   '/tr/platform-backdrop.svg?provider=exxen&type=series',
-  '/tr/desktop-folder-card.jpg?provider=exxen&type=series&title=Exxen',
-  liveDesktopContentVisual,
+  ...(V4_COLLECTIONS ? [] : ['/tr/desktop-folder-card.jpg?provider=exxen&type=series&title=Exxen', liveDesktopContentVisual]),
   '/fr/genre-folder-art.svg?genre=action&variant=card&type=movie&label=Action',
   '/static/assets/platform-art/tr/exxen-card.jpg',
   '/static/assets/platform-art/tr/d-smart-go-backdrop.jpg',
@@ -665,7 +683,7 @@ const summary = {
   assets: {
     collectionVisualUrlsChecked: visualUrls.size,
     explicitVisualsChecked: explicitVisuals.length,
-    generatedCoverRevision: generatedManifest.revision,
+    generatedCoverRevision: V4_COLLECTIONS ? null : generatedManifest.revision,
     generatedCoverFiles: generatedManifest.generatedFiles,
     generatedPlatformParents: generatedManifest.platformParents,
     generatedGenreIdentities: generatedManifest.genreIdentities,
