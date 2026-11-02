@@ -130,6 +130,28 @@ test('older series reappear on the release date of a new episode and not on thei
   assert.equal(store.stats().indexedAirings, 2);
 });
 
+test('monthly catalog shows each series once with the real episode and date for that month', (t) => {
+  const store = memory(t);
+  const now = new Date('2026-11-02T12:00:00Z');
+  const base = { first_air_date: '2025-03-01', name:'Drama with monthly episodes' };
+  for (const [season,episode,date] of [[4,3,'2026-09-22'],[4,4,'2026-10-07'],[4,5,'2026-10-14'],[4,6,'2026-11-01']]) {
+    store.upsert(tmdb(777,{...base,last_episode_to_air:{
+      season_number:season,episode_number:episode,air_date:date
+    }}));
+  }
+  for (const [period,code,date] of [
+    ['2026-09','S04E03','2026-09-22'],
+    ['2026-10','S04E05','2026-10-14'],
+    ['2026-11','S04E06','2026-11-01']
+  ]) {
+    const items=store.query({mode:'premieres',period,now});
+    assert.equal(items.length,1,period+' must not duplicate the series');
+    assert.equal(items[0].episodeCode,code);
+    assert.equal(items[0].released.slice(0,10),date);
+    assert.match(items[0].description,new RegExp('Nouvel épisode : '+code));
+  }
+});
+
 test('episode corrections replace original release event and animation remains excluded', (t) => {
   const store = memory(t);
   store.upsert(tmdb(30, { first_air_date: '2000-01-01',
