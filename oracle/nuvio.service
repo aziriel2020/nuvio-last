@@ -18,6 +18,9 @@ Environment=NUVIO_CACHE_MAX_ENTRIES=24576
 Environment=CALENDAR_CARDS=false
 # Preserve native TMDB/TVDB/TVmaze artwork URLs; never relay/re-encode them.
 Environment=NUVIO_V4_NATIVE_ART=1
+# The native Nuvio media hook cannot decorate collection-folder cards:
+# choose equivalent SVG folder artwork rather than generated JPEG renditions.
+Environment=NUVIO_V4_COLLECTIONS=1
 EnvironmentFile=/etc/nuvio/nuvio.env
 EnvironmentFile=-/etc/nuvio/release.env
 ExecStart=/usr/bin/node /opt/nuvio/current/oracle/server.mjs
