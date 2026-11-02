@@ -152,12 +152,12 @@ const direct=native.metas.filter(m=>/^https:\/\/(?:image\.tmdb\.org|artworks\.th
 assert(direct>=Math.min(3,native.metas.length),'Native Bridge still sends Oracle posters instead of provider images');
 // Canonical Films Monde must no longer load Oracle-generated content JPEGs.
 // Nuvio Custom Posters applies V4 after fetching these direct image URLs.
-const forbiddenArt=/\\/(?:calendar-card|desktop-content-card|content-card|shield-content-card)\\.jpg|\\/static\\/assets\\/generated-covers\\//;
+const forbiddenArt=/\/(?:calendar-card|desktop-content-card|content-card|shield-content-card)\.jpg|\/static\/assets\/generated-covers\//;
 for (const [name,catalog] of [['canonical',raw],['native bridge',native]]) {
   assert(catalog.metas.every(m=>!forbiddenArt.test(JSON.stringify(m))),
     name+' still references old server-side JPEG renderers');
 }
-const canonicalDirect=raw.metas.filter(m=>/^https:\\/\\/(?:image\\.tmdb\\.org|artworks\\.thetvdb\\.com)\\//.test(m.poster||'')).length;
+const canonicalDirect=raw.metas.filter(m=>/^https:\/\/(?:image\.tmdb\.org|artworks\.thetvdb\.com)\//.test(m.poster||'')).length;
 assert(canonicalDirect>=Math.min(3,raw.metas.length),
   'Films Monde canonical catalog still emits Oracle posters instead of TMDB/TVDB originals');
 // Check the actual production V4 vector route, not the old JPEG plugin.
@@ -173,7 +173,7 @@ for(const meta of raw.metas.slice(0,10)){
     .replace('{id}',encodeURIComponent(meta.id)).replace('{shape}','landscape');
   const response=await fetch(url,{signal:AbortSignal.timeout(18000)});
   if(response.status!==200){await response.body?.cancel();continue;}
-  assert.match(response.headers.get('content-type')||'',/^image\\/svg\\+xml/,
+  assert.match(response.headers.get('content-type')||'',/^image\/svg\+xml/,
     'V4 plugin must serve vector artwork, not a JPEG');
   const svg=await response.text();
   assert(svg.length>1000&&svg.includes('<svg')&&svg.includes('viewBox="0 0 1600 900"'),
