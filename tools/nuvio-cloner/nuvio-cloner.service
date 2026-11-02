@@ -1,0 +1,32 @@
+[Unit]
+Description=Nuvio Account Profile Mirror (isolated from catalogs)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=nuvio-cloner
+Group=nuvio-cloner
+WorkingDirectory=/opt/nuvio-cloner/source/tools/nuvio-cloner
+Environment=NODE_ENV=production
+Environment=CLONER_PORT=3001
+EnvironmentFile=/etc/nuvio-cloner/cloner.env
+ExecStart=/usr/bin/node /opt/nuvio-cloner/source/tools/nuvio-cloner/server.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=512M
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
