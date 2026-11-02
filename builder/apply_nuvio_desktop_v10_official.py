@@ -495,4 +495,485 @@ replace_once(folder,
                                 }''',
 "V4 custom landscape covers in desktop folder grids")
 
+
+# Preserve the custom V9 cinematic Catalog Hero on official Dev. The recent
+# official app has poster hover previews but no full-width CatalogHoverHero.
+catalog_hero=f("composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt") if (
+    root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").is_file() else (
+    root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt")
+catalog_hero.parent.mkdir(parents=True,exist_ok=True)
+catalog_hero.write_text(r'''package com.nuvio.app.features.home.components
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
+import com.nuvio.app.core.ui.NuvioBackButton
+import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
+import com.nuvio.app.features.details.MetaDetails
+import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.home.MetaPreview
+import com.nuvio.app.features.tmdb.originalTmdbImageUrl
+import com.nuvio.app.features.trailer.TrailerPlaybackSource
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+
+private const val CatalogHeroEnrichmentDelayMillis = 450L
+private const val CatalogHeroTrailerFadeMillis = 480
+private val CatalogHeroCornerRadius = 20.dp
+
+@Composable
+internal fun CatalogHoverHero(
+    selectedItem: MetaPreview,
+    isHoverActive: Boolean,
+    pageTitle: String,
+    pageSubtitle: String = "",
+    onBack: (() -> Unit)? = null,
+    showBack: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    val posterCardStyle = rememberPosterCardStyleUiState()
+    var resolvedMeta by remember(selectedItem.type, selectedItem.id) {
+        mutableStateOf<MetaDetails?>(null)
+    }
+    var trailerPlaybackSource by remember(selectedItem.type, selectedItem.id) {
+        mutableStateOf<TrailerPlaybackSource?>(null)
+    }
+
+    LaunchedEffect(selectedItem.type, selectedItem.id, isHoverActive) {
+        resolvedMeta = null
+        if (!isHoverActive) return@LaunchedEffect
+        delay(CatalogHeroEnrichmentDelayMillis)
+        resolvedMeta = try {
+            MetaDetailsRepository.peek(type = selectedItem.type, id = selectedItem.id)
+                ?: MetaDetailsRepository.fetch(type = selectedItem.type, id = selectedItem.id)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    val trailerPlaybackEnabled =
+        AppFeaturePolicy.heroTrailerPlaybackSupported &&
+            posterCardStyle.hoverPreviewTrailerEnabled
+
+    LaunchedEffect(
+        selectedItem.type,
+        selectedItem.id,
+        isHoverActive,
+        trailerPlaybackEnabled,
+        posterCardStyle.hoverPreviewOpenDelayMillis,
+    ) {
+        trailerPlaybackSource = null
+        if (!isHoverActive || !trailerPlaybackEnabled) return@LaunchedEffect
+        delay(posterCardStyle.hoverPreviewOpenDelayMillis.toLong())
+        trailerPlaybackSource = try {
+            resolveHomePosterHoverTrailerPlaybackSource(selectedItem)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    val meta = resolvedMeta
+    val title = meta?.name?.takeIf { it.isNotBlank() } ?: selectedItem.name
+    val backdrop = originalTmdbImageUrl(
+        meta?.background?.takeIf { it.isNotBlank() }
+            ?: selectedItem.banner
+            ?: selectedItem.poster,
+    )
+    val logo = originalTmdbImageUrl(
+        meta?.logo?.takeIf { it.isNotBlank() }
+            ?: selectedItem.logo,
+    )
+    val description = meta?.description?.takeIf { it.isNotBlank() }
+        ?: selectedItem.description
+    val releaseInfo = meta?.releaseInfo?.takeIf { it.isNotBlank() }
+        ?: selectedItem.releaseInfo
+    val rating = meta?.imdbRating?.takeIf { it.isNotBlank() }
+        ?: selectedItem.imdbRating
+    val genres = meta?.genres?.takeIf { it.isNotEmpty() }
+        ?: selectedItem.genres
+    val primaryMeta = buildList {
+        releaseInfo?.takeIf { it.isNotBlank() }?.let(::add)
+        meta?.runtime?.takeIf { it.isNotBlank() }?.let(::add)
+        meta?.ageRating?.takeIf { it.isNotBlank() }?.let(::add)
+        rating?.let { add("IMDb $it") }
+    }.joinToString("  •  ")
+
+    val backgroundColor = MaterialTheme.colorScheme.background
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(CatalogHeroCornerRadius))
+            .background(backgroundColor),
+    ) {
+        if (!backdrop.isNullOrBlank()) {
+            AsyncImage(
+                model = backdrop,
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.Center,
+            )
+        }
+
+        AnimatedVisibility(
+            visible = trailerPlaybackSource != null,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxWidth(0.54f)
+                .fillMaxHeight()
+                .zIndex(30f),
+            enter = fadeIn(tween(CatalogHeroTrailerFadeMillis)),
+            exit = fadeOut(tween(180)),
+        ) {
+            trailerPlaybackSource?.let { source ->
+                HomePosterHoverTrailer(
+                    playbackSource = source,
+                    soundEnabled = posterCardStyle.hoverPreviewTrailerSoundEnabled,
+                    startPositionSeconds = posterCardStyle.hoverPreviewTrailerStartSeconds,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 0.99f),
+                            0.22f to backgroundColor.copy(alpha = 0.96f),
+                            0.45f to backgroundColor.copy(alpha = 0.76f),
+                            0.70f to backgroundColor.copy(alpha = 0.16f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+                ),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to backgroundColor.copy(alpha = 0.42f),
+                            0.18f to Color.Transparent,
+                            0.68f to Color.Transparent,
+                            1f to backgroundColor.copy(alpha = 0.96f),
+                        ),
+                    ),
+                ),
+        )
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth(0.46f)
+                .zIndex(50f)
+                .padding(start = 24.dp, end = 24.dp, top = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showBack && onBack != null) {
+                NuvioBackButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(46.dp),
+                    containerColor = Color.Black.copy(alpha = 0.34f),
+                    contentColor = Color.White,
+                    iconSize = 24.dp,
+                )
+                Spacer(modifier = Modifier.size(14.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pageTitle,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (pageSubtitle.isNotBlank()) {
+                    Text(
+                        text = pageSubtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 34.dp, end = 28.dp, bottom = 34.dp)
+                .fillMaxWidth(0.43f)
+                .zIndex(50f),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
+            if (!logo.isNullOrBlank()) {
+                AsyncImage(
+                    model = logo,
+                    contentDescription = title,
+                    modifier = Modifier
+                        .fillMaxWidth(0.68f)
+                        .height(86.dp),
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.CenterStart,
+                )
+            } else {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (primaryMeta.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = primaryMeta,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.90f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (genres.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = genres.take(4).joinToString("  •  "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.76f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (!description.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.93f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+''',encoding="utf-8")
+
+# Extend the official V4 card without changing its image precedence/logo logic:
+# desktop catalog hover selects the large Hero instead of opening the small preview.
+poster="composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt"
+replace_once(poster,
+'''import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier''',
+'''import androidx.compose.runtime.Composable
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent''',
+"hover-aware V4 poster imports")
+replace_once(poster,
+'''@Composable
+fun HomePosterCard(''',
+'''@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun HomePosterCard(''',
+"poster pointer event opt-in")
+replace_once(poster,
+'''    showLandscapeOverlay: Boolean = true,
+) {
+    val posterCardStyle = rememberPosterCardStyleUiState()''',
+'''    showLandscapeOverlay: Boolean = true,
+    useHoverPreview: Boolean = true,
+    onHoverChanged: ((Boolean) -> Unit)? = null,
+) {
+    val posterCardStyle = rememberPosterCardStyleUiState()''',
+"desktop hover routing")
+replace_once(poster,
+'''    HomePosterHoverPreview(
+        item = item,
+        isWatched = isWatched,
+        onClick = onClick,
+        onLongClick = onLongClick,
+    ) { hoverModifier ->
+        NuvioPosterCard(''',
+'''    val card: @Composable (Modifier) -> Unit = { hoverModifier ->
+        NuvioPosterCard(''',
+"reusable original V4 poster card")
+replace_once(poster,
+'''            modifier = modifier.then(hoverModifier),
+            fallbackImageUrl = fallbackImageUrl,''',
+'''            modifier = modifier.then(hoverModifier)
+                .onPointerEvent(PointerEventType.Enter) { onHoverChanged?.invoke(true) }
+                .onPointerEvent(PointerEventType.Exit) { onHoverChanged?.invoke(false) },
+            fallbackImageUrl = fallbackImageUrl,''',
+"hover event on V4 poster")
+replace_once(poster,
+'''        )
+    }
+}
+
+private fun PosterShape.toNuvioPosterShape''',
+'''        )
+    }
+    if (useHoverPreview) {
+        HomePosterHoverPreview(
+            item = item,
+            isWatched = isWatched,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            content = card,
+        )
+    } else {
+        card(Modifier)
+    }
+}
+
+private fun PosterShape.toNuvioPosterShape''',
+"desktop hero reuses official poster V4")
+
+catalog="composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogScreen.kt"
+replace_once(catalog,
+'''import com.nuvio.app.features.home.components.HomeEmptyStateCard
+''',
+'''import com.nuvio.app.features.home.components.CatalogHoverHero
+import com.nuvio.app.features.home.components.HomeEmptyStateCard
+''',
+"catalog Hero import")
+replace_once(catalog,
+'''import org.jetbrains.compose.resources.stringResource
+
+@Composable''',
+'''import org.jetbrains.compose.resources.stringResource
+
+private val CatalogCoverHeroHeight = 430.dp
+
+@Composable''',
+"catalog hero height")
+replace_once(catalog,
+'''    var headerHeightPx by remember { mutableIntStateOf(0) }
+    var observedOfflineState by remember { mutableStateOf(false) }''',
+'''    var headerHeightPx by remember { mutableIntStateOf(0) }
+    var observedOfflineState by remember { mutableStateOf(false) }
+    var hoveredHeroItem by remember(target) { mutableStateOf<MetaPreview?>(null) }''',
+"catalog Hero hover state")
+replace_once(catalog,
+'''        val basePosterWidthDp = catalogPosterBaseWidthDp(posterCardStyle.widthDp)''',
+'''        val basePosterWidthDp = catalogPosterBaseWidthDp(posterCardStyle.widthDp)
+        val headerHeightDp = with(androidx.compose.ui.platform.LocalDensity.current) { headerHeightPx.toDp() }
+        val showDesktopHero = isDesktop && uiState.items.isNotEmpty()''',
+"catalog hero grid layout")
+replace_once(catalog,
+'''                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = pageHorizontalPadding,
+                    top = with(androidx.compose.ui.platform.LocalDensity.current) { headerHeightPx.toDp() } + 12.dp,''',
+'''                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = if (showDesktopHero) CatalogCoverHeroHeight + 18.dp else 0.dp),
+                contentPadding = PaddingValues(
+                    start = pageHorizontalPadding,
+                    top = if (showDesktopHero) 0.dp else headerHeightDp + 12.dp,''',
+"catalog hero above posters")
+replace_once(catalog,
+'''                            HomePosterCard(
+                                item = item,
+                                useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+                                isWatched = isWatched,''',
+'''                            HomePosterCard(
+                                item = item,
+                                useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+                                useHoverPreview = false,
+                                onHoverChanged = { hovering ->
+                                    if (hovering) hoveredHeroItem = item
+                                    else if (hoveredHeroItem?.stableKey() == item.stableKey()) hoveredHeroItem = null
+                                },
+                                isWatched = isWatched,''',
+"catalog poster to large Hero")
+replace_once(catalog,
+'''            CatalogHeader(
+                title = title,
+                subtitle = subtitle,
+                pageHorizontalPadding = pageHorizontalPadding,
+                modifier = Modifier.onSizeChanged { headerHeightPx = it.height },
+                onBack = onBack,
+            )
+''',
+'''            if (showDesktopHero) {
+                CatalogHoverHero(
+                    selectedItem = hoveredHeroItem ?: uiState.items.first(),
+                    isHoverActive = hoveredHeroItem != null,
+                    pageTitle = title,
+                    pageSubtitle = subtitle,
+                    onBack = onBack,
+                    showBack = !LocalUseNativeNavigation.current,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .fillMaxWidth()
+                        .height(CatalogCoverHeroHeight - 12.dp),
+                )
+            } else {
+                CatalogHeader(
+                    title = title,
+                    subtitle = subtitle,
+                    pageHorizontalPadding = pageHorizontalPadding,
+                    modifier = Modifier.onSizeChanged { headerHeightPx = it.height },
+                    onBack = onBack,
+                )
+            }
+''',
+"preserve full-width catalog Hero trailer")
+
 print("V10 official Dev patch applied: native Windows Hero, gradients, official V4 and Watch Party intact")
