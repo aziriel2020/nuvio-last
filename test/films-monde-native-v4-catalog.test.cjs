@@ -61,3 +61,20 @@ test('film detail metadata remains original and drops native duplicate logo',()=
   assert.equal(detail.background,B);
   assert.ok(!Object.hasOwn(detail,'logo'));
 });
+
+test('Films Monde bypasses old original.jpg Sharp relay even with V4 env flag disabled',async()=>{
+  const { relayOriginalImages } = await import('../runtime/original-images.mjs');
+  const env=process.env.NUVIO_V4_NATIVE_ART;
+  try {
+    process.env.NUVIO_V4_NATIVE_ART='0'; // reproduce the Oracle stale configuration
+    const payload={metas:[{id:'tt1234567',poster:P,background:B}]};
+    const request=new Request('https://nuvio.example/movies/catalog/movie/movies-fr-all-all-all.json');
+    const original=new Response(JSON.stringify(payload),{headers:{'content-type':'application/json'}});
+    const response=await relayOriginalImages(request,original);
+    assert.equal(response,original,'no JSON rewrite, no /images/original.jpg conversion');
+    assert.deepEqual(await response.json(),payload);
+  } finally {
+    if(env===undefined) delete process.env.NUVIO_V4_NATIVE_ART;
+    else process.env.NUVIO_V4_NATIVE_ART=env;
+  }
+});
