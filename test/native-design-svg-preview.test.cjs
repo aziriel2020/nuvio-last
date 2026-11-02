@@ -90,6 +90,22 @@ test('Shield SVG enlarges key text and shows confirmed TV season, episode and br
   assert.match(movieSvg,/SORTIE : 01\/01\/2024/);
 });
 
+test('v4 uses bigger text for films and series with correct episode date', () => {
+  const art={firstRelease:'2024-01-01',tmdbScore:7.5,seasonCount:4,genres:['Drame'],latestEpisode:{season:4,episode:5,date:'2026-10-14'}};
+  const bg='data:image/png;base64,AA==';
+  const old=renderSvg({type:'movie',name:'Exemple de film'},art,bg);
+  const film=renderSvg({type:'movie',name:'Exemple de film'},art,bg,null,{large:true});
+  const tv=renderSvg({type:'series',name:'Exemple de série'},art,bg,null,{large:true});
+  assert.ok(old.includes('font-size="60"'));
+  assert.ok(film.includes('font-size="69"'));
+  assert.ok(film.includes('font-size="65"'));
+  assert.ok(tv.includes('font-size="77"'));
+  assert.ok(tv.includes('S04 E05'));
+  assert.ok(tv.includes('14/10/2026'));
+  assert.ok(!film.includes('DERNIER ÉPISODE'));
+  assert.notEqual(old,film);
+});
+
 test('multiple services must not be mislabeled as one platform', async () => {
   const addon = createAddon({
     tmdb: async () => {
@@ -175,7 +191,7 @@ test('old v2 URL retains its original design while v3 uses large-screen typograp
 test('one global vector poster URL pattern renders art for any catalog source ID', async () => {
   const { vectorPosterPattern } = require('../runtime/native-design-meta-addon.cjs');
   assert.equal(vectorPosterPattern('https://example.test'),
-    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3');
+    'https://example.test/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4');
   let lookupCalls = 0;
   const addon = createAddon({
     tmdb: async (route) => {
