@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { Script } from 'node:vm';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { createMirrorProfileUpdate } from './profile-mirror-fields.mjs';
 import { fingerprint,validateHome,validateCollections,parseHome,parseCollections } from './home-manager-logic.mjs';
 import { createHomeManagerApi } from './home-manager-api.mjs';
@@ -70,6 +72,22 @@ test('Collections editor saves only target Home/collections and rejects stale co
   await assert.rejects(()=>manage.save({...auth,expected:initial.hashes,changes:{home:true},
     home,collections}),/changé sur un autre appareil/);
   assert.throws(()=>validateCollections([{id:'x',title:' ',folders:[]}]),/Titre/);
+});
+
+test('mobile and mouse sorting handlers compile, preserve existing save flow',async()=>{
+  const html=await readFile(fileURLToPath(new URL('home-manager.html',import.meta.url)),'utf8');
+  const script=html.match(/<script>([\\s\\S]*?)<\\/script>/)?.[1];
+  assert(script,'missing Home Manager script');
+  new Script(script,{filename:'home-manager-inline.js'});
+  assert.match(html,/touch-action:none/);
+  assert.match(script,/setPointerCapture/);
+  assert.match(script,/pointercancel/);
+  assert.match(script,/pointermove/);
+  assert.match(script,/moveTo\\(list,old/);
+  assert.match(script,/reorderHandle\\(rows,r/);
+  assert.match(script,/reorderHandle\\(state.collections,c/);
+  assert.match(script,/reorderHandle\\(collection.folders,folder/);
+  assert.match(script,/Enregistrer les modifications/);
 });
 
 const port=41000+Math.floor(Math.random()*10000);

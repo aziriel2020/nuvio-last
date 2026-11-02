@@ -20,6 +20,10 @@ button.small{padding:5px 10px;font-size:.85rem}
 .note{border-left:3px solid #cfaa69;padding:8px 12px;background:#272319;color:#e6cfa0;margin:13px 0}
 .tabs{display:flex;gap:8px;margin-top:20px}
 .tabs button[aria-selected=true]{background:#4c6ad8;border-color:#839aff}
+.drag-handle{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;font-size:1rem;font-weight:700;white-space:nowrap;background:#384e86!important;border-color:#7b96d6!important}
+.drag-handle:focus-visible{outline:3px solid #97bbff;outline-offset:2px}
+.sortable-card.dragging{outline:2px solid #8ca7ff;opacity:.73}
+.drop-marker{height:6px;border:0;border-radius:10px;background:#99b3ff;box-shadow:0 0 0 3px rgba(111,151,248,.2);margin:8px 0;pointer-events:none}
 .item{background:#0d1627;border:1px solid #2b3b56;border-radius:12px;padding:13px;margin:9px 0;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
 .identity{color:#8497b4;font-size:.83rem;word-break:break-all}
 .item .left{display:flex;flex-direction:column;gap:8px}
@@ -56,14 +60,14 @@ button.small{padding:5px 10px;font-size:.85rem}
 </div>
 <div id="view-home">
 <h2>2 · Rangées du Home Screen</h2>
-<p>Réordonne les catalogues, masque les rangées inutiles et renomme leurs titres. Les rangées masquées restent disponibles pour réactivation.</p>
+<p><strong>Glisse la poignée ⠿</strong> au doigt, à la souris ou au stylet pour placer chaque rangée où tu veux. Relâche sur la ligne bleue. Les flèches ↑/↓ restent disponibles au clavier. Les rangées masquées peuvent être réactivées.</p>
 <label class="toolbar"><input id="hide-unreleased" type="checkbox" style="width:auto"> Masquer les contenus non encore sortis</label>
 <div class="field" style="max-width:420px;margin-top:14px"><label for="home-filter">Rechercher un catalogue ou une collection</label><input id="home-filter" type="search" placeholder="Titre, addon, identifiant…"></div>
 <div id="home-items"></div>
 </div>
 <div id="view-collections" hidden>
 <h2>3 · Collections</h2>
-<p>Réorganise les collections, modifie leurs titres, leurs dossiers et leurs sources. La configuration de chaque collection est conservée, sauf les champs que tu changes.</p>
+<p>Maintiens ⠿ et fais glisser tes <strong>collections ou dossiers</strong> dans l'ordre voulu. Les titres, images et sources restent intacts pendant le déplacement.</p>
 <div class="row"><div class="field"><label for="new-source">Catalogue de départ (pour une nouvelle collection)</label><select id="new-source"></select></div>
 <button id="new-collection" class="secondary">+ Créer une collection</button></div>
 <div id="collections-items"></div>
@@ -137,10 +141,87 @@ function catalogLabel(x){
  if(x.is_collection){const c=state.collections.find(c=>c.id===x.collection_id);return 'Collection · '+(c?.title||x.collection_id);}
  return [x.addon_id,x.type,x.catalog_id].join(' · ');
 }
-function move(list,index,delta){const target=index+delta;if(target<0||target>=list.length)return;
- [list[index],list[target]]=[list[target],list[index]];
+function moveTo(list,sourceIndex,targetIndex){
+ if(busy || sourceIndex<0 || sourceIndex>=list.length || targetIndex<0 || targetIndex>=list.length || sourceIndex===targetIndex)return;
+ const [entry]=list.splice(sourceIndex,1);list.splice(targetIndex,0,entry);
  if(list===state.home?.items)list.forEach((r,i)=>{r.order=i;});
- renderAll();
+ renderAll();say('Nouvel ordre prêt. Clique sur « Enregistrer les modifications » pour l’appliquer à Nuvio.');
+}
+function move(list,index,delta){moveTo(list,index,index+delta);}
+// Pointer Events operate on a visible handle only, so text inputs and checkboxes
+// are never accidentally dragged. Works with touch, pen and mouse.
+function reorderHandle(list,entry,kind){
+ const handle=btn('⠿ Glisser',()=>{},'secondary');
+ handle.classList.add('drag-handle');
+ handle.title='Maintenir et glisser pour déplacer '+kind;
+ handle.setAttribute('aria-label','Déplacer '+kind+' ; utiliser les flèches pour le clavier');
+ handle.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();
+   moveTo(list,list.indexOf(entry),list.indexOf(entry)+(e.key==='ArrowUp'?-1:1));
+  }
+ });
+ handle.addEventListener('pointerdown',e=>{
+  if(busy||!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0)||list.length<2)return;
+  if(list===state.home?.items && $('home-filter').value.trim()){
+   say('Efface la recherche pour glisser librement les rangées, y compris celles actuellement masquées par le filtre.');
+   return;
+  }
+  const card=handle.closest('.sortable-card'),container=card?.parentElement;
+  if(!card||!container)return;
+  e.preventDefault();
+  const drag={startY:e.clientY,y:e.clientY,active:false,frame:0};
+  const marker=el('div',null,'drop-marker');
+  marker.setAttribute('aria-hidden','true');
+  const candidates=()=>[...container.children].filter(n=>n.classList?.contains('sortable-card')&&n!==card);
+  const position=()=>{
+   if(!drag.active)return;
+   const rows=candidates();
+   const next=rows.find(n=>drag.y < n.getBoundingClientRect().top + n.getBoundingClientRect().height/2);
+   container.insertBefore(marker,next||null);
+  };
+  const scroll=()=>{
+   if(!drag.active)return;
+   const margin=75,limit=window.innerHeight, y=drag.y;
+   if(y<margin)window.scrollBy(0,-Math.ceil((margin-y)/4));
+   else if(y>limit-margin)window.scrollBy(0,Math.ceil((y-(limit-margin))/4));
+   position();drag.frame=requestAnimationFrame(scroll);
+  };
+  const clean=()=>{
+   if(drag.frame)cancelAnimationFrame(drag.frame);
+   card.classList.remove('dragging');marker.remove();
+   handle.removeEventListener('pointermove',onMove);
+   handle.removeEventListener('pointerup',onEnd);
+   handle.removeEventListener('pointercancel',onCancel);
+   try{if(handle.hasPointerCapture(e.pointerId))handle.releasePointerCapture(e.pointerId);}catch{}
+  };
+  function onMove(ev){
+   if(ev.pointerId!==e.pointerId)return;
+   drag.y=ev.clientY;
+   if(!drag.active&&Math.abs(drag.y-drag.startY)>=6){
+    drag.active=true;card.classList.add('dragging');position();
+    drag.frame=requestAnimationFrame(scroll);
+   }
+   if(drag.active){ev.preventDefault();position();}
+  }
+  function onEnd(ev){
+   if(ev.pointerId!==e.pointerId)return;
+   if(!drag.active){clean();return;}
+   position();
+   const siblings=[...container.children];
+   const markIndex=siblings.indexOf(marker);
+   const before=siblings.slice(0,markIndex).filter(n=>n!==card&&n.classList?.contains('sortable-card')).length;
+   const old=list.indexOf(entry);
+   // The visual marker is positioned among all items except the dragged one.
+   clean();
+   moveTo(list,old,Math.min(before,list.length-1));
+  }
+  function onCancel(ev){if(ev.pointerId===e.pointerId)clean();}
+  handle.addEventListener('pointermove',onMove);
+  handle.addEventListener('pointerup',onEnd);
+  handle.addEventListener('pointercancel',onCancel);
+  try{handle.setPointerCapture(e.pointerId);}catch{clean();}
+ });
+ return handle;
 }
 function renderHome(){
  const root=$('home-items');root.replaceChildren();
@@ -151,10 +232,10 @@ function renderHome(){
  rows.forEach((r,index)=>{
   const name=catalogLabel(r);
   if(query&&!([name,r.custom_title].join(' ').toLowerCase().includes(query)))return;shown++;
-  const card=el('div',null,'item'),left=el('div',null,'left'),actions=el('div',null,'actions');
+  const card=el('div',null,'item sortable-card'),left=el('div',null,'left'),actions=el('div',null,'actions');
   left.append(check(name,r.enabled,v=>{r.enabled=v;}),el('div',name,'identity'));
   left.append(field('Titre affiché (vide = titre d’origine)',r.custom_title,v=>{r.custom_title=v;}));
-  actions.append(btn('↑',()=>move(rows,index,-1)),btn('↓',()=>move(rows,index,1)));
+  actions.append(reorderHandle(rows,r,'la rangée'),btn('↑',()=>move(rows,index,-1)),btn('↓',()=>move(rows,index,1)));
   card.append(left,actions);root.append(card);
  });
  if(!shown)root.append(el('p','Aucune rangée correspondante.'));
@@ -178,8 +259,8 @@ function addSource(folder){
  renderCollections();
 }
 function renderFolder(collection,folder,index){
- const box=el('div',null,'sub'),top=el('div',null,'toolbar');
- top.append(el('strong','Dossier '+(index+1)),btn('Supprimer le dossier',()=>{
+ const box=el('div',null,'sub sortable-card'),top=el('div',null,'toolbar');
+ top.append(reorderHandle(collection.folders,folder,'le dossier'),el('strong','Dossier '+(index+1)),btn('↑',()=>move(collection.folders,index,-1)),btn('↓',()=>move(collection.folders,index,1)),btn('Supprimer le dossier',()=>{
   if(!confirm('Supprimer ce dossier et ses sources ?'))return;
   collection.folders.splice(index,1);renderCollections();
  },'warn'));
@@ -211,8 +292,8 @@ function renderCollections(){
  for(const c of catalogs())source.append(new Option(catalogLabel(c),JSON.stringify([c.addon_id,c.type,c.catalog_id])));
  if(!source.options.length)source.append(new Option('Aucun catalogue disponible',''));
  state.collections.forEach((c,i)=>{
-  const box=el('div',null,'collection'),bar=el('div',null,'toolbar');
-  bar.append(el('strong','Collection '+(i+1)),
+  const box=el('div',null,'collection sortable-card'),bar=el('div',null,'toolbar');
+  bar.append(reorderHandle(state.collections,c,'la collection'),el('strong','Collection '+(i+1)),
    btn('↑',()=>move(state.collections,i,-1)),btn('↓',()=>move(state.collections,i,1)),
    btn('Supprimer',()=>{
     if(!confirm('Supprimer définitivement la collection « '+c.title+' » pour ce profil ?'))return;
@@ -228,7 +309,9 @@ function renderCollections(){
                  check('Onglet Tous',c.showAllTab!==false,v=>c.showAllTab=v));
   box.append(setting);
   const title=el('div','Dossiers ('+c.folders.length+')','muted');title.style.marginTop='12px';box.append(title);
-  c.folders.forEach((f,j)=>box.append(renderFolder(c,f,j)));
+  const folderList=el('div',null,'folder-list');
+  c.folders.forEach((f,j)=>folderList.append(renderFolder(c,f,j)));
+  box.append(folderList);
   box.append(btn('+ Ajouter un dossier depuis un catalogue',()=>{
    if(!catalogs().length){alert('Aucun catalogue disponible.');return;}
    const chosen=$('new-source').value||JSON.stringify([catalogs()[0].addon_id,catalogs()[0].type,catalogs()[0].catalog_id]);
