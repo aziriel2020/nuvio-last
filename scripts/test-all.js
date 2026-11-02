@@ -23,6 +23,7 @@ const suites = [
   { name: 'Artwork recovery and persistent cache', cwd: root, args: ['--test', 'test/artwork-runtime.test.mjs'] },
   { name: 'Concurrent Shield artwork request deduplication', cwd: root, args: ['--test', 'test/shield-poster-singleflight.test.mjs'] },
   { name: 'Films Monde poster/cache performance regression', cwd: root, args: ['--test', 'test/films-monde-posters.test.mjs'] },
+  { name: 'Films Monde direct TMDB V4 cards (no server JPEG)', cwd: root, args: ['--test', 'test/films-monde-native-v4-catalog.test.cjs'] },
   { name: 'Nuvio plugin-only Custom Posters France design', cwd: root, args: ['--test', 'test/design-plugin.test.cjs'] },
   { name: 'Native Nuvio Metadata Design addon (no catalogs or rendered images)', cwd: root, args: ['--test', 'test/native-design-meta-addon.test.cjs'] },
   { name: 'Nuvio experimental SVG vector artwork preview', cwd: root, args: ['--test', 'test/native-design-svg-preview.test.cjs'] },
