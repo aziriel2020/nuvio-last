@@ -56,5 +56,15 @@ jobs:
             jq -r '.error // "unexpected response"' "$RUNNER_TEMP/cloner-profiles-check.json" 2>/dev/null >&2 || true
             exit 1
           fi
+          # Check that the visual Home Manager is publicly reachable.
+          manager_code=$(curl -sS -o "$RUNNER_TEMP/home-manager.html" -w '%{http_code}' --max-time 12 "$origin/cloner/manage/")
+          test "$manager_code" = 200
+          grep -q 'Gestionnaire de l’accueil' "$RUNNER_TEMP/home-manager.html"
+          api_code=$(curl -sS -o "$RUNNER_TEMP/home-manager-api.json" -w '%{http_code}' --max-time 12 \
+            -X POST -H 'Content-Type: application/json' -H 'X-Requested-With: NuvioMirror' \
+            -H "Origin: $origin" -d '{"account":{"email":"invalid","password":""},"profileId":1}' \
+            "$origin/cloner/api/manage/load")
+          test "$api_code" = 400
+          jq -e '.error == "Identifiants Nuvio invalides"' "$RUNNER_TEMP/home-manager-api.json" >/dev/null
           curl -fsS "$origin/_oracle/health" | jq -e '.ok == true' >/dev/null
           curl -fsS "$origin/fr/manifest.json" >/dev/null
