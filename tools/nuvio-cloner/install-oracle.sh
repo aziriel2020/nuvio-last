@@ -49,8 +49,18 @@ fi
 systemctl daemon-reload
 systemctl enable --now nuvio-cloner.service
 systemctl is-active --quiet nuvio-cloner.service
-status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://127.0.0.1:3001/cloner/health || true)
-[[ "$status" == "200" ]] || { echo "Cloner local health check failed: expected 200, got $status" >&2;exit 1; }
+status=000
+for attempt in {1..20}; do
+ status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:3001/cloner/health || true)
+ [[ "$status" == "200" ]] && break
+ sleep 1
+done
+if [[ "$status" != "200" ]]; then
+ echo "Cloner local health check failed: expected 200, got $status" >&2
+ systemctl --no-pager status nuvio-cloner.service 2>&1 | tail -30 || true
+ journalctl -u nuvio-cloner.service -n 35 --no-pager --output=cat 2>&1 || true
+ exit 1
+fi
 caddy validate --config /etc/caddy/Caddyfile
 systemctl reload caddy
 systemctl is-active --quiet nuvio.service
