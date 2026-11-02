@@ -23,14 +23,14 @@ const port=41000+Math.floor(Math.random()*10000);
 const base='http://127.0.0.1:'+port;
 test('Nuvio login only, isolated clone route, CSRF protection',async()=>{
   const child=spawn(process.execPath,[fileURLToPath(new URL('server-nuvio-login.mjs',import.meta.url))],{
-    env:{...process.env,CLONER_PORT:String(port),NUVIO_SUPABASE_ANON_KEY:'public-test-anon'},
+    env:{...process.env,CLONER_PORT:String(port),NUVIO_SUPABASE_ANON_KEY:'public-test-anon',CLONER_REVISION:'test-profile-preserve'},
     stdio:'ignore'
   });
   try{
     let ready=false;
     for(let i=0;i<40;i++){
       try{ const r=await fetch(base+'/cloner/health');
-        if(r.status===200){ready=true;break;}
+        if(r.status===200 && (await r.json()).revision==='test-profile-preserve'){ready=true;break;}
       }catch{}
       await delay(125);
     }

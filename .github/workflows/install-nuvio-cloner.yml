@@ -46,7 +46,7 @@ jobs:
           # without using or logging any Nuvio credentials.
           root_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "$origin/cloner")
           test "$root_code" = 200 || test "$root_code" = 301 || test "$root_code" = 308
-          curl -fsS --max-time 12 "$origin/cloner/health" | jq -e '.ok == true and .app == "nuvio-mirror"' >/dev/null
+          curl -fsS --max-time 12 "$origin/cloner/health" | jq -e --arg sha "$GITHUB_SHA" '.ok == true and .app == "nuvio-mirror" and .revision == $sha' >/dev/null
           api_code=$(curl -sS -o "$RUNNER_TEMP/cloner-profiles-check.json" -w '%{http_code}' --max-time 15 \
             -X POST -H 'Content-Type: application/json' -H 'X-Requested-With: NuvioMirror' \
             -H "Origin: $origin" -d '{"account":{"email":"invalid","password":""}}' \

@@ -7,6 +7,7 @@ import { createMirrorProfileUpdate } from './profile-mirror-fields.mjs';
 const PREFIX = '/cloner';
 const PORT = Number(process.env.CLONER_PORT || '3001');
 const ANON_KEY = process.env.NUVIO_SUPABASE_ANON_KEY || '';
+const DEPLOY_REVISION = process.env.CLONER_REVISION || 'unknown';
 const API = 'https://api.nuvio.tv';
 const PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.html');
 if (!ANON_KEY) throw new Error('Missing NUVIO_SUPABASE_ANON_KEY');
@@ -227,7 +228,7 @@ async function route(req,res) {
       'Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"});
     return res.end(await readFile(PAGE));
   }
-  if(req.method==='GET' && req.url===PREFIX+'/health') return json(res,200,{ok:true,app:'nuvio-mirror'});
+  if(req.method==='GET' && req.url===PREFIX+'/health') return json(res,200,{ok:true,app:'nuvio-mirror',revision:DEPLOY_REVISION});
   if(req.method!=='POST'|| !req.url?.startsWith(PREFIX+'/api/'))return json(res,404,{error:'Not found'});
   const origin=req.headers.origin;
   const host=req.headers['x-forwarded-host']||req.headers.host;

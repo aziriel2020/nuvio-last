@@ -29,6 +29,11 @@ else
  git -C "$BASE/source" checkout -B "$BRANCH" FETCH_HEAD
 fi
 chown -R root:root "$BASE/source";chmod -R go-w "$BASE/source"
+# Record the exact source revision loaded by the running process, not just the UI file.
+release_sha="$(git -C "$BASE/source" rev-parse HEAD)"
+printf 'CLONER_REVISION=%s\n' "$release_sha" > /etc/nuvio-cloner/deploy.env
+chown root:nuvio-cloner /etc/nuvio-cloner/deploy.env
+chmod 0640 /etc/nuvio-cloner/deploy.env
 node --check "$BASE/source/tools/nuvio-cloner/server-nuvio-login.mjs"
 node --test "$BASE/source/tools/nuvio-cloner/test.mjs"
 install -m 0644 "$BASE/source/tools/nuvio-cloner/nuvio-cloner.service" /etc/systemd/system/nuvio-cloner.service
@@ -47,7 +52,10 @@ PY
  mv /etc/caddy/Caddyfile.cloner.new /etc/caddy/Caddyfile
 fi
 systemctl daemon-reload
-systemctl enable --now nuvio-cloner.service
+systemctl enable nuvio-cloner.service
+# enable --now DOES NOT restart an already running Node process after a git update.
+# Restart is essential: the previous process had cached code that still copied names/avatars.
+systemctl restart nuvio-cloner.service
 systemctl is-active --quiet nuvio-cloner.service
 status=000
 for attempt in {1..20}; do
