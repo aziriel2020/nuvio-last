@@ -38,6 +38,9 @@ test('systemd is limited, Oracle-only and separated from catalog sync and APK',(
  assert.match(service,/MemoryMax=192M/);
  assert.match(service,/scripts\/warm-films-monde-artwork\.mjs/);
  assert.match(timer,/OnUnitActiveSec=12min/);
- assert.match(updater,/systemctl start nuvio-movies-warm.timer/);
+ assert.match(updater,/systemctl stop nuvio-movies-warm.timer/);
+ assert.match(updater,/systemctl disable nuvio-movies-warm.timer/);
+ assert.doesNotMatch(updater,/systemctl enable nuvio-movies-warm.timer/);
+ assert.doesNotMatch(updater,/systemctl start nuvio-movies-warm.timer/);
  assert.doesNotMatch(service,/vercel|pages\.dev|worker|npm run build/i);
 });

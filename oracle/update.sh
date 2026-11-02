@@ -126,8 +126,8 @@ install -d -m 0755 -o nuvio -g nuvio /var/lib/nuvio-movies
 install -m 0644 "$TARGET/oracle/nuvio.service" /etc/systemd/system/nuvio.service
 install -m 0644 "$TARGET/oracle/nuvio-series-sync.service" /etc/systemd/system/nuvio-series-sync.service
 install -m 0644 "$TARGET/oracle/nuvio-movies-sync.service" /etc/systemd/system/nuvio-movies-sync.service
-install -m 0644 "$TARGET/oracle/nuvio-movies-warm.service" /etc/systemd/system/nuvio-movies-warm.service
-install -m 0644 "$TARGET/oracle/nuvio-movies-warm.timer" /etc/systemd/system/nuvio-movies-warm.timer
+# The legacy JPEG prewarmer is intentionally retired in V4-only mode.
+# Keep old unit files in previous release snapshots for an emergency rollback.
 install -d -m 0755 /etc/nuvio
 printf 'NUVIO_GIT_SHA=%s\n' "$SHA" > /etc/nuvio/release.env.new
 chmod 0644 /etc/nuvio/release.env.new
@@ -152,10 +152,10 @@ systemctl restart nuvio-series-sync.service
 systemctl enable nuvio-movies-sync.service
 systemctl restart nuvio-movies-sync.service
 systemctl restart nuvio
-# Optional background warmer runs after Oracle is healthy; never blocks boot
-# or restarts the primary movies/series indexers.
-systemctl enable nuvio-movies-warm.timer
-systemctl start nuvio-movies-warm.timer
+# Stop costly JPEG prewarming on upgrade as well as on fresh installs.
+# Catalog/index synchronization services are deliberately left running.
+systemctl stop nuvio-movies-warm.timer nuvio-movies-warm.service 2>/dev/null || true
+systemctl disable nuvio-movies-warm.timer 2>/dev/null || true
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
 for _ in {1..30}; do

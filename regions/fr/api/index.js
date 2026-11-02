@@ -2208,7 +2208,7 @@ function decorateCatalogMetas(origin, metas, catalog, timeZone) {
     const widePoster = getConfig().calendarCards && wideSource
       ? (calendarCardUrl(origin, meta, catalog, timeZone, 'landscape', wideSource) || wideSource)
       : (meta?.landscapePoster || wideSource);
-    const desktopPoster = homeVisible
+    const desktopPoster = homeVisible && getConfig().calendarCards
       ? desktopContentCardUrl(origin, meta, catalog, wideSource)
       : null;
 
