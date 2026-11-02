@@ -37,6 +37,18 @@ function earliestMovieRelease(data) {
   return dates.filter(Boolean).sort()[0] || null;
 }
 
+function latestAiredEpisode(data, today = new Date().toISOString().slice(0, 10)) {
+  // TMDB exposes the last verified airing independently of the show's premiere.
+  // Never invent an episode or use a future scheduled airing as already released.
+  const episode = data?.last_episode_to_air;
+  const season = Number(episode?.season_number);
+  const number = Number(episode?.episode_number);
+  const date = validDate(episode?.air_date);
+  if (!Number.isInteger(season) || season < 1 ||
+      !Number.isInteger(number) || number < 1 || !date || date > today) return null;
+  return { season, episode: number, date };
+}
+
 function streamingPlatforms(data) {
   const fr = data?.['watch/providers']?.results?.FR;
   const offers = [...(fr?.flatrate || []), ...(fr?.free || []), ...(fr?.ads || [])];
@@ -195,7 +207,7 @@ function respond(res, status, payload, ttl = 0) {
 function vectorPosterPattern(origin) {
   // Nuvio resolves these native placeholders for every catalog item,
   // regardless of which addon supplied that catalog.
-  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v2';
+  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3';
 }
 
 function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } = {}) {
@@ -253,6 +265,7 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
           firstRelease: isMovie ? earliestMovieRelease(data) : validDate(data.first_air_date),
           tmdbScore: data.vote_average,
           seasonCount: isMovie ? 0 : data.number_of_seasons,
+          latestEpisode: isMovie ? null : latestAiredEpisode(data),
         };
         const meta = {
           id: request.id,
@@ -314,5 +327,5 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
 
 module.exports = {
   createAddon, manifest, buildMeta, fetchDetails, episodesForSeries, parseId,
-  validDate, earliestMovieRelease, streamingPlatforms, tmdbImage, vectorPosterPattern, VERSION, ADDON_ID
+  validDate, earliestMovieRelease, latestAiredEpisode, streamingPlatforms, tmdbImage, vectorPosterPattern, VERSION, ADDON_ID
 };
