@@ -63,21 +63,8 @@ run_nuvio "node scripts/verify-series-covers.mjs"
 run_nuvio "node scripts/verify-movie-covers.mjs"
 run_nuvio "node scripts/test-movies-runtime.mjs"
 
-# Generated collection covers are release assets consumed by the Oracle integration
-# test itself. Reuse the previous set only as a warm cache; the revisioned generator
-# invalidates and fully rebuilds it whenever the art-direction revision changes.
-if [[ -n "$PREVIOUS" && -d "$PREVIOUS/assets/generated-covers" && ! -d "$TARGET/assets/generated-covers" ]]; then
-  cp -a "$PREVIOUS/assets/generated-covers" "$TARGET/assets/generated-covers"
-  chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
-fi
-
-echo "Generating/validating Nuvio cinematic collection covers"
-(
-  cd "$TARGET"
-  npm run generate:covers
-)
-chown -R nuvio:nuvio "$TARGET/assets/generated-covers"
-
+# V4 collection covers are served from native SVG and approved static sources.
+# No prebuilt JPEG cover generation, conversion, or copying into this release.
 # The Oracle integration test deliberately builds a local 127.0.0.1 fixture.
 # Run it AFTER cover generation so the fixture validates the exact release artwork,
 # but BEFORE the final public-origin build so localhost URLs can never be switched.
