@@ -210,7 +210,23 @@ function vectorPosterPattern(origin) {
   return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details';
 }
 
-function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } = {}) {
+function indexedMovieTmdbId(id) {
+  // Films Mondiaux already indexes IMDb <-> TMDB in local SQLite. Avoid a
+  // network /find/<imdbId> before EVERY cold movie artwork render.
+  if (!/^tt\d{5,12}$/.test(id)) return null;
+  try {
+    const store = require('../regions/movies/index.cjs')._internals.reader();
+    const row = store?.row(id);
+    if (!row) return null;
+    const source = store.sources(row.id).find(s =>
+      s.source === 'tmdb' && s.imdb_id === id && Number.isSafeInteger(Number(s.source_id)));
+    const tmdbId = Number(source?.source_id);
+    return tmdbId > 0 ? tmdbId : null;
+  } catch { return null; } // No local index: use the existing TMDB /find path.
+}
+
+function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch,
+  movieIdResolver = indexedMovieTmdbId } = {}) {
   const load = tmdb || ((path, params) => require('../regions/fr/api/index.js')._internals.tmdbFetch(path, params));
   const cache = new Map();
   // Experimental SVG preview is isolated from the normal metadata/poster paths.
@@ -232,7 +248,13 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
       return cached.promise;
     }
     if (cached) artworkDetails.delete(key);
-    const promise = Promise.resolve().then(() => fetchDetails(request, load));
+    const promise = Promise.resolve().then(() => {
+      const indexedId = request.type === 'movie' && /^tt\d{5,12}$/.test(request.id)
+        ? movieIdResolver(request.id) : null;
+      const lookup = Number.isSafeInteger(indexedId) && indexedId > 0
+        ? { ...request, id: 'tmdb:movie:' + indexedId } : request;
+      return fetchDetails(lookup, load);
+    });
     const entry = { promise, until: now() + ARTWORK_DETAILS_TTL };
     artworkDetails.set(key, entry);
     promise.catch(() => { if (artworkDetails.get(key) === entry) artworkDetails.delete(key); });
@@ -355,6 +377,6 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
 }
 
 module.exports = {
-  createAddon, manifest, buildMeta, fetchDetails, episodesForSeries, parseId,
+  createAddon, manifest, buildMeta, fetchDetails, indexedMovieTmdbId, episodesForSeries, parseId,
   validDate, earliestMovieRelease, latestAiredEpisode, streamingPlatforms, tmdbImage, vectorPosterPattern, VERSION, ADDON_ID
 };
