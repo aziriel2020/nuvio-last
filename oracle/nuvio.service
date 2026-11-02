@@ -13,6 +13,9 @@ Environment=PORT=3000
 Environment=HOST=127.0.0.1
 Environment=NUVIO_CACHE_DIR=/var/cache/nuvio
 Environment=NUVIO_CACHE_MAX_ENTRIES=24576
+# V4 Custom Posters consumes original TMDB artwork; disable legacy per-catalog
+# JPEG/SVG conversions in the production France catalog feed.
+Environment=CALENDAR_CARDS=false
 EnvironmentFile=/etc/nuvio/nuvio.env
 EnvironmentFile=-/etc/nuvio/release.env
 ExecStart=/usr/bin/node /opt/nuvio/current/oracle/server.mjs
