@@ -11,7 +11,7 @@
 For an opt-in test profile on Nuvio, set Custom Posters' URL pattern to:
 
 ```text
-https://YOUR-PUBLIC-ORIGIN/design-meta/art/{type}/{id}/{shape}.svg
+https://141-145-215-202.nip.io/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v2
 ```
 
 Enable Custom Posters for **Catalogs/Home** and enable **landscape posters** in Nuvio's layout options. Keep the existing addons as they are; the native resolver requests our artwork per media identifier. No APK fork, no edits to the catalogs, and no generated JPEG artifacts are involved.
@@ -28,7 +28,10 @@ Non-landscape shapes return HTTP 404 for native artwork fallback instead of crop
 - Fanart.tv and TVDB are **not integrated yet**; this prototype currently downloads artwork via TMDB.
 - Nuvio determines card aspect ratio; this engine provides artwork, not UI layout code.
 - This first vector engine may download and base64-embed original TMDB image bytes into SVG; it does not create or save JPEGs. Server cache is bounded (32 entries/48 MiB).
+- Oracle public hostname comes from the production deployment workflow, but the **new route is not live there while this branch remains unmerged**. Copying the pattern today cannot activate the feature.
 - No production Oracle or NVIDIA Shield rollout is implied. Development branch and PR remain isolated.
+- Oracle runtime uses `oracle/server.mjs` → `runtime/index.mjs` → `runtime/router.mjs` → `api/index.js`; the integration suite tests that full path with no TMDB credentials.
+- The dynamic SVG route has a 900-second Oracle edge/disk cache, with a revisioned URL. A changed design requires changing the `v` value.
 - An identical film can appear in several catalogs: neither title ID nor TMDB watch-provider availability reliably identifies the catalog's specific brand. Provider badges are omitted when ambiguous.
 
 ## Verification
