@@ -84,8 +84,10 @@ try {
     const meta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
     assert.equal(meta.width, 1600); assert.equal(meta.height, 900);
   }
-  const fallback = await get('/movies/content-card.jpg?title=Film%20sans%20photo&label=VOD');
-  assert.equal((await sharp(Buffer.from(await fallback.arrayBuffer())).metadata()).width, 1600);
+  // Films Monde no longer exposes an image-generating JPEG fallback endpoint.
+  const legacyCard = await get('/movies/content-card.jpg?title=Film%20sans%20photo&label=VOD');
+  assert.equal(legacyCard.status, 404, 'Film thumbnails must never use an Oracle JPEG renderer');
+  await legacyCard.body?.cancel();
   const status = await (await get('/movies/status.json')).json(); assert.equal(status.eligible, 204); assert(status.genreArtwork.ready);
   const replay = { results: { FR: { free: [{provider_id:1967,provider_name:'Molotov TV'}] } } };
   store.upsert(fixture(2001,{title:'Cleanup replay fiction',release_dates:{results:[]},'watch/providers':replay}));
