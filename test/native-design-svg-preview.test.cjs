@@ -124,6 +124,7 @@ test('an optional installable vector manifest produces SVG poster URLs, while na
   assert.equal(vectorMeta.posterShape,'landscape');
   assert.equal(vectorMeta.poster,'https://example.test/design-meta/preview/movie/tmdb%3Amovie%3A456.svg');
   assert.equal(vectorMeta.landscapePoster, vectorMeta.poster);
+  assert.equal(vectorMeta.background, vectorMeta.poster, 'Nuvio metadata enrichment reads background, not poster');
   const native = response();
   await addon.handle({url:'/design-meta/meta/movie/tmdb%3Amovie%3A456.json'}, native,'https://example.test');
   const nativeMeta = JSON.parse(native.body).meta;
