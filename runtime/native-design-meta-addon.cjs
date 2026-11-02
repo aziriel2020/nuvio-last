@@ -207,7 +207,7 @@ function respond(res, status, payload, ttl = 0) {
 function vectorPosterPattern(origin) {
   // Nuvio resolves these native placeholders for every catalog item,
   // regardless of which addon supplied that catalog.
-  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4';
+  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details';
 }
 
 function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } = {}) {
@@ -273,9 +273,12 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch } =
           name: safeString(isMovie ? data.title || data.original_title : data.name || data.original_name, 200)
         };
         if (!meta.name) return respond(res, 404, { error: 'No title' });
+        const artworkProfile = url.searchParams.get('v');
+        const filmDetails = artworkProfile === 'oracle-vector-v4-film-details';
         const svg = await svgService.make(meta, artwork, {
-          legacy: url.searchParams.get('v') === 'oracle-vector-v2',
-          large: url.searchParams.get('v') === 'oracle-vector-v4'
+          legacy: artworkProfile === 'oracle-vector-v2',
+          large: artworkProfile === 'oracle-vector-v4' || filmDetails,
+          filmDetails
         });
         res.statusCode = 200;
         res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
