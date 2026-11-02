@@ -23,14 +23,14 @@ function annualYearPage(store, descriptor, now, skip, search, size = WORLD_PAGE_
   if (cached && Date.now()-cached.storedAt < 60000) highlighted=cached.metas;
   else {
     highlighted=store.query({...descriptor,now,search,curated:true,skip:0,
-      limit:size,monthSample:2});
+      limit:size,monthSample:2,cardOnly:true});
     annualPreviewCache.set(key,{storedAt:Date.now(),metas:highlighted});
     while(annualPreviewCache.size>180) annualPreviewCache.delete(annualPreviewCache.keys().next().value);
   }
   const ids=highlighted.map(m=>m._sourceId);
   const featured=highlighted.map(({_sourceId,...m})=>m);
   const request=(offset,count)=>count>0 ? store.query({...descriptor,now,search,curated:true,
-    skip:offset,limit:count,excludeIds:ids}) : [];
+    skip:offset,limit:count,excludeIds:ids,cardOnly:true}) : [];
   // Supplement sparse months with additional films. In either case the first
   // 24 poster slots span as many months as the source index actually contains.
   const supplement=request(0,size-featured.length);
@@ -117,7 +117,7 @@ function pagedMovieCatalog(store, descriptor, now, skip, search, pageSize = WORL
     .slice(0, pageSize);
   const query = (offset) => descriptor.period.startsWith('annual-')
     ? annualYearPage(store,descriptor,now,offset,search,pageSize)
-    : store.query({ ...descriptor,skip:offset,search,now,curated:true,limit:pageSize });
+    : store.query({ ...descriptor,skip:offset,search,now,curated:true,limit:pageSize,cardOnly:true });
   if (skip === 0) {
     return verifiedWorldCatalogMetas(store, descriptor, now, 0, search, query(0))
       .slice(0, pageSize);
