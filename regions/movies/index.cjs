@@ -246,7 +246,7 @@ function buildManifest(origin, now = new Date()) {
         extra: [{ name: 'skip', isRequired: false }, { name: 'search', isRequired: false }]
       })))),
     logo: new URL('../fr/logo.svg', `${origin}/`).href,
-    background: `${origin}/backdrop.jpg?v=${art.REVISION}`, behaviorHints: { configurable: false, configurationRequired: false }
+    background: `${origin}/artwork/genre/all.webp?v=${art.REVISION}`, behaviorHints: { configurable: false, configurationRequired: false }
   };
 }
 function buildCollections(origin, now = new Date(), mode = 'shield') {
@@ -254,7 +254,7 @@ function buildCollections(origin, now = new Date(), mode = 'shield') {
   const westernDates = periods(now, WESTERN_GENRE).filter(({ key }) => key !== 'all');
   return withHeroTitles(VIEWS.map((view) => ({
     id: `movies-world-${view.id}`, title: `🌍 ${view.name}`, pinToTop: true, focusGlowEnabled: true,
-    backdropImageUrl: `${origin}/backdrop.jpg?v=${art.REVISION}`, viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
+    backdropImageUrl: `${origin}/artwork/genre/all.webp?v=${art.REVISION}`, viewMode: 'FOLLOW_LAYOUT', showAllTab: false,
     folders: VISIBLE_GENRES.map((genre) => {
       const image = `${origin}/artwork/genre/${genre.id}.webp?v=${art.REVISION}`;
       const backdrop = `${origin}/artwork/backdrop/${genre.id}.jpg?v=${art.REVISION}`;
