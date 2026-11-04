@@ -1,0 +1,86 @@
+name: Build Shield Global France Design (all collections)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'builder/france-overlay/**'
+      - '.github/workflows/build-shield-france-overlay.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  shield-native-theme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin newest verified upstream dev (1 November 2026)
+        run: |
+          git clone --filter=blob:none https://github.com/NuvioMedia/NuvioTV.git NuvioTV
+          git -C NuvioTV checkout --detach 2d4748cc0ed8743443cd6be4681cb7ac6772fac3
+          git -C NuvioTV lfs pull || true
+
+      - name: Apply user-designed France overlay globally to isolated APK
+        run: |
+          python3 builder/france-overlay/apply.py NuvioTV
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("NuvioTV/app/src/main/java/com/nuvio/tv")
+          component=(root/"ui/components/FranceCalendarCardOverlay.kt").read_text()
+          assert "Color(0xC638BDF8)" in component, "original blue-cyan divider"
+          assert "Color(0xC5062B5C)" in component, "France navy-blue palette not preserved"
+          assert 'text = item.name' in component
+          assert "FranceOverlayArtwork" in component
+          assert "fun shouldPaint(" in component, "must detect already rendered images"
+          assert "FILMS MONDE" in component and "showSecondaryProvider" in component
+          assert "val overlayTop = height * if (landscape) 0.61f else 0.65f" in component
+          screen=(root/"ui/screens/settings/LayoutSettingsScreen.kt").read_text()
+          assert "Design France — toutes les collections" in screen
+          for path in ["ui/components/GridContentCard.kt",
+                       "ui/components/ContentCard.kt",
+                       "ui/screens/home/ModernHomeRows.kt"]:
+              code=(root/path).read_text()
+              assert "FranceCalendarCardOverlay(" in code, path
+              assert "FranceOverlayArtwork.image(" in code, path
+              assert "FranceOverlayArtwork.shouldPaint(" in code, "do not double-paint baked images: "+path
+          gradle=Path("NuvioTV/app/build.gradle.kts").read_text()
+          assert 'applicationIdSuffix = ".franceoverlay"' in gradle
+          print("All layouts, preserved original France design, opt-in toggle and safe app ID OK")
+          PY
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Configure official runtime without personal credentials
+        working-directory: NuvioTV
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          req=Request("https://api.nuvio.tv/.well-known/nuvio",headers={"User-Agent":"NuvioTV-Global-France-Overlay"})
+          with urlopen(req,timeout=25) as response: data=json.load(response)
+          url=str(data.get("backend_url","")).rstrip("/")
+          key=str(data.get("publishable_key","")).strip()
+          if data.get("service")!="nuvio" or url!="https://api.nuvio.tv" or not key:
+              raise SystemExit("Unexpected Nuvio runtime discovery; refusing to build")
+          Path("local.properties").write_text("NUVIO_SUPABASE_URL="+url+"\nNUVIO_SUPABASE_ANON_KEY="+key+"\n")
+          print("Official public runtime configured")
+          PY
+      - name: Build isolated arm64-compatible full APK
+        working-directory: NuvioTV
+        run: ./gradlew :app:assembleFullDebug --no-daemon --stacktrace
+      - name: Check APK
+        run: |
+          find NuvioTV/app/build/outputs/apk/full/debug -type f -name '*.apk' -print
+          test -n "$(find NuvioTV/app/build/outputs/apk/full/debug -type f -name '*.apk' -print -quit)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-shield-global-france-overlay-all-collections-apk
+          path: NuvioTV/app/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
