@@ -6,6 +6,7 @@ on:
       - feat/nuvio-desktop-v10-official-watchparty-v4-hero
     paths:
       - builder/apply_nuvio_desktop_v10_official.py
+      - builder/apply_nuvio_desktop_v10_recovery.py
       - .github/workflows/build-nuvio-desktop-v10-official.yml
   workflow_dispatch:
 
@@ -36,6 +37,8 @@ jobs:
         run: |
           python -m py_compile builder/apply_nuvio_desktop_v10_official.py
           python builder/apply_nuvio_desktop_v10_official.py NuvioDesktop
+          python -m py_compile builder/apply_nuvio_desktop_v10_recovery.py
+          python builder/apply_nuvio_desktop_v10_recovery.py NuvioDesktop
 
       - name: Fetch official Windows native dependencies
         working-directory: NuvioDesktop
@@ -107,7 +110,7 @@ jobs:
             "player_party":["PartyRepository","partyBlocksControl"],
             "cover":["item.landscapePoster","alwaysShowLandscapeClearlogo","item.rawPosterUrl"],
             "win_hero":["NativePlayerController","heroTrailerControlsPageUrl","latestOnReady.value()"],
-            "native_fade":["heroTrailerMode","format=rgb24","pow(clip(X/(W*0.45),0,1),0.95)"],
+            "native_fade":["heroTrailerMode","target-colorspace-hint"],
             "overlay":["hero-player-ui-v10","linear-gradient(90deg","linear-gradient(180deg"]
           }
           for name,path in files.items():
@@ -122,26 +125,30 @@ jobs:
           for label,content,tokens in [
             ("folder Hero",folder,["DesktopFolderHeroHeight", "CatalogHoverHero(", "FolderViewMode.TABBED_GRID", "FolderViewMode.FOLLOW_LAYOUT","onPosterHoverChanged"]),
             ("catalog Hero",catalog,["CatalogHoverHero(","isHoverActive = true"]),
-            ("V4 profile migration",storage,["oracle_design_v4_seeded_windows_20261102", "CustomPosterScreen.ALL", "design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details"]),
+            ("V4 profile migration",storage,["oracle_vector_v3_recovery_windows_20261104", "CustomPosterScreen.ALL", "design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3"]),
             ("V4 card priority",cover,["approvedV4Artwork", "approvedV4Artwork || !posterCardStyle.alwaysShowLandscapeClearlogo", "effectiveLandscapePoster ?: item.banner ?: item.poster"]),
             ("V4 folder row",row,["onPosterHoverChanged = onPosterHoverChanged", "useHoverPreview = onPosterHoverChanged == null"])
           ]:
             for token in tokens:
               if token not in content: raise SystemExit(f"Missing {label} runtime contract: {token}")
-          print("V10.3 Hero + actual V4 Windows source contracts passed")
+          hero=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
+          if "selectedItem.landscapePoster?.takeIf { it.isNotBlank() }" not in hero: raise SystemExit("Hero ignores user Custom Posters")
+          if "requiredSize(2.dp)" in files["win_hero"].read_text(encoding="utf-8"): raise SystemExit("Native Hero size deadlock remains")
+          if "format=rgb24,geq=" in files["native_fade"].read_text(encoding="utf-8"): raise SystemExit("Costly per-pixel GEQ filter remains")
+          print("V10 V3 custom artwork + native trailer startup contracts passed")
           '@ | python -
 
       - name: Compile official Desktop Kotlin with our Windows Hero
         working-directory: NuvioDesktop
         shell: pwsh
         run: |
-          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.36" "-Pnuvio.desktop.versionCode=36" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.37" "-Pnuvio.desktop.versionCode=37" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
 
       - name: Package Windows MSI
         working-directory: NuvioDesktop
         shell: pwsh
         run: |
-          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.36" "-Pnuvio.desktop.versionCode=36" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.37" "-Pnuvio.desktop.versionCode=37" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
 
       - name: Collect and install MSI
         shell: pwsh
@@ -157,10 +164,10 @@ jobs:
           $record = $query.Fetch()
           $version = if ($record) { $record.StringData(1) } else { "" }
           $query.Close()
-          if ($version -ne "1.1.36") { throw "MSI ProductVersion is $version; expected 1.1.36 for real Windows upgrade" }
+          if ($version -ne "1.1.37") { throw "MSI ProductVersion is $version; expected 1.1.37 for real Windows upgrade" }
           Write-Host "Verified MSI ProductVersion=$version"
-          Copy-Item $msi.FullName "NuvioDesktop-V10-Official-WatchParty-Hero-V4.msi"
-          $path = (Resolve-Path "NuvioDesktop-V10-Official-WatchParty-Hero-V4.msi").Path
+          Copy-Item $msi.FullName "NuvioDesktop-V10-Official-WatchParty-Hero-V3-Trailer-Fix.msi"
+          $path = (Resolve-Path "NuvioDesktop-V10-Official-WatchParty-Hero-V3-Trailer-Fix.msi").Path
           $quotedPath = [char]34 + $path + [char]34
           $arguments = "/i " + $quotedPath + " /qn /norestart"
           $proc = Start-Process msiexec.exe -ArgumentList $arguments -PassThru -Wait
@@ -169,6 +176,6 @@ jobs:
       - name: Upload MSI only if compilation and installer succeed
         uses: actions/upload-artifact@v4
         with:
-          name: nuvio-desktop-v10-official-watchparty-hero-v4-msi
-          path: NuvioDesktop-V10-Official-WatchParty-Hero-V4.msi
+          name: nuvio-desktop-v10-official-watchparty-hero-v3-trailer-fix-msi
+          path: NuvioDesktop-V10-Official-WatchParty-Hero-V3-Trailer-Fix.msi
           retention-days: 14
