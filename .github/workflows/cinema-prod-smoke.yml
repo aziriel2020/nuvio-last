@@ -1,0 +1,72 @@
+name: Cinema Production Smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cinema-prod-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Oracle manifest and cinema catalogs
+        shell: bash
+        run: |
+          set -uo pipefail
+          BASE="https://141-145-215-202.nip.io"
+          echo "===== Oracle health ====="
+          curl -k -sS -L --connect-timeout 8 --max-time 15 "$BASE/_oracle/health" || true
+          echo
+          for URL in             "$BASE/fr/manifest.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-nowplaying.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-today.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-thisweek.json?probe=v8"             "$BASE/fr/catalog/movie/cinema-torrentio-thismonth.json?probe=v8"             "$BASE/nuvio-collections-shield.json?probe=v8"             "$BASE/nuvio-collections-desktop.json?probe=v8"
+          do
+            echo "===== $URL ====="
+            OUT="$(mktemp)"
+            HDR="$(mktemp)"
+            CODE="$(curl -k -sS -L --connect-timeout 8 --max-time 25 -D "$HDR" -o "$OUT" -w '%{http_code}' "$URL" || true)"
+            echo "HTTP=$CODE"
+            echo "--- headers ---"
+            cat "$HDR" || true
+            echo "--- body first 2000 chars ---"
+            head -c 2000 "$OUT" || true
+            echo
+            if jq -e . "$OUT" >/dev/null 2>&1; then
+              echo "json_ok=1"
+              echo -n "version="
+              jq -r '.version // empty' "$OUT"
+              echo -n "metas_count="
+              jq -r 'if (.metas|type)=="array" then (.metas|length) else "n/a" end' "$OUT"
+              echo -n "first_meta="
+              jq -c '.metas[0] // empty' "$OUT" | head -c 1200
+              echo
+              echo -n "cinema_collection="
+              jq -c 'if type=="array" then ([.[] | select(.id=="cinema-now-torrentio")][0] // null | {id,title,folders:[.folders[]? | {id,title,catalogId:(.sources[0].catalogId // null)}]}) else null end' "$OUT" | head -c 3000
+              echo
+            else
+              echo "json_ok=0"
+            fi
+            rm -f "$OUT" "$HDR"
+          done
+
+          echo "===== Torrentio direct probes ====="
+          for ID in tt1375666 tt15398776 tt15239678
+          do
+            URL="https://torrentio.strem.fun/stream/movie/$ID.json"
+            OUT="$(mktemp)"
+            CODE="$(curl -sS -L --connect-timeout 8 --max-time 15 -o "$OUT" -w '%{http_code}' "$URL" || true)"
+            echo "torrentio id=$ID http=$CODE bytes=$(wc -c < "$OUT")"
+            if jq -e . "$OUT" >/dev/null 2>&1; then
+              echo -n "streams_count="
+              jq -r 'if (.streams|type)=="array" then (.streams|length) else "n/a" end' "$OUT"
+              echo -n "first_stream="
+              jq -c '.streams[0] // empty' "$OUT" | head -c 500
+              echo
+            else
+              head -c 500 "$OUT" || true
+              echo
+            fi
+            rm -f "$OUT"
+          done
