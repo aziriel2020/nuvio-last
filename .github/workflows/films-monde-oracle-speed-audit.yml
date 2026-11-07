@@ -35,3 +35,4 @@ jobs:
           node --test test/films-monde-posters.test.mjs
           node --test test/artwork-runtime.test.mjs
           node --test test/films-monde-oracle-warm.test.mjs
+          node --test test/oracle-movies-cache-stale.test.mjs

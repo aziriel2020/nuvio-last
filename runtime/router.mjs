@@ -668,6 +668,8 @@ async function invokeNodeHandler(request, timeZone) {
 // request the same period simultaneously; this keeps one SQLite/render pass
 // without changing cache freshness, addon IDs or approved visual assets.
 const artworkInFlight = new Map();
+const historicalRefreshes = new Map();
+const MAX_BACKGROUND_HISTORICAL_REFRESHES = 2;
 const MAX_INFLIGHT_ARTWORK = 192;
 
 const COALESCED_ARTWORK_NAMES = new Set([
@@ -695,7 +697,34 @@ async function dynamicResponse(request, env, ctx) {
 
   if (key && cache) {
     const hit = await cache.match(key);
-    if (hit) return withHeaders(hit, { 'X-Nuvio-Cache': 'HIT' });
+    if (hit) {
+      const stale = hit.headers.get('x-nuvio-disk-cache') === 'STALE';
+      if (stale && request.method === 'GET' && !request.headers.has('authorization') &&
+          ctx?.waitUntil && historicalRefreshes.size < MAX_BACKGROUND_HISTORICAL_REFRESHES &&
+          !historicalRefreshes.has(key.url)) {
+        // Defer CPU-heavy SQLite work until the stale response has had a
+        // chance to flush. Never revalidate live or current-month films.
+        const promise = new Promise(resolve => {
+          setTimeout(() => {
+            Promise.resolve().then(() => invokeNodeHandler(request, timeZone))
+              .then(async response => {
+                if (response.ok && !/(?:no-store|private)/i.test(response.headers.get('cache-control') || '')) {
+                  const headers = new Headers(response.headers);
+                  headers.set('cache-control', 'public, max-age=' + ttl + ', stale-while-revalidate=' + Math.max(ttl,900));
+                  await cache.put(key, new Response(response.body, {
+                    status: response.status, statusText: response.statusText, headers
+                  }));
+                } else await response.body?.cancel();
+              })
+              .catch(error => console.warn('[oracle-movies-refresh]', error?.message || error))
+              .finally(() => { historicalRefreshes.delete(key.url); resolve(); });
+          }, 25);
+        });
+        historicalRefreshes.set(key.url, promise);
+        ctx.waitUntil(promise);
+      }
+      return withHeaders(hit, { 'X-Nuvio-Cache': stale ? 'STALE' : 'HIT' });
+    }
   }
 
   // Cache misses for the same public image must share one upstream fetch
