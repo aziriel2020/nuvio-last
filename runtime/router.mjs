@@ -1,4 +1,5 @@
 import nodeHandler from '../api/index.js';
+import { historyGraceMs } from '../oracle/movie-history-grace.mjs';
 
 const DYNAMIC_CATALOG_TTL = 300;
 const HISTORICAL_CATALOG_TTL = 21600;
@@ -69,7 +70,11 @@ export function edgeTtl(input) {
   // refresh independently after late indexing (5 minutes maximum).
   // Existing /movies meta, status, artworks and other series bypasses remain.
   if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections|native-bridge(?:\/mobile)?)\/)?catalog\/movie\/[^/]+(?:\/[^/]+)?\.json$/.test(path)) {
-    return /-(?:today|tomorrow|yesterday|lastweek|nextweek)(?:\/|\.|$)/i.test(path) ? 60 : 300;
+    // The authoritative Movies catalog already allows 15 minutes for old
+    // monthly and annual rows; avoid defeating that TTL at Oracle's disk
+    // cache layer. Current and rolling periods keep their original windows.
+    return /-(?:today|tomorrow|yesterday|lastweek|nextweek)(?:\/|\.|$)/i.test(path)
+      ? 60 : historyGraceMs(url) ? 900 : 300;
   }
   // Empty/error series responses must not become a cached successful catalog.
   if (/^\/(?:series(?:-v2)?|movies)\//.test(path)) return 0;
@@ -668,6 +673,8 @@ async function invokeNodeHandler(request, timeZone) {
 // request the same period simultaneously; this keeps one SQLite/render pass
 // without changing cache freshness, addon IDs or approved visual assets.
 const artworkInFlight = new Map();
+const historicalRefreshes = new Map();
+const MAX_BACKGROUND_HISTORICAL_REFRESHES = 2;
 const MAX_INFLIGHT_ARTWORK = 192;
 
 const COALESCED_ARTWORK_NAMES = new Set([
@@ -695,7 +702,34 @@ async function dynamicResponse(request, env, ctx) {
 
   if (key && cache) {
     const hit = await cache.match(key);
-    if (hit) return withHeaders(hit, { 'X-Nuvio-Cache': 'HIT' });
+    if (hit) {
+      const stale = hit.headers.get('x-nuvio-disk-cache') === 'STALE';
+      if (stale && request.method === 'GET' && !request.headers.has('authorization') &&
+          ctx?.waitUntil && historicalRefreshes.size < MAX_BACKGROUND_HISTORICAL_REFRESHES &&
+          !historicalRefreshes.has(key.url)) {
+        // Defer CPU-heavy SQLite work until the stale response has had a
+        // chance to flush. Never revalidate live or current-month films.
+        const promise = new Promise(resolve => {
+          setTimeout(() => {
+            Promise.resolve().then(() => invokeNodeHandler(request, timeZone))
+              .then(async response => {
+                if (response.ok && !/(?:no-store|private)/i.test(response.headers.get('cache-control') || '')) {
+                  const headers = new Headers(response.headers);
+                  headers.set('cache-control', 'public, max-age=' + ttl + ', stale-while-revalidate=' + Math.max(ttl,900));
+                  await cache.put(key, new Response(response.body, {
+                    status: response.status, statusText: response.statusText, headers
+                  }));
+                } else await response.body?.cancel();
+              })
+              .catch(error => console.warn('[oracle-movies-refresh]', error?.message || error))
+              .finally(() => { historicalRefreshes.delete(key.url); resolve(); });
+          }, 25);
+        });
+        historicalRefreshes.set(key.url, promise);
+        ctx.waitUntil(promise);
+      }
+      return withHeaders(hit, { 'X-Nuvio-Cache': stale ? 'STALE' : 'HIT' });
+    }
   }
 
   // Cache misses for the same public image must share one upstream fetch

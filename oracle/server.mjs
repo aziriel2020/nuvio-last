@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import runtime from '../runtime/index.mjs';
 import { encodeJsonForClient } from './response-compression.mjs';
+import { historyGraceMs } from './movie-history-grace.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -84,40 +85,42 @@ class FileCache {
   }
 
   async match(input) {
-    const key = this.key(input);
-    const hot = this.hot.get(key);
-    if (hot) {
-      if (hot.meta.expiresAt > Date.now()) {
-        this.hot.delete(key);
-        this.hot.set(key, hot);
-        return new Response(hot.body, {
-          status: hot.meta.status || 200,
-          statusText: hot.meta.statusText || '',
-          headers: { ...hot.meta.headers, 'x-nuvio-disk-cache': 'HIT', 'x-nuvio-hot-cache': 'HIT' }
-        });
+    const key=this.key(input);
+    const url=typeof input==='string'?input:input?.url||String(input);
+    const grace=historyGraceMs(url);
+    const now=Date.now();
+    const usable=meta=>meta?.expiresAt && (
+      meta.expiresAt>now ||
+      (grace>0 && now-meta.expiresAt<=grace &&
+        String(meta.headers?.['cache-control']||'').includes('stale-while-revalidate'))
+    );
+    const asResponse=(body,meta,hot)=>{
+      const stale=meta.expiresAt<=now;
+      const headers=new Headers(meta.headers||{});
+      headers.set('x-nuvio-disk-cache',stale?'STALE':'HIT');
+      if(hot)headers.set('x-nuvio-hot-cache',stale?'STALE':'HIT');
+      if(stale)headers.set('cache-control','no-store');
+      return new Response(body,{status:meta.status||200,statusText:meta.statusText||'',headers});
+    };
+    const hot=this.hot.get(key);
+    if(hot){
+      if(usable(hot.meta)){
+        this.hot.delete(key); this.hot.set(key,hot);
+        return asResponse(hot.body,hot.meta,true);
       }
-      this.hot.delete(key);
-      this.hotBytes -= hot.bytes;
+      this.hot.delete(key);this.hotBytes-=hot.bytes;
     }
-    const files = this.paths(input);
+    const files=this.paths(input);
     try {
-      const meta = JSON.parse(await fs.readFile(files.meta, 'utf8'));
-      if (!meta?.expiresAt || meta.expiresAt <= Date.now()) {
-        await Promise.allSettled([fs.unlink(files.meta), fs.unlink(files.body)]);
+      const meta=JSON.parse(await fs.readFile(files.meta,'utf8'));
+      if(!usable(meta)){
+        await Promise.allSettled([fs.unlink(files.meta),fs.unlink(files.body)]);
         return undefined;
       }
-      const body = await fs.readFile(files.body);
-      this.remember(input, body, meta);
-      const headers = new Headers(meta.headers || {});
-      headers.set('x-nuvio-disk-cache', 'HIT');
-      return new Response(body, {
-        status: meta.status || 200,
-        statusText: meta.statusText || '',
-        headers
-      });
-    } catch {
-      return undefined;
-    }
+      const body=await fs.readFile(files.body);
+      this.remember(input,body,meta);
+      return asResponse(body,meta,false);
+    }catch{return undefined;}
   }
 
   async put(input, response) {

@@ -1,0 +1,46 @@
+name: Audit Films Monde Oracle Speed (read only)
+on:
+  push:
+    branches:
+      - feat/oracle-films-monde-hyperspeed-20261107
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oracle-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bounded read-only sampling of public Oracle
+        run: node scripts/benchmark-films-monde-oracle-readonly.mjs
+      - name: Upload benchmark observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: films-monde-oracle-readonly-metrics
+          path: films-monde-oracle-benchmark.json
+          if-no-files-found: warn
+      - name: Install test dependencies
+        run: npm ci
+      - name: Run targeted Films Monde regression tests
+        run: |
+          node --test regions/movies/test/*.test.cjs
+          node --test test/films-monde-fast-collections.test.cjs
+          node --test test/films-monde-posters.test.mjs
+          node --test test/artwork-runtime.test.mjs
+          node --test test/films-monde-oracle-warm.test.mjs
+          node --test test/oracle-movies-cache-stale.test.mjs
+      - name: Validate server-only syntax and full project regression suite
+        run: |
+          node --check oracle/server.mjs
+          node --check runtime/router.mjs
+          node --check oracle/movie-history-grace.mjs
+          npm run test:movies
+          npm run test:runtime
+          npm test
