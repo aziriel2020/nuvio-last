@@ -27,3 +27,13 @@ test('Europe/Brussels month boundary and DST remain safe',()=>{
   assert.equal(grace(u,new Date('2026-10-31T22:59:00Z')),0);
   assert.equal(grace(u,new Date('2026-10-31T23:01:00Z')),180000);
 });
+
+test('historical TTL tracks the authoritative archive cache and leaves live dates alone',async()=>{
+  const {edgeTtl}=await import('../runtime/router.mjs');
+  const month=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Brussels',year:'numeric',month:'2-digit'}).format(new Date());
+  const historical=Number(month.slice(0,4))-2;
+  assert.equal(edgeTtl(o+'/movies/catalog/movie/movies-fr-all-all-annual-'+historical+'.json'),900);
+  assert.equal(edgeTtl(o+'/movies/catalog/movie/movies-fr-all-all-'+month+'.json'),300);
+  assert.equal(edgeTtl(o+'/movies/catalog/movie/movies-fr-all-all-today.json'),60);
+  assert.equal(edgeTtl(o+'/movies/artwork/genre/all.webp?v=abc'),604800);
+});

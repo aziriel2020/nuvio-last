@@ -1,4 +1,5 @@
 import nodeHandler from '../api/index.js';
+import { historyGraceMs } from '../oracle/movie-history-grace.mjs';
 
 const DYNAMIC_CATALOG_TTL = 300;
 const HISTORICAL_CATALOG_TTL = 21600;
@@ -69,7 +70,11 @@ export function edgeTtl(input) {
   // refresh independently after late indexing (5 minutes maximum).
   // Existing /movies meta, status, artworks and other series bypasses remain.
   if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections|native-bridge(?:\/mobile)?)\/)?catalog\/movie\/[^/]+(?:\/[^/]+)?\.json$/.test(path)) {
-    return /-(?:today|tomorrow|yesterday|lastweek|nextweek)(?:\/|\.|$)/i.test(path) ? 60 : 300;
+    // The authoritative Movies catalog already allows 15 minutes for old
+    // monthly and annual rows; avoid defeating that TTL at Oracle's disk
+    // cache layer. Current and rolling periods keep their original windows.
+    return /-(?:today|tomorrow|yesterday|lastweek|nextweek)(?:\/|\.|$)/i.test(path)
+      ? 60 : historyGraceMs(url) ? 900 : 300;
   }
   // Empty/error series responses must not become a cached successful catalog.
   if (/^\/(?:series(?:-v2)?|movies)\//.test(path)) return 0;
