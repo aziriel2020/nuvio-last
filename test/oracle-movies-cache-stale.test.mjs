@@ -6,6 +6,7 @@ const date=new Date('2026-11-07T06:00:00Z');
 test('bounded stale grace applies only to historical Films Monde monthly and annual catalogs',()=>{
   for(const path of [
     '/movies/catalog/movie/movies-fr-all-all-2026-10.json',
+    '/movies/catalog/movie/movies-fr-all-all-2026-10/skip=24.json',
     '/movies/collections-only/catalog/movie/movies-fr-vod-35-2026-08.json',
     '/movies/native-bridge/catalog/movie/movies-fr-cinema-28-annual-2025.json'
   ])assert.equal(grace(o+path,date),180000,path);
