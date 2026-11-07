@@ -36,3 +36,11 @@ jobs:
           node --test test/artwork-runtime.test.mjs
           node --test test/films-monde-oracle-warm.test.mjs
           node --test test/oracle-movies-cache-stale.test.mjs
+      - name: Validate server-only syntax and full project regression suite
+        run: |
+          node --check oracle/server.mjs
+          node --check runtime/router.mjs
+          node --check oracle/movie-history-grace.mjs
+          npm run test:movies
+          npm run test:runtime
+          npm test
