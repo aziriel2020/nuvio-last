@@ -1,0 +1,181 @@
+name: Build Nuvio Desktop V10 official + Watch Party + Hero MSI
+
+on:
+  push:
+    branches:
+      - feat/nuvio-desktop-v10-official-watchparty-v4-hero
+    paths:
+      - builder/apply_nuvio_desktop_v10_official.py
+      - builder/apply_nuvio_desktop_v10_recovery.py
+      - .github/workflows/build-nuvio-desktop-v10-official.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 75
+    steps:
+      - name: Checkout our Nuvio MSI builder
+        uses: actions/checkout@v4
+
+      - name: Checkout recent official NuvioDesktop Dev with Watch Party
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch Dev https://github.com/NuvioMedia/NuvioDesktop.git NuvioDesktop
+          git -C NuvioDesktop fetch --depth 1 origin 1a600da8314fea54a8aa36a9998fd8fcd66132ec
+          git -C NuvioDesktop checkout --detach 1a600da8314fea54a8aa36a9998fd8fcd66132ec
+          $actual = (git -C NuvioDesktop rev-parse HEAD).Trim()
+          if ($actual -ne "1a600da8314fea54a8aa36a9998fd8fcd66132ec") {
+            throw "Incorrect official source revision: $actual"
+          }
+
+      - name: Apply compatible V10 Windows Hero patch
+        shell: pwsh
+        run: |
+          python -m py_compile builder/apply_nuvio_desktop_v10_official.py
+          python builder/apply_nuvio_desktop_v10_official.py NuvioDesktop
+          python -m py_compile builder/apply_nuvio_desktop_v10_recovery.py
+          python builder/apply_nuvio_desktop_v10_recovery.py NuvioDesktop
+
+      - name: Fetch official Windows native dependencies
+        working-directory: NuvioDesktop
+        shell: bash
+        run: |
+          git lfs pull --include="composeApp/src/desktopMain/native/windows/runtime/**,composeApp/src/desktopMain/resources/torrserver/windows-amd64/TorrServer.exe" --exclude=""
+
+      - name: Resolve official runtime configuration
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          req=Request("https://api.nuvio.tv/.well-known/nuvio",headers={"User-Agent":"NuvioDesktop-V10"})
+          with urlopen(req,timeout=25) as response: cfg=json.load(response)
+          backend=str(cfg.get("backend_url","")).strip().rstrip("/")
+          key=str(cfg.get("publishable_key","")).strip()
+          if str(cfg.get("service","")).lower()!="nuvio" or backend!="https://api.nuvio.tv" or not key:
+              raise SystemExit("Official Nuvio configuration invalid")
+          Path("local.properties").write_text("\n".join([
+              f"NUVIO_SUPABASE_URL={backend}",
+              f"NUVIO_SUPABASE_ANON_KEY={key}",
+              "NUVIO_SUPABASE_FALLBACK_URL=",
+              "TRAKT_CLIENT_ID=",
+              "TRAKT_CLIENT_SECRET=",
+              "SENTRY_DSN=",
+              "SENTRY_DESKTOP_DSN=",
+              ""
+          ]),encoding="utf-8")
+          print("Official Nuvio service discovered")
+          '@ | python -
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Windows WebView2 SDK
+        shell: pwsh
+        run: |
+          $version = "1.0.4078.44"
+          nuget install Microsoft.Web.WebView2 -Version $version -OutputDirectory "$env:RUNNER_TEMP\nuget" -DirectDownload -NonInteractive -NoCache
+          $root = Join-Path $env:RUNNER_TEMP "nuget\Microsoft.Web.WebView2.$version"
+          "WEBVIEW2_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify Watch Party, Shield-style V4 covers and Hero code still coexist
+        shell: pwsh
+        working-directory: NuvioDesktop
+        run: |
+          @'
+          from pathlib import Path
+          root=Path(".")
+          files={
+            "party":root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/party/PartyRepository.kt",
+            "player_party":root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeParty.kt",
+            "cover":root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt",
+            "win_hero":root/"composeApp/src/windowsDesktopMain/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.desktop.kt",
+            "native_fade":root/"composeApp/src/desktopMain/native/windows/player_bridge.cpp",
+            "overlay":root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt"
+          }
+          required={
+            "party":["server.capabilities.watchParty","fun join(code:"],
+            "player_party":["PartyRepository","partyBlocksControl"],
+            "cover":["item.landscapePoster","alwaysShowLandscapeClearlogo","item.rawPosterUrl"],
+            "win_hero":["NativePlayerController","heroTrailerControlsPageUrl","latestOnReady.value()"],
+            "native_fade":["heroTrailerMode","target-colorspace-hint"],
+            "overlay":["hero-player-ui-v10","linear-gradient(90deg","linear-gradient(180deg"]
+          }
+          for name,path in files.items():
+            data=path.read_text(encoding="utf-8")
+            for token in required[name]:
+              if token not in data: raise SystemExit(f"Missing {name} contract: {token}")
+          folder=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt").read_text(encoding="utf-8")
+          catalog=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/catalog/CatalogScreen.kt").read_text(encoding="utf-8")
+          storage=(root/"composeApp/src/desktopMain/kotlin/com/nuvio/app/core/poster/CustomPosterUrlStorage.desktop.kt").read_text(encoding="utf-8")
+          row=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt").read_text(encoding="utf-8")
+          cover=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt").read_text(encoding="utf-8")
+          for label,content,tokens in [
+            ("folder Hero",folder,["DesktopFolderHeroHeight", "CatalogHoverHero(", "FolderViewMode.TABBED_GRID", "FolderViewMode.FOLLOW_LAYOUT","onPosterHoverChanged"]),
+            ("catalog Hero",catalog,["CatalogHoverHero(","isHoverActive = true"]),
+            ("V4 profile migration",storage,["oracle_vector_v3_recovery_windows_20261104", "CustomPosterScreen.ALL", "design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v3"]),
+            ("V4 card priority",cover,["approvedV4Artwork", "approvedV4Artwork || !posterCardStyle.alwaysShowLandscapeClearlogo", "effectiveLandscapePoster ?: item.banner ?: item.poster"]),
+            ("V4 folder row",row,["onPosterHoverChanged = onPosterHoverChanged", "useHoverPreview = onPosterHoverChanged == null"])
+          ]:
+            for token in tokens:
+              if token not in content: raise SystemExit(f"Missing {label} runtime contract: {token}")
+          hero=(root/"composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/CatalogHoverHero.kt").read_text(encoding="utf-8")
+          if "selectedItem.landscapePoster?.takeIf { it.isNotBlank() }" not in hero: raise SystemExit("Hero ignores user Custom Posters")
+          if "requiredSize(2.dp)" in files["win_hero"].read_text(encoding="utf-8"): raise SystemExit("Native Hero size deadlock remains")
+          if "format=rgb24,geq=" in files["native_fade"].read_text(encoding="utf-8"): raise SystemExit("Costly per-pixel GEQ filter remains")
+          print("V10 V3 custom artwork + native trailer startup contracts passed")
+          '@ | python -
+
+      - name: Compile official Desktop Kotlin with our Windows Hero
+        working-directory: NuvioDesktop
+        shell: pwsh
+        run: |
+          .\gradlew.bat :composeApp:compileKotlinDesktop "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.37" "-Pnuvio.desktop.versionCode=37" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+
+      - name: Package Windows MSI
+        working-directory: NuvioDesktop
+        shell: pwsh
+        run: |
+          .\gradlew.bat :composeApp:packageReleaseMsi "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" "-Pnuvio.desktop.versionName=0.1.37" "-Pnuvio.desktop.versionCode=37" "-Pcompose.desktop.packaging.checkJdkVendor=false" --no-configuration-cache --no-daemon --stacktrace
+
+      - name: Collect and install MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "NuvioDesktop\composeApp\build\compose" -Recurse -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw "No MSI generated" }
+          # Ensure Windows Installer sees this as an actual update, not a repair
+          # of the earlier V10 binary with the same ProductVersion.
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.GetType().InvokeMember("OpenDatabase", "InvokeMethod", $null, $installer, @($msi.FullName, 0))
+          $query = $database.OpenView("SELECT Value FROM Property WHERE Property = 'ProductVersion'")
+          $query.Execute()
+          $record = $query.Fetch()
+          $version = if ($record) { $record.StringData(1) } else { "" }
+          $query.Close()
+          if ($version -ne "1.1.37") { throw "MSI ProductVersion is $version; expected 1.1.37 for real Windows upgrade" }
+          Write-Host "Verified MSI ProductVersion=$version"
+          Copy-Item $msi.FullName "NuvioDesktop-V10-Official-WatchParty-Hero-V3-Trailer-Fix.msi"
+          $path = (Resolve-Path "NuvioDesktop-V10-Official-WatchParty-Hero-V3-Trailer-Fix.msi").Path
+          $quotedPath = [char]34 + $path + [char]34
+          $arguments = "/i " + $quotedPath + " /qn /norestart"
+          $proc = Start-Process msiexec.exe -ArgumentList $arguments -PassThru -Wait
+          if ($proc.ExitCode -notin 0,3010) { throw "MSI install failed: $($proc.ExitCode)" }
+
+      - name: Upload MSI only if compilation and installer succeed
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-desktop-v10-official-watchparty-hero-v3-trailer-fix-msi
+          path: NuvioDesktop-V10-Official-WatchParty-Hero-V3-Trailer-Fix.msi
+          retention-days: 14
