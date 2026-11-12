@@ -1,0 +1,99 @@
+name: Build Nuvio Shield Lazy Periods Beta APK
+
+on:
+  push:
+    branches:
+      - feature/shield-lazy-periods-beta-20261031
+    paths:
+      - builder/apply_nuvio_tv_lazy_periods.py
+      - .github/workflows/build-nuvio-shield-lazy-periods.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shield-apk:
+    name: Compile isolated Android TV calendar beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Checkout Nuvio Calendar patches
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned upstream Nuvio TV revision
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git clone --filter=blob:none https://github.com/NuvioMedia/NuvioTV.git NuvioTV
+          git -C NuvioTV checkout --detach fa194b008e331780d2391491879e4a0a343641ef
+          test "$(git -C NuvioTV rev-parse HEAD)" = "fa194b008e331780d2391491879e4a0a343641ef"
+
+      - name: Apply and audit targeted period lazy loading
+        run: |
+          python3 builder/apply_nuvio_tv_lazy_periods.py NuvioTV
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("NuvioTV")
+          s=(root/"app/src/main/java/com/nuvio/tv/ui/screens/collection/FolderDetailViewModel.kt").read_text()
+          g=(root/"app/build.gradle.kts").read_text()
+          for key in ("isNuvioPeriodFolder", "hasLoaded", "if (!isNuvioPeriodFolder || index == 0)", "loadSourceForTab(index, tab.source)", "FolderViewMode.TABBED_GRID"):
+              assert key in s, key
+          assert 'applicationIdSuffix = ".calendarbeta"' in g
+          assert 'signingConfig = signingConfigs.getByName("debug")' in g
+          print("Scoped Shield source and side-by-side package checks: OK")
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Check Android SDK
+        shell: bash
+        run: |
+          test -d "$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+      - name: Configure Gradle caching
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve official public Nuvio runtime
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          try:
+              req=Request("https://api.nuvio.tv/.well-known/nuvio",headers={"User-Agent":"Nuvio-Shield-Lazy-Periods-Beta"})
+              with urlopen(req,timeout=20) as response: data=json.load(response)
+              backend=str(data.get("backend_url","")).strip().rstrip("/")
+              key=str(data.get("publishable_key","")).strip()
+              if str(data.get("service","")).lower() != "nuvio" or backend!="https://api.nuvio.tv" or not key:
+                  raise ValueError("Public discovery is not the official Nuvio runtime")
+              Path("NuvioTV/local.properties").write_text(
+                  "NUVIO_SUPABASE_URL="+backend+"\nNUVIO_SUPABASE_ANON_KEY="+key+"\n", encoding="utf-8")
+              print("Configured official public Nuvio runtime.")
+          except Exception as error:
+              print("Public discovery unavailable, beta keeps offline/local addon functionality:",type(error).__name__)
+          PY
+
+      - name: Build side-by-side Shield APK
+        working-directory: NuvioTV
+        run: ./gradlew :app:assembleFullDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8"
+
+      - name: Verify APK outputs
+        shell: bash
+        run: |
+          find NuvioTV/app/build/outputs/apk/full/debug -name '*.apk' -type f -print
+          test -n "$(find NuvioTV/app/build/outputs/apk/full/debug -name '*.apk' -type f -print -quit)"
+
+      - name: Upload isolated Shield beta APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-shield-lazy-periods-beta-apks
+          path: NuvioTV/app/build/outputs/apk/full/debug/*.apk
+          retention-days: 14
+          if-no-files-found: error
