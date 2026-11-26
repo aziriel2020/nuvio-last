@@ -1,0 +1,88 @@
+name: Verify Listener Oracle and encrypted credential
+on:
+  push:
+    branches: [listener-oracle-bridge-20261126]
+    paths: ['.github/workflows/verify-listener-oracle.yml']
+permissions:
+  contents: read
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HOST: 141.145.215.202
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish existing authorized Oracle connection
+        env:
+          SSH_SECRET: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+          HOST_KEYS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/listener-auth"
+          export KEYFILE="$RUNNER_TEMP/listener-auth/oracle.pem"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=os.environ['SSH_SECRET'].strip()
+          vals=[raw]
+          try: vals.append(json.loads(raw))
+          except Exception: pass
+          for v in list(vals):
+              if not isinstance(v,str): continue
+              vals.append(v.replace(chr(13),'').replace(chr(92)+'n',chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              if not isinstance(v,str): continue
+              for label in ('OPENSSH PRIVATE KEY','PRIVATE KEY','RSA PRIVATE KEY'):
+                  b='-----BEGIN '+label+'-----'; e='-----END '+label+'-----'
+                  if b in v and e in v:
+                      body=''.join(v.split(b,1)[1].split(e,1)[0].split())
+                      Path(os.environ['KEYFILE']).write_text(b+'\n'+body+'\n'+e+'\n')
+                      raise SystemExit(0)
+          raise SystemExit('Existing Oracle SSH secret unavailable')
+          PY
+          chmod 600 "$KEYFILE"
+          ssh-keygen -y -f "$KEYFILE" >/dev/null
+          known="$RUNNER_TEMP/listener-auth/known_hosts"
+          printf '%s\n' '141.145.215.202 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFhUslXpb+14KEWscNNEp7pSU/gf4rZLbVnm339WajS' > "$known"
+          trust=yes
+          opts=(-i "$KEYFILE" -o IdentitiesOnly=yes -o BatchMode=yes -o "StrictHostKeyChecking=$trust" -o "UserKnownHostsFile=$known" -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=15)
+          ssh "${opts[@]}" "ubuntu@$HOST" "sudo -n bash -s" <<'VERIFY'
+          set -Eeuo pipefail
+          root=/opt/listen-recorder-ultimate
+          url=https://listener.141-145-215-202.nip.io
+          if [[ ! -d "$root" ]]; then echo 'Listener installation not yet started'; exit 1; fi
+          if [[ ! -f "$root/.env" ]]; then echo 'Configuration not yet present'; exit 1; fi
+          if ! command -v docker >/dev/null; then echo 'Docker installation pending'; exit 1; fi
+          cd "$root"
+          docker ps -a --filter label=com.docker.compose.project=listen-recorder-ultimate --format '{{.Names}} {{.Status}}'
+          if ! curl -fsS --max-time 5 http://127.0.0.1:18185/healthz; then echo 'Listener local API not ready'; exit 1; fi
+          password=$(sed -n 's/^RECORDER_PASSWORD=//p' .env)
+          [[ "$password" =~ ^[a-f0-9]{64}$ ]]
+          printf 'user = "recorder:%s"\n' "$password" | curl -fsS --config - --max-time 10 "$url/api/status" >/dev/null
+          curl -fsS --max-time 10 "$url/healthz"
+          curl -fsS --max-time 10 https://141-145-215-202.nip.io/_oracle/health >/dev/null
+          printf '\nLISTENER_CREDENTIAL_ENCRYPTED=%s\n' "$(printf '%s' "$password" | openssl pkeyutl -encrypt -pubin -inkey <(cat <<'KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1/waefiaFzmnbvhlDQfR
+          bK9jfSjS+rHaqhes3z+4eizVy7hVD7LZlrCuOXm7IUcnLbvD+V/plft8EON3Uwxl
+          uf6rcPYbVhTsGvGDtQyhb5uqQ5VR3Aa6i7TOYrFqLrVJnIYtpseObbbfnX8dd/5b
+          f9G0x3a+5Uhea3MDVdwFoWzHwhemUah4Wn3K+8p2CqzX1bhFRtqcTS2/2PubcrBM
+          LdYxAylzwd2Pms3F/bPj3LbmDJ+RHioNfJI2zz4eeyzjTE0FWXj5FzxQeq8CXvjA
+          F72hqaYQMgW0nrfweP3n+tRRK4n7Eg2Tt2jhkc0Hw08RigD3AW0twHE9qsxmLIiP
+          2DfcHp8HNGZKzHS51PDTTVLz8LQzNN6XD18O4ZtTR4wAvJUsISnQ0aWB++ol5jg3
+          0cmuOAzqjL4IJcsZrsvHEFKNtEz7WyGj6AfcYui6XEUx7eglzS15+zSKr6Hyr6MU
+          TPuOtzcoNPH8dqhkuJWf+cxtZTAIKOhjeVEkV1mpeY4DAgMBAAE=
+          -----END PUBLIC KEY-----
+          KEY
+          ) -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
+          unset password
+          echo 'Public TLS and authenticated Listener API verified.'
+          VERIFY
+      - name: Cleanup local credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/listener-auth"
