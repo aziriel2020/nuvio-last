@@ -41,6 +41,20 @@ nice -n 10 bash INSTALL_ORACLE.sh
 curl -fsS --max-time 10 http://127.0.0.1:18185/healthz
 password=$(sed -n 's/^RECORDER_PASSWORD=//p' .env)
 printf 'user = "recorder:%s"\n' "$password" | curl -fsS --config - --max-time 10 http://127.0.0.1:18185/api/status >/dev/null
+printf 'LISTENER_CREDENTIAL_ENCRYPTED=%s\n' "$(printf '%s' "$password" | openssl pkeyutl -encrypt -pubin -inkey <(cat <<'CREDENTIAL_PUB'
+-----BEGIN PUBLIC KEY-----
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1/waefiaFzmnbvhlDQfR
+bK9jfSjS+rHaqhes3z+4eizVy7hVD7LZlrCuOXm7IUcnLbvD+V/plft8EON3Uwxl
+uf6rcPYbVhTsGvGDtQyhb5uqQ5VR3Aa6i7TOYrFqLrVJnIYtpseObbbfnX8dd/5b
+f9G0x3a+5Uhea3MDVdwFoWzHwhemUah4Wn3K+8p2CqzX1bhFRtqcTS2/2PubcrBM
+LdYxAylzwd2Pms3F/bPj3LbmDJ+RHioNfJI2zz4eeyzjTE0FWXj5FzxQeq8CXvjA
+F72hqaYQMgW0nrfweP3n+tRRK4n7Eg2Tt2jhkc0Hw08RigD3AW0twHE9qsxmLIiP
+2DfcHp8HNGZKzHS51PDTTVLz8LQzNN6XD18O4ZtTR4wAvJUsISnQ0aWB++ol5jg3
+0cmuOAzqjL4IJcsZrsvHEFKNtEz7WyGj6AfcYui6XEUx7eglzS15+zSKr6Hyr6MU
+TPuOtzcoNPH8dqhkuJWf+cxtZTAIKOhjeVEkV1mpeY4DAgMBAAE=
+-----END PUBLIC KEY-----
+CREDENTIAL_PUB
+) -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
 unset password
 site=/etc/caddy/listener-ultimate.Caddyfile
 hook=/usr/local/sbin/listener-ensure-caddy
