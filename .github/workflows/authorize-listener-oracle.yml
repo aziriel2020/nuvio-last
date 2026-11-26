@@ -1,0 +1,83 @@
+name: Authorize isolated Listener deployment
+on:
+  push:
+    branches: [listener-oracle-bridge-20261126]
+    paths: ['.github/workflows/authorize-listener-oracle.yml']
+permissions:
+  contents: write
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HOST: 141.145.215.202
+      DIGEST: 97faafd150e93756e1ac20a6dd0a292903fa7aa0f1d379c856c37d2a50e9f44a
+      PUBKEY: AAAAC3NzaC1lZDI1NTE5AAAAIL1pg7WOXI6jwIU79AyNTo3NbybIejOTjoyU8XPbckW5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish existing authorized Oracle connection
+        env:
+          SSH_SECRET: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+          HOST_KEYS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/listener-auth"
+          export KEYFILE="$RUNNER_TEMP/listener-auth/oracle.pem"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=os.environ['SSH_SECRET'].strip()
+          vals=[raw]
+          try: vals.append(json.loads(raw))
+          except Exception: pass
+          for v in list(vals):
+              if not isinstance(v,str): continue
+              vals.append(v.replace(chr(13),'').replace(chr(92)+'n',chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              if not isinstance(v,str): continue
+              for label in ('OPENSSH PRIVATE KEY','PRIVATE KEY','RSA PRIVATE KEY'):
+                  b='-----BEGIN '+label+'-----'; e='-----END '+label+'-----'
+                  if b in v and e in v:
+                      body=''.join(v.split(b,1)[1].split(e,1)[0].split())
+                      Path(os.environ['KEYFILE']).write_text(b+'\n'+body+'\n'+e+'\n')
+                      raise SystemExit(0)
+          raise SystemExit('Existing Oracle SSH secret unavailable')
+          PY
+          chmod 600 "$KEYFILE"
+          ssh-keygen -y -f "$KEYFILE" >/dev/null
+          known="$RUNNER_TEMP/listener-auth/known_hosts"
+          if [[ -n "$HOST_KEYS" ]]; then
+            printf '%s\n' "$HOST_KEYS" > "$known"
+            trust=yes
+          else
+            touch "$known"
+            trust=accept-new
+          fi
+          opts=(-i "$KEYFILE" -o IdentitiesOnly=yes -o BatchMode=yes -o "StrictHostKeyChecking=$trust" -o "UserKnownHostsFile=$known" -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=15)
+          ssh "${opts[@]}" "ubuntu@$HOST" "sudo -n bash -c 'set -eu; test ! -e /usr/local/sbin/listener-bridge-install-20261126; umask 077; set -C; cat > /usr/local/sbin/listener-bridge-install-20261126; chmod 700 /usr/local/sbin/listener-bridge-install-20261126'" < .listener-bridge/install.sh
+          ssh "${opts[@]}" "ubuntu@$HOST" "sudo -n bash -s -- '$PUBKEY'" <<'REMOTE'
+          set -Eeuo pipefail
+          auth=/home/ubuntu/.ssh/authorized_keys
+          wrapper=/usr/local/sbin/listener-bridge-install-20261126
+          [[ -f "$auth" && ! -L "$auth" && -x "$wrapper" ]]
+          systemctl is-active --quiet caddy
+          grep -Fq ' listener-bridge-20261126' "$auth" && exit 1
+          expiry=$(date -u -d '+20 minutes' +%Y%m%d%H%M%SZ)
+          printf 'restrict,expiry-time="%s",command="sudo -n %s" ssh-ed25519 %s listener-bridge-20261126\n' "$expiry" "$wrapper" "$1" >> "$auth"
+          REMOTE
+          mkdir -p .listener-bridge
+          printf '%s\n' "$DIGEST" > .listener-bridge/ready.txt
+          ssh-keygen -F "$HOST" -f "$known" | grep -v '^#' | head -1 | awk -v host="$HOST" '{print host,$2,$3}' >> .listener-bridge/ready.txt
+          test "$(wc -l < .listener-bridge/ready.txt)" -eq 2
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f .listener-bridge/ready.txt
+          git commit -m 'Publish one-use transport readiness'
+          git push origin HEAD:listener-oracle-bridge-20261126
+      - name: Cleanup local credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/listener-auth"
