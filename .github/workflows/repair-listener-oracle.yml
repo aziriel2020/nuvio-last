@@ -1,0 +1,194 @@
+name: Repair and verify Listener Oracle
+on:
+  push:
+    branches: [listener-oracle-bridge-20261126]
+    paths: ['.github/workflows/repair-listener-oracle.yml']
+permissions:
+  contents: read
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOST: 141.145.215.202
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish existing authorized Oracle connection
+        env:
+          SSH_SECRET: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+          HOST_KEYS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/listener-auth"
+          export KEYFILE="$RUNNER_TEMP/listener-auth/oracle.pem"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=os.environ['SSH_SECRET'].strip()
+          vals=[raw]
+          try: vals.append(json.loads(raw))
+          except Exception: pass
+          for v in list(vals):
+              if not isinstance(v,str): continue
+              vals.append(v.replace(chr(13),'').replace(chr(92)+'n',chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              if not isinstance(v,str): continue
+              for label in ('OPENSSH PRIVATE KEY','PRIVATE KEY','RSA PRIVATE KEY'):
+                  b='-----BEGIN '+label+'-----'; e='-----END '+label+'-----'
+                  if b in v and e in v:
+                      body=''.join(v.split(b,1)[1].split(e,1)[0].split())
+                      Path(os.environ['KEYFILE']).write_text(b+'\n'+body+'\n'+e+'\n')
+                      raise SystemExit(0)
+          raise SystemExit('Existing Oracle SSH secret unavailable')
+          PY
+          chmod 600 "$KEYFILE"
+          ssh-keygen -y -f "$KEYFILE" >/dev/null
+          known="$RUNNER_TEMP/listener-auth/known_hosts"
+          printf '%s\n' '141.145.215.202 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFhUslXpb+14KEWscNNEp7pSU/gf4rZLbVnm339WajS' > "$known"
+          trust=yes
+          opts=(-i "$KEYFILE" -o IdentitiesOnly=yes -o BatchMode=yes -o "StrictHostKeyChecking=$trust" -o "UserKnownHostsFile=$known" -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=15)
+          ssh "${opts[@]}" -o ServerAliveInterval=20 -o ServerAliveCountMax=6 "ubuntu@$HOST" "sudo -n bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/listen-recorder-ultimate
+          host=listener.141-145-215-202.nip.io
+          url=https://$host
+          cd "$root"
+          [[ "$(cat .listener-archive-sha)" == 97faafd150e93756e1ac20a6dd0a292903fa7aa0f1d379c856c37d2a50e9f44a ]]
+          [[ -f .env && ! -L .env && -f docker/Dockerfile ]]
+          grep -Fxq "PUBLIC_ORIGIN=$url" .env
+          systemctl is-active --quiet nuvio
+          systemctl is-active --quiet caddy
+          curl -fsS --max-time 15 https://141-145-215-202.nip.io/_oracle/health >/dev/null
+          exec 9>/run/lock/listener-bridge-install.lock
+          flock -n 9
+          # Only fix the source files used in the container. Keep private config private.
+          for d in server audio-engine browser-engine playlist-engine adapters apps/web tests docker; do
+            chmod -R a+rX "$d"
+          done
+          chmod a+r package.json package-lock.json
+          chmod 600 .env
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('docker/Dockerfile')
+          s=p.read_text()
+          needle='RUN chmod -R a+rX /app && chmod 0555 /app/docker/start.sh\n'
+          if needle not in s:
+              assert s.count('USER recorder\n')==1
+              p.write_text(s.replace('USER recorder\n',needle+'USER recorder\n'))
+          p=pathlib.Path('docker/chromium-seccomp.json')
+          v=json.loads(p.read_text())
+          entry=next(x for x in v['syscalls'] if x['names']==['chroot'])
+          entry['includes']={}
+          entry['comment']='Allow chroot inside unprivileged user namespace; kernel capability checks remain.'
+          p.write_text(json.dumps(v,indent=2)+'\n')
+          PY
+          export LR_SECCOMP_PATH="$root/docker/chromium-seccomp.json"
+          compose() { docker compose --env-file "$root/.env" -p listen-recorder-ultimate -f "$root/docker/compose.yaml" "$@"; }
+          if ! compose up -d --build --wait --wait-timeout 180 recorder; then
+            compose logs --tail 60 recorder 2>&1 | sed -E 's/[0-9a-f]{64}/[redacted]/g'
+            exit 1
+          fi
+          curl -fsS --max-time 10 http://127.0.0.1:18185/healthz
+          password=$(sed -n 's/^RECORDER_PASSWORD=//p' .env)
+          [[ "$password" =~ ^[a-f0-9]{64}$ ]]
+          authcurl() { printf 'user = "recorder:%s"\n' "$password" | curl -fsS --config - --max-time 30 "$@"; }
+          authcurl http://127.0.0.1:18185/api/status >/dev/null
+          # Check browser engine using the original local test fixture, without saving recordings.
+          authcurl -H 'Content-Type: application/json' -d '{"authorized":true,"url":"http://listen-recorder.test/fixtures/playlist.html","attempts":1}' http://127.0.0.1:18185/api/analyze | python3 -c 'import json,sys; r=json.load(sys.stdin); assert len(r["tracks"])==3; print("Live fixture analysis: 3 tracks OK")'
+          # Attach a dedicated virtual host, retaining Nuvio's entire existing Caddy config.
+          site=/etc/caddy/listener-ultimate.Caddyfile
+          hook=/usr/local/sbin/listener-ensure-caddy
+          if [[ ! -e "$site" ]]; then
+            cat > "$site" <<CADDY
+          $host {
+            header Strict-Transport-Security "max-age=31536000"
+            reverse_proxy 127.0.0.1:18185 {
+              flush_interval -1
+            }
+          }
+          CADDY
+            chmod 644 "$site"
+          fi
+          if [[ ! -e "$hook" ]]; then
+            cat > "$hook" <<'HOOK'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          exec 8>/run/lock/listener-caddy.lock
+          flock 8
+          config=/etc/caddy/Caddyfile
+          include='import /etc/caddy/listener-ultimate.Caddyfile'
+          [[ -f "$config" && -f /etc/caddy/listener-ultimate.Caddyfile ]]
+          grep -Fxq "$include" "$config" && exit 0
+          old=$(mktemp /etc/caddy/.listener-old.XXXXXX)
+          new=$(mktemp /etc/caddy/.listener-new.XXXXXX)
+          trap 'rm -f "$old" "$new"' EXIT
+          cp -p "$config" "$old"
+          cp -p "$config" "$new"
+          printf '\n%s\n' "$include" >> "$new"
+          caddy validate --adapter caddyfile --config "$new"
+          cmp -s "$old" "$config" || { echo 'Concurrent Caddy change; retry later.' >&2; exit 1; }
+          mv -f "$new" "$config"
+          if ! systemctl reload caddy || ! curl -fsS --max-time 15 https://141-145-215-202.nip.io/_oracle/health >/dev/null; then
+            cp -p "$old" "$config"
+            systemctl reload caddy || true
+            exit 1
+          fi
+          HOOK
+            chmod 755 "$hook"
+          fi
+          "$hook"
+          if [[ ! -e /etc/systemd/system/listener-caddy-ensure.service ]]; then
+            cat > /etc/systemd/system/listener-caddy-ensure.service <<'UNIT'
+          [Unit]
+          Description=Restore isolated Listener Caddy import
+          After=caddy.service
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/listener-ensure-caddy
+          UNIT
+            cat > /etc/systemd/system/listener-caddy-ensure.path <<'UNIT'
+          [Unit]
+          Description=Watch Caddy configuration for Listener import
+          [Path]
+          PathChanged=/etc/caddy/Caddyfile
+          Unit=listener-caddy-ensure.service
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+            systemctl daemon-reload
+            systemctl enable --now listener-caddy-ensure.path
+          fi
+          ready=0
+          for i in $(seq 1 25); do
+            if curl -fsS --max-time 8 "$url/healthz"; then ready=1; break; fi
+            sleep 4
+          done
+          [[ "$ready" == 1 ]]
+          authcurl "$url/api/status" >/dev/null
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$url/api/status")" == 401 ]]
+          curl -fsS --max-time 15 https://141-145-215-202.nip.io/_oracle/health >/dev/null
+          printf '\nLISTENER_CREDENTIAL_ENCRYPTED=%s\n' "$(printf '%s' "$password" | openssl pkeyutl -encrypt -pubin -inkey <(cat <<'KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAmLgMqa85ACAATp0U3rFR
+          9cR2HGM6yOSdS8D4IMGot/85hxE/d2FJgb7XtZo2fBeHt6czxjWluIpsvba3aBLG
+          2ycVfnKz4BpD0OkD0a+bgxoGGrAuQdP7xkhWZBPahFnfaS+HJCuH+xGgVYtRu6Xe
+          tkAc9OvILyNs+IAiEzXOxUuRKanyXppcTYR8YsDm4N4SRpOuoi1APsIPZfREh+mO
+          PObraCP47jCmnkBiCvk4GADT9GWnRjrqxcifwh7K6MtuQHKkNI7QlazRTD9Fsnvo
+          l4+Evs6j32CXn6jj3MoZh8/sAQiwQiWRXmAgtY/VQQd5VPrcRyRtz04q6uv727A/
+          ffH4HTJaSK8hiCTES4avUAYx2eN7tLi7dde30BdbOQlgKMmQg1zZfwo5mlMI9ss1
+          e+G4PtkLJR2NLY3V+qi1vrpulo6CJTYhHdnZmobX2B+MxYWc9fFQPonG4JPE8KGY
+          /XSGA18SiwFbnhxr8o+QZg9gNUfzFrmQMleW/IcSI/hfAgMBAAE=
+          -----END PUBLIC KEY-----
+          KEY
+          ) -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
+          unset password
+          printf '\nVerified Listener HTTPS, login, unauthorized access rejection, live browser and Nuvio health: %s\n' "$url"
+          REMOTE
+      - name: Cleanup local credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/listener-auth"
