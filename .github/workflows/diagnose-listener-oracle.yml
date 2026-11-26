@@ -1,0 +1,70 @@
+name: Diagnose isolated Listener container
+on:
+  push:
+    branches: [listener-oracle-bridge-20261126]
+    paths: ['.github/workflows/diagnose-listener-oracle.yml']
+permissions:
+  contents: read
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HOST: 141.145.215.202
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish existing authorized Oracle connection
+        env:
+          SSH_SECRET: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+          HOST_KEYS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/listener-auth"
+          export KEYFILE="$RUNNER_TEMP/listener-auth/oracle.pem"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          raw=os.environ['SSH_SECRET'].strip()
+          vals=[raw]
+          try: vals.append(json.loads(raw))
+          except Exception: pass
+          for v in list(vals):
+              if not isinstance(v,str): continue
+              vals.append(v.replace(chr(13),'').replace(chr(92)+'n',chr(10)))
+              try: vals.append(base64.b64decode(v,validate=True).decode())
+              except Exception: pass
+          for v in vals:
+              if not isinstance(v,str): continue
+              for label in ('OPENSSH PRIVATE KEY','PRIVATE KEY','RSA PRIVATE KEY'):
+                  b='-----BEGIN '+label+'-----'; e='-----END '+label+'-----'
+                  if b in v and e in v:
+                      body=''.join(v.split(b,1)[1].split(e,1)[0].split())
+                      Path(os.environ['KEYFILE']).write_text(b+'\n'+body+'\n'+e+'\n')
+                      raise SystemExit(0)
+          raise SystemExit('Existing Oracle SSH secret unavailable')
+          PY
+          chmod 600 "$KEYFILE"
+          ssh-keygen -y -f "$KEYFILE" >/dev/null
+          known="$RUNNER_TEMP/listener-auth/known_hosts"
+          printf '%s\n' '141.145.215.202 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFhUslXpb+14KEWscNNEp7pSU/gf4rZLbVnm339WajS' > "$known"
+          trust=yes
+          opts=(-i "$KEYFILE" -o IdentitiesOnly=yes -o BatchMode=yes -o "StrictHostKeyChecking=$trust" -o "UserKnownHostsFile=$known" -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=15)
+          ssh "${opts[@]}" "ubuntu@$HOST" "sudo -n bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/listen-recorder-ultimate
+          cd "$root"
+          name=listen-recorder-ultimate-recorder-1
+          docker inspect "$name" --format 'State={{.State.Status}} Exit={{.State.ExitCode}} Health={{if .State.Health}}{{.State.Health.Status}}{{end}}'
+          docker inspect "$name" --format '{{if .State.Health}}{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}{{end}}'
+          docker logs --tail 100 "$name" 2>&1 | sed -E 's/[0-9a-f]{64}/[redacted]/g' | head -c 16000
+          printf '\n'
+          df -h "$root"
+          free -m
+          docker volume inspect listen-recorder-ultimate_recordings --format '{{.Mountpoint}}' | xargs -r stat -c 'volume uid=%u gid=%g mode=%a'
+          systemctl is-active caddy nuvio
+          REMOTE
+      - name: Cleanup local credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/listener-auth"
