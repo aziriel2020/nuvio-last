@@ -1,5 +1,8 @@
 import nodeHandler from '../api/index.js';
 import { historyGraceMs } from '../oracle/movie-history-grace.mjs';
+import movieVectorArt from './movie-vector-art.cjs';
+
+const { FILM_DETAILS_PROFILE, MOVIE_VECTOR_TTL, MOVIE_VECTOR_GRACE, movieVectorCachePath } = movieVectorArt;
 
 const DYNAMIC_CATALOG_TTL = 300;
 const HISTORICAL_CATALOG_TTL = 21600;
@@ -45,6 +48,7 @@ export function edgeTtl(input) {
   // Original France design, resolved once by ID then cached as an image.
   if (path === '/design-plugin/poster.jpg') return GENERATED_ART_TTL;
   if (path === '/design-plugin/config.json') return 0;
+  if (movieVectorCachePath(url)) return MOVIE_VECTOR_TTL;
   // Dynamic vector artwork is generated in the Oracle runtime, not a prebuilt JPEG.
   // Keep changes fresh while sharing cached output across rapid Shield scrolling.
   if (/^\/design-meta\/(?:art\/(?:movie|series)\/[^/]+\/landscape|preview\/(?:movie|series)\/[^/]+)\.svg$/.test(path)) return 900;
@@ -580,12 +584,26 @@ function copyStringBindingsToProcessEnv(env) {
 
 function cacheKeyFor(request, timeZone) {
   const url = new URL(request.url);
+  const movieArtPath = movieVectorCachePath(url);
+  if (movieArtPath) {
+    // Warmers use literal TMDB IDs. Clients may percent-encode their colons.
+    url.pathname = movieArtPath;
+    url.search = '?v=' + FILM_DETAILS_PROFILE;
+  }
   // Internal-only cache revision: keeps public URLs/IDs unchanged while
   // invalidating stale empty anime responses after runtime fixes.
   url.searchParams.set('__nuvio_edge_rev', EDGE_CACHE_REV);
   // Midnight changes the cache identity even before the TTL expires. Film
   // Monde uses Europe/Brussels civil dates for Today/Yesterday in all apps.
   if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections|native-bridge(?:\/mobile)?)\/)?catalog\/movie\//.test(url.pathname)) {
+    // The catalogue handler treats an omitted skip and an explicit zero alike.
+    if (/\/catalog\/movie\/[^/]+\/skip=0\.json$/.test(url.pathname) && !url.searchParams.has('skip')) {
+      url.pathname = url.pathname.replace('/skip=0.json', '.json');
+    }
+    if (/\/catalog\/movie\/[^/]+\.json$/.test(url.pathname) && url.searchParams.getAll('skip').length === 1 &&
+        url.searchParams.get('skip') === '0') {
+      url.searchParams.delete('skip');
+    }
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit'
     }).formatToParts(new Date());
@@ -673,8 +691,11 @@ async function invokeNodeHandler(request, timeZone) {
 // request the same period simultaneously; this keeps one SQLite/render pass
 // without changing cache freshness, addon IDs or approved visual assets.
 const artworkInFlight = new Map();
-const historicalRefreshes = new Map();
-const MAX_BACKGROUND_HISTORICAL_REFRESHES = 2;
+const backgroundRefreshes = new Map();
+const MAX_BACKGROUND_REFRESHES = 2;
+const movieArtRefreshAfter = new Map();
+const MOVIE_ART_REFRESH_DELAY_MS = 60_000;
+const MAX_MOVIE_ART_REFRESH_KEYS = 512;
 const MAX_INFLIGHT_ARTWORK = 192;
 
 const COALESCED_ARTWORK_NAMES = new Set([
@@ -686,7 +707,9 @@ const COALESCED_ARTWORK_NAMES = new Set([
 
 function canCoalesceArtwork(request) {
   if (request.method !== 'GET' || request.headers.has('authorization')) return false;
-  const pathname = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  if (movieVectorCachePath(url)) return true;
+  const { pathname } = url;
   if (/^\/movies\/(?:(?:collections-only|mobile-desktop-collections|native-bridge(?:\/mobile)?)\/)?catalog\/movie\//.test(pathname)) return true;
   const name = pathname.split('/').pop();
   return COALESCED_ARTWORK_NAMES.has(name);
@@ -699,33 +722,43 @@ async function dynamicResponse(request, env, ctx) {
   const ttl = request.method === 'GET' || request.method === 'HEAD' ? edgeTtl(url) : 0;
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const key = ttl > 0 && cache ? cacheKeyFor(request, timeZone) : null;
+  const vectorMovie = Boolean(movieVectorCachePath(url));
+  const staleSeconds = vectorMovie ? MOVIE_VECTOR_GRACE : Math.max(ttl, 900);
+  const cacheControl = `public, max-age=${ttl}, stale-while-revalidate=${staleSeconds}`;
 
   if (key && cache) {
     const hit = await cache.match(key);
     if (hit) {
       const stale = hit.headers.get('x-nuvio-disk-cache') === 'STALE';
       if (stale && request.method === 'GET' && !request.headers.has('authorization') &&
-          ctx?.waitUntil && historicalRefreshes.size < MAX_BACKGROUND_HISTORICAL_REFRESHES &&
-          !historicalRefreshes.has(key.url)) {
-        // Defer CPU-heavy SQLite work until the stale response has had a
-        // chance to flush. Never revalidate live or current-month films.
+          ctx?.waitUntil && backgroundRefreshes.size < MAX_BACKGROUND_REFRESHES &&
+          !backgroundRefreshes.has(key.url) &&
+          (!vectorMovie || (movieArtRefreshAfter.get(key.url) || 0) <= Date.now())) {
+        if (vectorMovie) {
+          movieArtRefreshAfter.delete(key.url);
+          movieArtRefreshAfter.set(key.url, Date.now() + MOVIE_ART_REFRESH_DELAY_MS);
+          if (movieArtRefreshAfter.size > MAX_MOVIE_ART_REFRESH_KEYS) {
+            movieArtRefreshAfter.delete(movieArtRefreshAfter.keys().next().value);
+          }
+        }
+        // Let the cached response flush before SQLite or upstream artwork work.
         const promise = new Promise(resolve => {
           setTimeout(() => {
             Promise.resolve().then(() => invokeNodeHandler(request, timeZone))
               .then(async response => {
                 if (response.ok && !/(?:no-store|private)/i.test(response.headers.get('cache-control') || '')) {
                   const headers = new Headers(response.headers);
-                  headers.set('cache-control', 'public, max-age=' + ttl + ', stale-while-revalidate=' + Math.max(ttl,900));
+                  headers.set('cache-control', cacheControl);
                   await cache.put(key, new Response(response.body, {
                     status: response.status, statusText: response.statusText, headers
                   }));
                 } else await response.body?.cancel();
               })
-              .catch(error => console.warn('[oracle-movies-refresh]', error?.message || error))
-              .finally(() => { historicalRefreshes.delete(key.url); resolve(); });
+              .catch(error => console.warn('[oracle-background-refresh]', error?.message || error))
+              .finally(() => { backgroundRefreshes.delete(key.url); resolve(); });
           }, 25);
         });
-        historicalRefreshes.set(key.url, promise);
+        backgroundRefreshes.set(key.url, promise);
         ctx.waitUntil(promise);
       }
       return withHeaders(hit, { 'X-Nuvio-Cache': stale ? 'STALE' : 'HIT' });
@@ -758,7 +791,7 @@ async function dynamicResponse(request, env, ctx) {
       if (key && cache && finalResponse.ok && ttl > 0
         && !/(?:no-store|private|max-age=0)(?:\b|,)/i.test(finalResponse.headers.get('cache-control') || '')) {
         const headers = new Headers(finalResponse.headers);
-        headers.set('Cache-Control', `public, max-age=${ttl}, stale-while-revalidate=${Math.max(ttl, 900)}`);
+        headers.set('Cache-Control', cacheControl);
         finalResponse = new Response(finalResponse.body, {
           status: finalResponse.status,
           statusText: finalResponse.statusText,
