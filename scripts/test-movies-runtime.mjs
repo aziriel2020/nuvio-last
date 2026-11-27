@@ -63,10 +63,12 @@ try {
       'canonical Films Monde must deliver direct TMDB artwork, without server JPEG processing');
   }
   assert.equal(ids.length, 205); assert.equal(new Set(ids).size, 205);
-  const cached = await get('/movies/catalog/movie/movies-fr-all-all-all/skip=0.json');
-  assert.equal(cached.headers.get('x-nuvio-disk-cache'), 'HIT',
-    'Oracle cache avoids repeated 24-film enrichment when the same period is reopened');
-  await cached.arrayBuffer();
+  for (const firstPage of ['movies-fr-all-all-all.json', 'movies-fr-all-all-all.json?skip=0']) {
+    const cached = await get('/movies/catalog/movie/' + firstPage);
+    assert.equal(cached.headers.get('x-nuvio-disk-cache'), 'HIT',
+      'All first-page URL forms reuse one warmed response');
+    assert.deepEqual((await cached.json()).metas.map(meta => meta.id), ids.slice(0, 24));
+  }
   const endOfRows = await get('/movies/catalog/movie/movies-fr-all-all-all/skip=216.json');
   assert.equal(endOfRows.headers.get('cache-control'), 'no-store', 'Empty pages must not be cached');
   assert.deepEqual((await endOfRows.json()).metas, []);

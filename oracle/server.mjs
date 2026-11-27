@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import runtime from '../runtime/index.mjs';
 import { encodeJsonForClient } from './response-compression.mjs';
 import { historyGraceMs } from './movie-history-grace.mjs';
+import movieVectorArt from '../runtime/movie-vector-art.cjs';
+
+const { MOVIE_VECTOR_GRACE, movieVectorCachePath } = movieVectorArt;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -87,7 +90,7 @@ class FileCache {
   async match(input) {
     const key=this.key(input);
     const url=typeof input==='string'?input:input?.url||String(input);
-    const grace=historyGraceMs(url);
+    const grace = movieVectorCachePath(new URL(url)) ? MOVIE_VECTOR_GRACE * 1000 : historyGraceMs(url);
     const now=Date.now();
     const usable=meta=>meta?.expiresAt && (
       meta.expiresAt>now ||

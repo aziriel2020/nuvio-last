@@ -1,12 +1,11 @@
 [Unit]
-Description=Warm Films Monde catalog pages and artwork every 12 minutes on Oracle
+Description=Warm Films Monde catalog pages and artwork every four minutes on Oracle
 
 [Timer]
-OnBootSec=6min
-OnUnitActiveSec=12min
-RandomizedDelaySec=30
-AccuracySec=60
-Persistent=true
+OnActiveSec=45s
+OnUnitActiveSec=4min
+RandomizedDelaySec=10s
+AccuracySec=10s
 Unit=nuvio-movies-warm.service
 
 [Install]

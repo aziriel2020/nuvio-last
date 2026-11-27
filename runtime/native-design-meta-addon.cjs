@@ -4,6 +4,7 @@
 // All artwork URLs point directly to TMDB's native image CDN.
 const { selectMovieLogo } = require('../regions/movies/src/logos.cjs');
 const { createSvgService } = require('./native-design-svg.cjs');
+const { FILM_DETAILS_PROFILE, movieVectorCachePath } = require('./movie-vector-art.cjs');
 
 const ADDON_ID = 'com.nuvio.native.metadata.design';
 const VERSION = '0.2.0';
@@ -207,7 +208,7 @@ function respond(res, status, payload, ttl = 0) {
 function vectorPosterPattern(origin) {
   // Nuvio resolves these native placeholders for every catalog item,
   // regardless of which addon supplied that catalog.
-  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=oracle-vector-v4-film-details';
+  return origin + '/design-meta/art/{type}/{id}/{shape}.svg?v=' + FILM_DETAILS_PROFILE;
 }
 
 function indexedMovieTmdbId(id) {
@@ -299,7 +300,8 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch,
         const data = await artworkData(request);
         if (!data?.id) return respond(res, 404, { error: 'Metadata unavailable' });
         const isMovie = request.type === 'movie';
-        const background = tmdbImage(data.backdrop_path, 'w1280');
+        const background = tmdbImage(data.backdrop_path, 'w1280')
+          || (movieVectorCachePath(url) ? tmdbImage(data.poster_path, 'w500') : null);
         if (!background) return respond(res, 404, { error: 'No landscape artwork' });
         const logo = selectMovieLogo(data.images, data.original_language)?.url || null;
         const artwork = {
@@ -319,7 +321,7 @@ function createAddon({ tmdb, now = Date.now, imageFetcher = globalThis.fetch,
         };
         if (!meta.name) return respond(res, 404, { error: 'No title' });
         const artworkProfile = url.searchParams.get('v');
-        const filmDetails = artworkProfile === 'oracle-vector-v4-film-details';
+        const filmDetails = artworkProfile === FILM_DETAILS_PROFILE;
         const svg = await svgService.make(meta, artwork, {
           legacy: artworkProfile === 'oracle-vector-v2',
           large: artworkProfile === 'oracle-vector-v4' || filmDetails,

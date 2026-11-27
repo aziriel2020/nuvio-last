@@ -145,6 +145,30 @@ test('film-only V4 detail boost keeps movie logos and series SVG unchanged', asy
   assert.ok(!tv.body.includes('font-size="80"'));
 });
 
+test('V4 movie posters use real portrait artwork when TMDB has no landscape', async () => {
+  const fixtures = [];
+  const addon = createAddon({
+    tmdb: async () => ({ ...movie(), backdrop_path: null, poster_path: '/portrait.jpg' }),
+    imageFetcher: async url => {
+      fixtures.push(url);
+      return fakeImageResponse(url);
+    }
+  });
+  const path = '/design-meta/art/movie/tmdb%3Amovie%3A456/landscape.svg';
+  const v4 = response();
+  await addon.handle({ url: path + '?v=oracle-vector-v4-film-details' }, v4, 'https://example.test');
+  assert.equal(v4.statusCode, 200);
+  assert.match(v4.body, /viewBox="0 0 1600 900"/);
+  assert.match(v4.body, /font-size="80"/);
+  assert.deepEqual(fixtures, [
+    'https://image.tmdb.org/t/p/w500/portrait.jpg',
+    'https://image.tmdb.org/t/p/w500/logo.png'
+  ]);
+  const old = response();
+  await addon.handle({ url: path + '?v=oracle-vector-v3' }, old, 'https://example.test');
+  assert.equal(old.statusCode, 404);
+});
+
 test('multiple services must not be mislabeled as one platform', async () => {
   const addon = createAddon({
     tmdb: async () => {
@@ -273,9 +297,11 @@ test('global art rejects unsupported IDs and never fetches untrusted artwork URL
   assert.equal(invalid.statusCode,400);
 });
 
-test('Oracle routing caches artwork 15 minutes while status is always fresh', async () => {
+test('Oracle gives V4 movie posters extended caching without changing series or old profiles', async () => {
   const { edgeTtl } = await import('../runtime/router.mjs');
+  assert.equal(edgeTtl('https://oracle.test/design-meta/art/movie/tt1234567/landscape.svg?v=oracle-vector-v4-film-details'), 21600);
   assert.equal(edgeTtl('https://oracle.test/design-meta/art/movie/tt1234567/landscape.svg?v=oracle-vector-v3'), 900);
+  assert.equal(edgeTtl('https://oracle.test/design-meta/art/series/tt1234567/landscape.svg?v=oracle-vector-v4-film-details'), 900);
   assert.equal(edgeTtl('https://oracle.test/design-meta/preview/series/tmdb%3Atv%3A123.svg'), 900);
   assert.equal(edgeTtl('https://oracle.test/design-meta/status.json'), 0);
   assert.equal(edgeTtl('https://oracle.test/design-meta/vector/manifest.json'), 300);
